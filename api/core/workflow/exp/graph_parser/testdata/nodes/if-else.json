@@ -1,0 +1,42 @@
+{
+  "id": "1747814160742",
+  "type": "custom",
+  "data": {
+    "type": "if-else",
+    "title": "IF/ELSE",
+    "desc": "",
+    "cases": [
+      {
+        "id": "true",
+        "case_id": "true",
+        "logical_operator": "and",
+        "conditions": [
+          {
+            "id": "73042c9c-f5f8-486b-ab43-62954e0d3a9e",
+            "varType": "string",
+            "variable_selector": [
+              "sys",
+              "workflow_id"
+            ],
+            "comparison_operator": "contains",
+            "value": "a"
+          }
+        ]
+      }
+    ],
+    "selected": false
+  },
+  "position": {
+    "x": 1250,
+    "y": 1053.5404424866363
+  },
+  "targetPosition": "left",
+  "sourcePosition": "right",
+  "positionAbsolute": {
+    "x": 1250,
+    "y": 1053.5404424866363
+  },
+  "width": 244,
+  "height": 126,
+  "selected": false
+}

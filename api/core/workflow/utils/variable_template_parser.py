@@ -18,6 +18,15 @@ def extract_selectors_from_template(template: str, /) -> Sequence[VariableSelect
     return selectors
 
 
+def extract_selector(template: str, /) -> VariableSelector | None:
+    matched = SELECTOR_PATTERN.fullmatch(template)
+    if not matched:
+        return None
+    variable = matched.group(1)
+    value_selector = variable[1:-1].split(".")
+    return VariableSelector(variable=variable, value_selector=value_selector)
+
+
 class VariableTemplateParser:
     """
     !NOTE: Consider to use the new `segments` module instead of this class.

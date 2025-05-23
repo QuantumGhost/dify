@@ -1,10 +1,12 @@
-from typing import Literal
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 from typing_extensions import deprecated
 
 from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.nodes.base import BaseNode
+from core.workflow.nodes.base.node import GenericNodeData
 from core.workflow.nodes.enums import NodeType
 from core.workflow.nodes.if_else.entities import IfElseNodeData
 from core.workflow.utils.condition.entities import Condition
@@ -86,6 +88,16 @@ class IfElseNode(BaseNode[IfElseNodeData]):
         )
 
         return data
+
+    @classmethod
+    def _extract_variable_selector_to_variable_mapping(
+        cls,
+        *,
+        graph_config: Mapping[str, Any],
+        node_id: str,
+        node_data: GenericNodeData,
+    ) -> Mapping[str, Sequence[str]]:
+        pass
 
 
 @deprecated("This function is deprecated. You should use the new cases structure.")

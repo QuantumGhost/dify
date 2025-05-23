@@ -1,0 +1,1814 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "1747228642872",
+        "type": "custom",
+        "data": {
+          "type": "start",
+          "title": "Start",
+          "desc": "",
+          "variables": [],
+          "selected": false
+        },
+        "position": {
+          "x": -149.56376829070769,
+          "y": 289.4265374093339
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": -149.56376829070769,
+          "y": 289.4265374093339
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "answer",
+        "type": "custom",
+        "data": {
+          "type": "answer",
+          "title": "Answer",
+          "desc": "",
+          "variables": [],
+          "answer": "OK",
+          "selected": false
+        },
+        "position": {
+          "x": 4922,
+          "y": 391
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 4922,
+          "y": 391
+        },
+        "width": 244,
+        "height": 102,
+        "_parentOutputVarMap": {
+          "llm.text": {
+            "variable": "text",
+            "type": "string"
+          },
+          "1747229171606.result": {
+            "variable": "result",
+            "type": "string"
+          }
+        },
+        "selected": false
+      },
+      {
+        "id": "1747736480496",
+        "type": "custom",
+        "data": {
+          "type": "llm",
+          "title": "LLM",
+          "desc": "",
+          "variables": [],
+          "model": {
+            "provider": "langgenius/openai/openai",
+            "name": "gpt-4o",
+            "mode": "chat",
+            "completion_params": {}
+          },
+          "prompt_template": [
+            {
+              "role": "system",
+              "text": "{{#sys.query#}}",
+              "id": "ed296921-8620-4934-b61f-07df194cfc10"
+            }
+          ],
+          "context": {
+            "enabled": false,
+            "variable_selector": []
+          },
+          "vision": {
+            "enabled": false
+          },
+          "selected": false
+        },
+        "position": {
+          "x": 950,
+          "y": 315.31323896258135
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 950,
+          "y": 315.31323896258135
+        },
+        "width": 244,
+        "height": 90,
+        "selected": false
+      },
+      {
+        "id": "1747813693182",
+        "type": "custom",
+        "data": {
+          "type": "loop",
+          "title": "Loop",
+          "desc": "",
+          "start_node_id": "1747813693182start",
+          "break_conditions": [],
+          "loop_count": 10,
+          "logical_operator": "and",
+          "selected": false,
+          "width": 812,
+          "error_handle_mode": "terminated",
+          "height": 174
+        },
+        "position": {
+          "x": 950,
+          "y": -553
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1,
+        "positionAbsolute": {
+          "x": 950,
+          "y": -553
+        },
+        "width": 812,
+        "height": 174,
+        "selected": false
+      },
+      {
+        "id": "1747813693182start",
+        "type": "custom-loop-start",
+        "data": {
+          "title": "",
+          "desc": "",
+          "type": "loop-start",
+          "isInLoop": true,
+          "selected": false
+        },
+        "position": {
+          "x": 60,
+          "y": 63
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1002,
+        "parentId": "1747813693182",
+        "selectable": false,
+        "draggable": false,
+        "positionAbsolute": {
+          "x": 1010,
+          "y": -490
+        },
+        "width": 44,
+        "height": 48
+      },
+      {
+        "id": "1747813696434",
+        "type": "custom",
+        "data": {
+          "type": "code",
+          "title": "Reverse Workflow ID",
+          "desc": "",
+          "variables": [
+            {
+              "variable": "workflow_id",
+              "value_selector": [
+                "sys",
+                "workflow_id"
+              ]
+            }
+          ],
+          "code_language": "python3",
+          "code": "\ndef main(workflow_id: str) -> dict:\n    return {\n        \"reversed_workflow_id\": workflow_id[::-1],\n    }\n",
+          "outputs": {
+            "reversed_workflow_id": {
+              "type": "string",
+              "children": null
+            }
+          },
+          "selected": false,
+          "isInIteration": false,
+          "isInLoop": true,
+          "loop_id": "1747813693182"
+        },
+        "position": {
+          "x": 201.46126807067822,
+          "y": 65
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1002,
+        "parentId": "1747813693182",
+        "positionAbsolute": {
+          "x": 1151.4612680706782,
+          "y": -488
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "1747813699279",
+        "type": "custom",
+        "data": {
+          "type": "template-transform",
+          "title": "Map workflow id to reversed",
+          "desc": "",
+          "variables": [
+            {
+              "variable": "reversed_workflow_id",
+              "value_selector": [
+                "1747813696434",
+                "reversed_workflow_id"
+              ]
+            },
+            {
+              "variable": "workflow_id",
+              "value_selector": [
+                "sys",
+                "workflow_id"
+              ]
+            }
+          ],
+          "template": "{{workflow_id}}: {{ reversed_workflow_id }}\n",
+          "selected": false,
+          "isInIteration": false,
+          "isInLoop": true,
+          "loop_id": "1747813693182"
+        },
+        "position": {
+          "x": 508,
+          "y": 60
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1002,
+        "parentId": "1747813693182",
+        "positionAbsolute": {
+          "x": 1458,
+          "y": -493
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "1747813842812",
+        "type": "custom",
+        "data": {
+          "type": "iteration",
+          "title": "Iteration",
+          "desc": "",
+          "start_node_id": "1747813842812start",
+          "iterator_selector": [
+            "1747813890629",
+            "ascii_chars"
+          ],
+          "output_selector": [
+            "1747813985528",
+            "output"
+          ],
+          "is_parallel": false,
+          "parallel_nums": 10,
+          "error_handle_mode": "terminated",
+          "selected": false,
+          "width": 508,
+          "height": 174,
+          "output_type": "array[string]"
+        },
+        "position": {
+          "x": 1434,
+          "y": -329
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1,
+        "positionAbsolute": {
+          "x": 1434,
+          "y": -329
+        },
+        "width": 508,
+        "height": 174,
+        "selected": false
+      },
+      {
+        "id": "1747813842812start",
+        "type": "custom-iteration-start",
+        "data": {
+          "title": "",
+          "desc": "",
+          "type": "iteration-start",
+          "isInIteration": true,
+          "selected": false
+        },
+        "position": {
+          "x": 60,
+          "y": 63
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1002,
+        "parentId": "1747813842812",
+        "selectable": false,
+        "draggable": false,
+        "positionAbsolute": {
+          "x": 1494,
+          "y": -266
+        },
+        "width": 44,
+        "height": 48
+      },
+      {
+        "id": "1747813890629",
+        "type": "custom",
+        "data": {
+          "type": "code",
+          "title": "Generate first 7 Letters",
+          "desc": "",
+          "variables": [],
+          "code_language": "python3",
+          "code": "\ndef main() -> dict:\n    return {\n        \"ascii_chars\": [chr(ord('A') + i) for i in range(7)],\n    }\n",
+          "outputs": {
+            "ascii_chars": {
+              "type": "array[string]",
+              "children": null
+            }
+          },
+          "selected": false
+        },
+        "position": {
+          "x": 666,
+          "y": -329
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 666,
+          "y": -329
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "1747813985528",
+        "type": "custom",
+        "data": {
+          "type": "template-transform",
+          "title": "Template 2",
+          "desc": "",
+          "variables": [
+            {
+              "variable": "item",
+              "value_selector": [
+                "1747813842812",
+                "item"
+              ]
+            },
+            {
+              "variable": "index",
+              "value_selector": [
+                "1747813842812",
+                "index"
+              ]
+            }
+          ],
+          "template": "{{ index }}: {{ item }}",
+          "selected": false,
+          "isInIteration": true,
+          "isInLoop": false,
+          "iteration_id": "1747813842812"
+        },
+        "position": {
+          "x": 204,
+          "y": 60
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "zIndex": 1002,
+        "parentId": "1747813842812",
+        "positionAbsolute": {
+          "x": 1638,
+          "y": -269
+        },
+        "width": 244,
+        "height": 54
+      },
+      {
+        "id": "1747814033379",
+        "type": "custom",
+        "data": {
+          "type": "knowledge-retrieval",
+          "title": "Knowledge Retrieval",
+          "desc": "",
+          "query_variable_selector": [
+            "1747228642872",
+            "sys.query"
+          ],
+          "dataset_ids": [
+            "15d3646e-b37e-462e-ad82-f0997df52422"
+          ],
+          "retrieval_mode": "multiple",
+          "multiple_retrieval_config": {
+            "top_k": 4,
+            "reranking_mode": "reranking_model",
+            "reranking_model": {
+              "provider": "langgenius/jina/jina",
+              "model": "jina-reranker-v2-base-multilingual"
+            },
+            "reranking_enable": false
+          },
+          "selected": false
+        },
+        "position": {
+          "x": 801.9812180306328,
+          "y": 155.863375749176
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 801.9812180306328,
+          "y": 155.863375749176
+        },
+        "width": 244,
+        "height": 92,
+        "selected": false
+      },
+      {
+        "id": "1747814095146",
+        "type": "custom",
+        "data": {
+          "type": "agent",
+          "title": "Agent",
+          "desc": "",
+          "selected": false,
+          "agent_strategy_provider_name": "langgenius/agent/agent",
+          "agent_strategy_name": "ReAct",
+          "agent_strategy_label": "ReAct",
+          "output_schema": null,
+          "plugin_unique_identifier": "langgenius/agent:0.0.15@3cb96179914f8c4025282bcb1cc2fd5a951f6be0877567b02daee01e28ca4bf3",
+          "agent_parameters": {
+            "model": {
+              "type": "constant",
+              "value": {
+                "provider": "langgenius/openai/openai",
+                "model": "gpt-4o",
+                "model_type": "llm",
+                "mode": "chat",
+                "completion_params": {},
+                "type": "model-selector"
+              }
+            },
+            "instruction": {
+              "type": "constant",
+              "value": "You may use the \"Current Time\" tool to get the current time."
+            },
+            "tools": {
+              "type": "constant",
+              "value": [
+                {
+                  "provider_name": "time",
+                  "type": "builtin",
+                  "tool_name": "current_time",
+                  "tool_label": "Current Time",
+                  "tool_description": "A tool for getting the current time.",
+                  "settings": {
+                    "format": {
+                      "value": "%Y-%m-%d %H:%M:%S"
+                    },
+                    "timezone": {
+                      "value": "UTC"
+                    }
+                  },
+                  "parameters": {
+                  },
+                  "enabled": true,
+                  "extra": {
+                    "description": "A tool for getting the current time."
+                  },
+                  "schemas": [
+                    {
+                      "name": "format",
+                      "label": {
+                        "en_US": "Format",
+                        "zh_Hans": "格式",
+                        "pt_BR": "Format",
+                        "ja_JP": "Format"
+                      },
+                      "placeholder": null,
+                      "scope": null,
+                      "auto_generate": null,
+                      "template": null,
+                      "required": false,
+                      "default": "%Y-%m-%d %H:%M:%S",
+                      "min": null,
+                      "max": null,
+                      "precision": null,
+                      "options": [],
+                      "type": "string",
+                      "human_description": {
+                        "en_US": "Time format in strftime standard.",
+                        "zh_Hans": "strftime 标准的时间格式。",
+                        "pt_BR": "Time format in strftime standard.",
+                        "ja_JP": "Time format in strftime standard."
+                      },
+                      "form": "form",
+                      "llm_description": null
+                    },
+                    {
+                      "name": "timezone",
+                      "label": {
+                        "en_US": "Timezone",
+                        "zh_Hans": "时区",
+                        "pt_BR": "Timezone",
+                        "ja_JP": "Timezone"
+                      },
+                      "placeholder": null,
+                      "scope": null,
+                      "auto_generate": null,
+                      "template": null,
+                      "required": false,
+                      "default": "UTC",
+                      "min": null,
+                      "max": null,
+                      "precision": null,
+                      "options": [
+                        {
+                          "value": "UTC",
+                          "label": {
+                            "en_US": "UTC",
+                            "zh_Hans": "UTC",
+                            "pt_BR": "UTC",
+                            "ja_JP": "UTC"
+                          }
+                        },
+                        {
+                          "value": "America/New_York",
+                          "label": {
+                            "en_US": "America/New_York",
+                            "zh_Hans": "美洲/纽约",
+                            "pt_BR": "America/New_York",
+                            "ja_JP": "America/New_York"
+                          }
+                        },
+                        {
+                          "value": "America/Los_Angeles",
+                          "label": {
+                            "en_US": "America/Los_Angeles",
+                            "zh_Hans": "美洲/洛杉矶",
+                            "pt_BR": "America/Los_Angeles",
+                            "ja_JP": "America/Los_Angeles"
+                          }
+                        },
+                        {
+                          "value": "America/Chicago",
+                          "label": {
+                            "en_US": "America/Chicago",
+                            "zh_Hans": "美洲/芝加哥",
+                            "pt_BR": "America/Chicago",
+                            "ja_JP": "America/Chicago"
+                          }
+                        },
+                        {
+                          "value": "America/Sao_Paulo",
+                          "label": {
+                            "en_US": "America/Sao_Paulo",
+                            "zh_Hans": "美洲/圣保罗",
+                            "pt_BR": "América/São Paulo",
+                            "ja_JP": "America/Sao_Paulo"
+                          }
+                        },
+                        {
+                          "value": "Asia/Shanghai",
+                          "label": {
+                            "en_US": "Asia/Shanghai",
+                            "zh_Hans": "亚洲/上海",
+                            "pt_BR": "Asia/Shanghai",
+                            "ja_JP": "Asia/Shanghai"
+                          }
+                        },
+                        {
+                          "value": "Asia/Ho_Chi_Minh",
+                          "label": {
+                            "en_US": "Asia/Ho_Chi_Minh",
+                            "zh_Hans": "亚洲/胡志明市",
+                            "pt_BR": "Ásia/Ho Chi Minh",
+                            "ja_JP": "Asia/Ho_Chi_Minh"
+                          }
+                        },
+                        {
+                          "value": "Asia/Tokyo",
+                          "label": {
+                            "en_US": "Asia/Tokyo",
+                            "zh_Hans": "亚洲/东京",
+                            "pt_BR": "Asia/Tokyo",
+                            "ja_JP": "Asia/Tokyo"
+                          }
+                        },
+                        {
+                          "value": "Asia/Dubai",
+                          "label": {
+                            "en_US": "Asia/Dubai",
+                            "zh_Hans": "亚洲/迪拜",
+                            "pt_BR": "Asia/Dubai",
+                            "ja_JP": "Asia/Dubai"
+                          }
+                        },
+                        {
+                          "value": "Asia/Kolkata",
+                          "label": {
+                            "en_US": "Asia/Kolkata",
+                            "zh_Hans": "亚洲/加尔各答",
+                            "pt_BR": "Asia/Kolkata",
+                            "ja_JP": "Asia/Kolkata"
+                          }
+                        },
+                        {
+                          "value": "Asia/Seoul",
+                          "label": {
+                            "en_US": "Asia/Seoul",
+                            "zh_Hans": "亚洲/首尔",
+                            "pt_BR": "Asia/Seoul",
+                            "ja_JP": "Asia/Seoul"
+                          }
+                        },
+                        {
+                          "value": "Asia/Singapore",
+                          "label": {
+                            "en_US": "Asia/Singapore",
+                            "zh_Hans": "亚洲/新加坡",
+                            "pt_BR": "Asia/Singapore",
+                            "ja_JP": "Asia/Singapore"
+                          }
+                        },
+                        {
+                          "value": "Europe/London",
+                          "label": {
+                            "en_US": "Europe/London",
+                            "zh_Hans": "欧洲/伦敦",
+                            "pt_BR": "Europe/London",
+                            "ja_JP": "Europe/London"
+                          }
+                        },
+                        {
+                          "value": "Europe/Berlin",
+                          "label": {
+                            "en_US": "Europe/Berlin",
+                            "zh_Hans": "欧洲/柏林",
+                            "pt_BR": "Europe/Berlin",
+                            "ja_JP": "Europe/Berlin"
+                          }
+                        },
+                        {
+                          "value": "Europe/Moscow",
+                          "label": {
+                            "en_US": "Europe/Moscow",
+                            "zh_Hans": "欧洲/莫斯科",
+                            "pt_BR": "Europe/Moscow",
+                            "ja_JP": "Europe/Moscow"
+                          }
+                        },
+                        {
+                          "value": "Australia/Sydney",
+                          "label": {
+                            "en_US": "Australia/Sydney",
+                            "zh_Hans": "澳大利亚/悉尼",
+                            "pt_BR": "Australia/Sydney",
+                            "ja_JP": "Australia/Sydney"
+                          }
+                        },
+                        {
+                          "value": "Pacific/Auckland",
+                          "label": {
+                            "en_US": "Pacific/Auckland",
+                            "zh_Hans": "太平洋/奥克兰",
+                            "pt_BR": "Pacific/Auckland",
+                            "ja_JP": "Pacific/Auckland"
+                          }
+                        },
+                        {
+                          "value": "Africa/Cairo",
+                          "label": {
+                            "en_US": "Africa/Cairo",
+                            "zh_Hans": "非洲/开罗",
+                            "pt_BR": "Africa/Cairo",
+                            "ja_JP": "Africa/Cairo"
+                          }
+                        }
+                      ],
+                      "type": "select",
+                      "human_description": {
+                        "en_US": "Timezone",
+                        "zh_Hans": "时区",
+                        "pt_BR": "Timezone",
+                        "ja_JP": "Timezone"
+                      },
+                      "form": "form",
+                      "llm_description": null
+                    }
+                  ]
+                }
+              ]
+            },
+            "query": {
+              "type": "constant",
+              "value": "Give me the current time."
+            }
+          }
+        },
+        "position": {
+          "x": 950,
+          "y": 439.7352325372109
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 950,
+          "y": 439.7352325372109
+        },
+        "width": 244,
+        "height": 198,
+        "selected": false
+      },
+      {
+        "id": "1747814116329",
+        "type": "custom",
+        "data": {
+          "type": "question-classifier",
+          "title": "Question Classifier",
+          "desc": "",
+          "query_variable_selector": [
+            "1747228642872",
+            "sys.query"
+          ],
+          "topics": [],
+          "model": {
+            "provider": "langgenius/openai/openai",
+            "name": "gpt-4o",
+            "mode": "chat",
+            "completion_params": {
+              "temperature": 0.7
+            }
+          },
+          "classes": [
+            {
+              "id": "1",
+              "name": "a"
+            },
+            {
+              "id": "2",
+              "name": "b"
+            }
+          ],
+          "vision": {
+            "enabled": false
+          },
+          "selected": false,
+          "instructions": ""
+        },
+        "position": {
+          "x": 950,
+          "y": 675.1093612425979
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 950,
+          "y": 675.1093612425979
+        },
+        "width": 244,
+        "height": 172,
+        "selected": false
+      },
+      {
+        "id": "1747814160742",
+        "type": "custom",
+        "data": {
+          "type": "if-else",
+          "title": "IF/ELSE",
+          "desc": "",
+          "cases": [
+            {
+              "id": "true",
+              "case_id": "true",
+              "logical_operator": "and",
+              "conditions": [
+                {
+                  "id": "73042c9c-f5f8-486b-ab43-62954e0d3a9e",
+                  "varType": "string",
+                  "variable_selector": [
+                    "sys",
+                    "workflow_id"
+                  ],
+                  "comparison_operator": "contains",
+                  "value": "a"
+                }
+              ]
+            }
+          ],
+          "selected": false
+        },
+        "position": {
+          "x": 1250,
+          "y": 1053.5404424866363
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 1250,
+          "y": 1053.5404424866363
+        },
+        "width": 244,
+        "height": 126,
+        "selected": false
+      },
+      {
+        "id": "1747814213322",
+        "type": "custom",
+        "data": {
+          "type": "variable-aggregator",
+          "title": "Variable Aggregator",
+          "desc": "",
+          "variables": [
+            [
+              "1747814304087",
+              "result2"
+            ]
+          ],
+          "output_type": "string",
+          "selected": false,
+          "advanced_settings": {
+            "group_enabled": true,
+            "groups": [
+              {
+                "output_type": "string",
+                "variables": [
+                  [
+                    "1747814304087",
+                    "result"
+                  ],
+                  [
+                    "1747814259670",
+                    "result"
+                  ]
+                ],
+                "group_name": "G1",
+                "groupId": "c886bf64-2a14-4c27-916d-1aa224b69325"
+              }
+            ]
+          }
+        },
+        "position": {
+          "x": 1283.9715237306746,
+          "y": -72.37745927899181
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 1283.9715237306746,
+          "y": -72.37745927899181
+        },
+        "width": 244,
+        "height": 131,
+        "selected": false
+      },
+      {
+        "id": "1747814259670",
+        "type": "custom",
+        "data": {
+          "type": "code",
+          "title": "Generate variable",
+          "desc": "",
+          "variables": [],
+          "code_language": "python3",
+          "code": "\ndef main() -> dict:\n    return {\n        \"result\": \"result\",\n    }\n",
+          "outputs": {
+            "result": {
+              "type": "string",
+              "children": null
+            }
+          },
+          "selected": false
+        },
+        "position": {
+          "x": 983.9715237306746,
+          "y": -72.37745927899181
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 983.9715237306746,
+          "y": -72.37745927899181
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "1747814304087",
+        "type": "custom",
+        "data": {
+          "type": "code",
+          "title": "Generate variable 2",
+          "desc": "",
+          "variables": [],
+          "code_language": "python3",
+          "code": "\ndef main() -> dict:\n    return {\n        \"result2\": \"result2\",\n    }\n",
+          "outputs": {
+            "result2": {
+              "type": "string",
+              "children": null
+            }
+          },
+          "selected": false
+        },
+        "position": {
+          "x": 983.9715237306746,
+          "y": 5.271737819692646
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 983.9715237306746,
+          "y": 5.271737819692646
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "1747814413020",
+        "type": "custom",
+        "data": {
+          "type": "document-extractor",
+          "title": "Doc Extractor",
+          "desc": "",
+          "variable_selector": [
+            "sys",
+            "files"
+          ],
+          "is_array_file": false,
+          "selected": false
+        },
+        "position": {
+          "x": 1317.5468062129898,
+          "y": 172.61163315995015
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 1317.5468062129898,
+          "y": 172.61163315995015
+        },
+        "width": 244,
+        "height": 92,
+        "selected": false
+      },
+      {
+        "id": "1747814521403",
+        "type": "custom",
+        "data": {
+          "type": "parameter-extractor",
+          "title": "Parameter Extractor",
+          "desc": "",
+          "variables": [],
+          "query": [
+            "1747736480496",
+            "text"
+          ],
+          "model": {
+            "provider": "langgenius/openai/openai",
+            "name": "gpt-4o",
+            "mode": "chat",
+            "completion_params": {
+              "temperature": 0.7
+            }
+          },
+          "reasoning_mode": "prompt",
+          "vision": {
+            "enabled": false
+          },
+          "selected": false,
+          "instruction": "try generate something bases on input.\n\nthe output should be 20-40 words long.",
+          "parameters": [
+            {
+              "name": "output",
+              "type": "string",
+              "description": "extracted from llm output",
+              "required": false
+            }
+          ]
+        },
+        "position": {
+          "x": 1651.5183299436644,
+          "y": 323.0569525386512
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 1651.5183299436644,
+          "y": 323.0569525386512
+        },
+        "width": 244,
+        "height": 90,
+        "selected": false
+      },
+      {
+        "id": "1747814635687",
+        "type": "custom",
+        "data": {
+          "type": "http-request",
+          "title": "HTTP Request",
+          "desc": "",
+          "variables": [],
+          "method": "get",
+          "url": "https://httpbin.org/get",
+          "authorization": {
+            "type": "no-auth",
+            "config": null
+          },
+          "headers": "",
+          "params": "",
+          "body": {
+            "type": "none",
+            "data": []
+          },
+          "timeout": {
+            "max_connect_timeout": 0,
+            "max_read_timeout": 0,
+            "max_write_timeout": 0,
+            "connect": 2,
+            "read": 2,
+            "write": 2
+          },
+          "retry_config": {
+            "retry_enabled": true,
+            "max_retries": 3,
+            "retry_interval": 100
+          },
+          "selected": false,
+          "ssl_verify": true
+        },
+        "position": {
+          "x": 950,
+          "y": 1053.5404424866363
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 950,
+          "y": 1053.5404424866363
+        },
+        "width": 244,
+        "height": 123
+      },
+      {
+        "id": "1747814691972",
+        "type": "custom",
+        "data": {
+          "type": "list-operator",
+          "title": "List Operator",
+          "desc": "",
+          "variable": [
+            "1747813890629",
+            "ascii_chars"
+          ],
+          "filter_by": {
+            "enabled": true,
+            "conditions": [
+              {
+                "key": "",
+                "comparison_operator": "contains",
+                "value": "A"
+              }
+            ]
+          },
+          "extract_by": {
+            "enabled": false,
+            "serial": "1"
+          },
+          "order_by": {
+            "enabled": false,
+            "key": "",
+            "value": "asc"
+          },
+          "limit": {
+            "enabled": false,
+            "size": 10
+          },
+          "selected": false,
+          "var_type": "array[string]",
+          "item_var_type": "string"
+        },
+        "position": {
+          "x": 1034.5119662173106,
+          "y": -329
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 1034.5119662173106,
+          "y": -329
+        },
+        "width": 244,
+        "height": 92,
+        "selected": false
+      },
+      {
+        "id": "1747829548239",
+        "type": "custom",
+        "data": {
+          "type": "llm",
+          "title": "LLM with var ref",
+          "desc": "",
+          "variables": [],
+          "model": {
+            "provider": "langgenius/openai/openai",
+            "name": "gpt-4o",
+            "mode": "chat",
+            "completion_params": {}
+          },
+          "prompt_template": [
+            {
+              "role": "system",
+              "text": "before var ref.{{#1747829667553.result#}}.after var ref",
+              "id": "b729e565-0b95-4059-a926-92d21c146318"
+            }
+          ],
+          "context": {
+            "enabled": false,
+            "variable_selector": []
+          },
+          "vision": {
+            "enabled": false
+          },
+          "selected": true
+        },
+        "position": {
+          "x": 2080.299706408818,
+          "y": -553
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 2080.299706408818,
+          "y": -553
+        },
+        "width": 244,
+        "height": 90,
+        "selected": true
+      },
+      {
+        "id": "1747829667553",
+        "type": "custom",
+        "data": {
+          "type": "code",
+          "title": "Code before loop",
+          "desc": "",
+          "variables": [],
+          "code_language": "python3",
+          "code": "\ndef main() -> dict:\n    return {\n        \"result\": \"import this;\"\n    }\n",
+          "outputs": {
+            "result": {
+              "type": "string",
+              "children": null
+            }
+          },
+          "selected": false
+        },
+        "position": {
+          "x": 650,
+          "y": -553
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 650,
+          "y": -553
+        },
+        "width": 244,
+        "height": 54,
+        "selected": false
+      },
+      {
+        "id": "1747893904496",
+        "type": "custom",
+        "data": {
+          "type": "assigner",
+          "title": "Variable Assigner",
+          "desc": "",
+          "version": "2",
+          "items": [
+            {
+              "variable_selector": [
+                "conversation",
+                "conv_a"
+              ],
+              "write_mode": "over-write",
+              "input_type": "variable",
+              "value": [
+                "sys",
+                "workflow_id"
+              ],
+              "operation": "over-write"
+            }
+          ],
+          "selected": false
+        },
+        "position": {
+          "x": 2044.5076851036429,
+          "y": 172.61163315995015
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+        "positionAbsolute": {
+          "x": 2044.5076851036429,
+          "y": 172.61163315995015
+        },
+        "width": 244,
+        "height": 88,
+        "selected": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "1747813693182start-source-1747813696434-target",
+        "type": "custom",
+        "source": "1747813693182start",
+        "sourceHandle": "source",
+        "target": "1747813696434",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "loop-start",
+          "targetType": "code",
+          "isInIteration": false,
+          "isInLoop": true,
+          "loop_id": "1747813693182"
+        },
+        "zIndex": 1002,
+        "selected": false
+      },
+      {
+        "id": "1747813696434-source-1747813699279-target",
+        "type": "custom",
+        "source": "1747813696434",
+        "sourceHandle": "source",
+        "target": "1747813699279",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "code",
+          "targetType": "template-transform",
+          "isInIteration": false,
+          "isInLoop": true,
+          "loop_id": "1747813693182"
+        },
+        "zIndex": 1002,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747736480496-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "target": "1747736480496",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "llm",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747813842812-source-answer-target",
+        "type": "custom",
+        "source": "1747813842812",
+        "target": "answer",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "iteration",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747813890629-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747813890629",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "code",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747813842812start-source-1747813985528-target",
+        "type": "custom",
+        "source": "1747813842812start",
+        "sourceHandle": "source",
+        "target": "1747813985528",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "iteration-start",
+          "targetType": "template-transform",
+          "isInIteration": true,
+          "isInLoop": false,
+          "iteration_id": "1747813842812"
+        },
+        "zIndex": 1002,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747814033379-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747814033379",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "knowledge-retrieval",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747814095146-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747814095146",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "agent",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814095146-source-answer-target",
+        "type": "custom",
+        "source": "1747814095146",
+        "target": "answer",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "agent",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747814116329-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747814116329",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "question-classifier",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814116329-1-answer-target",
+        "type": "custom",
+        "source": "1747814116329",
+        "target": "answer",
+        "sourceHandle": "1",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "question-classifier",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814116329-2-answer-target",
+        "type": "custom",
+        "source": "1747814116329",
+        "target": "answer",
+        "sourceHandle": "2",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "question-classifier",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814160742-true-answer-target",
+        "type": "custom",
+        "source": "1747814160742",
+        "target": "answer",
+        "sourceHandle": "true",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "if-else",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814160742-false-answer-target",
+        "type": "custom",
+        "source": "1747814160742",
+        "target": "answer",
+        "sourceHandle": "false",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "if-else",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747814259670-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747814259670",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "code",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814259670-source-1747814213322-target",
+        "type": "custom",
+        "source": "1747814259670",
+        "sourceHandle": "source",
+        "target": "1747814213322",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "code",
+          "targetType": "variable-aggregator",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747814304087-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747814304087",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "code",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814304087-source-1747814213322-target",
+        "type": "custom",
+        "source": "1747814304087",
+        "target": "1747814213322",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "code",
+          "targetType": "variable-aggregator",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814213322-source-answer-target",
+        "type": "custom",
+        "source": "1747814213322",
+        "target": "answer",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "variable-aggregator",
+          "targetType": "answer",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814033379-source-1747814413020-target",
+        "type": "custom",
+        "source": "1747814033379",
+        "target": "1747814413020",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "knowledge-retrieval",
+          "targetType": "document-extractor",
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747736480496-source-1747814521403-target",
+        "type": "custom",
+        "source": "1747736480496",
+        "sourceHandle": "source",
+        "target": "1747814521403",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "llm",
+          "targetType": "parameter-extractor",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814521403-source-answer-target",
+        "type": "custom",
+        "source": "1747814521403",
+        "sourceHandle": "source",
+        "target": "answer",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "parameter-extractor",
+          "targetType": "answer",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747814635687-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "sourceHandle": "source",
+        "target": "1747814635687",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "http-request",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814635687-source-1747814160742-target",
+        "type": "custom",
+        "source": "1747814635687",
+        "sourceHandle": "source",
+        "target": "1747814160742",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "http-request",
+          "targetType": "if-else",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747813890629-source-1747814691972-target",
+        "type": "custom",
+        "source": "1747813890629",
+        "sourceHandle": "source",
+        "target": "1747814691972",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "code",
+          "targetType": "list-operator",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747814691972-source-1747813842812-target",
+        "type": "custom",
+        "source": "1747814691972",
+        "sourceHandle": "source",
+        "target": "1747813842812",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "list-operator",
+          "targetType": "iteration",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747813693182-source-1747829548239-target",
+        "type": "custom",
+        "source": "1747813693182",
+        "sourceHandle": "source",
+        "target": "1747829548239",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "loop",
+          "targetType": "llm",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747829548239-source-answer-target",
+        "type": "custom",
+        "source": "1747829548239",
+        "sourceHandle": "source",
+        "target": "answer",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "llm",
+          "targetType": "answer",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0,
+        "selected": false
+      },
+      {
+        "id": "1747228642872-source-1747829667553-target",
+        "type": "custom",
+        "source": "1747228642872",
+        "target": "1747829667553",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "start",
+          "targetType": "code",
+          "isInLoop": false
+        },
+        "zIndex": 0
+      },
+      {
+        "id": "1747829667553-source-1747813693182-target",
+        "type": "custom",
+        "source": "1747829667553",
+        "target": "1747813693182",
+        "sourceHandle": "source",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "code",
+          "targetType": "loop",
+          "isInLoop": false
+        },
+        "zIndex": 0
+      },
+      {
+        "id": "1747814413020-source-1747893904496-target",
+        "type": "custom",
+        "source": "1747814413020",
+        "sourceHandle": "source",
+        "target": "1747893904496",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "document-extractor",
+          "targetType": "assigner",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0
+      },
+      {
+        "id": "1747893904496-source-answer-target",
+        "type": "custom",
+        "source": "1747893904496",
+        "sourceHandle": "source",
+        "target": "answer",
+        "targetHandle": "target",
+        "data": {
+          "sourceType": "assigner",
+          "targetType": "answer",
+          "isInIteration": false,
+          "isInLoop": false
+        },
+        "zIndex": 0
+      }
+    ],
+    "viewport": {
+      "x": -314.19149266129784,
+      "y": 326.69971456060796,
+      "zoom": 0.37850743312079654
+    }
+  },
+  "features": {
+    "opening_statement": "",
+    "suggested_questions": [],
+    "suggested_questions_after_answer": {
+      "enabled": false
+    },
+    "text_to_speech": {
+      "enabled": false,
+      "voice": "",
+      "language": ""
+    },
+    "speech_to_text": {
+      "enabled": false
+    },
+    "retriever_resource": {
+      "enabled": true
+    },
+    "sensitive_word_avoidance": {
+      "enabled": false
+    },
+    "file_upload": {
+      "image": {
+        "enabled": false,
+        "number_limits": 3,
+        "transfer_methods": [
+          "local_file",
+          "remote_url"
+        ]
+      },
+      "enabled": false,
+      "allowed_file_types": [
+        "image"
+      ],
+      "allowed_file_extensions": [
+        ".JPG",
+        ".JPEG",
+        ".PNG",
+        ".GIF",
+        ".WEBP",
+        ".SVG"
+      ],
+      "allowed_file_upload_methods": [
+        "local_file",
+        "remote_url"
+      ],
+      "number_limits": 3,
+      "fileUploadConfig": {
+        "file_size_limit": 15,
+        "batch_count_limit": 5,
+        "image_file_size_limit": 10,
+        "video_file_size_limit": 100,
+        "audio_file_size_limit": 50,
+        "workflow_file_upload_limit": 10
+      }
+    }
+  },
+  "environment_variables": [
+    {
+      "id": "fefdf099-b2c6-4c24-bc1c-7b0387f464bc",
+      "name": "env1",
+      "value": "env_value_1",
+      "value_type": "string"
+    }
+  ],
+  "conversation_variables": [
+    {
+      "id": "3764baf1-a2c9-4458-80a2-42d6f0111418",
+      "name": "conv_a",
+      "value_type": "string",
+      "value": "a",
+      "description": "conversation variable a"
+    }
+  ],
+  "hash": "bd029904274684f32d5aa5c3cb18d48dc1f0147de0ccd833faae1df3da6ad0f6"
+}
