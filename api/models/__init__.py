@@ -9,6 +9,7 @@ from .account import (
     TenantStatus,
 )
 from .api_based_extension import APIBasedExtension, APIBasedExtensionPoint
+from .counter import Counter
 from .dataset import (
     AppDatasetJoin,
     Dataset,
