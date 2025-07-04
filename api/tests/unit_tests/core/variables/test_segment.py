@@ -1,5 +1,8 @@
+from pydantic import BaseModel
+
 from core.helper import encrypter
-from core.variables import SecretVariable, StringVariable
+from core.variables.segments import FloatSegment, IntegerSegment, SegmentUnion, StringSegment
+from core.variables.variables import IntegerVariable, SecretVariable, StringVariable, VariableUnion
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.enums import SystemVariableKey
 
@@ -56,3 +59,34 @@ def test_convert_variable_to_segment_group():
     assert segments_group.log == "fake-user-id"
     assert isinstance(segments_group.value[0], StringVariable)
     assert segments_group.value[0].value == "fake-user-id"
+
+
+class _Segments(BaseModel):
+    segments: list[SegmentUnion]
+
+
+class _Variables(BaseModel):
+    variables: list[VariableUnion]
+
+
+class TestSegmentDumpAndLoad:
+    def test_segments(self):
+        model = _Segments(segments=[IntegerSegment(value=1), StringSegment(value="a")])
+        json = model.model_dump_json()
+        print("Json: ", json)
+        loaded = _Segments.model_validate_json(json)
+        assert loaded == model
+
+    def test_segment_number(self):
+        model = _Segments(segments=[IntegerSegment(value=1), FloatSegment(value=1.0)])
+        json = model.model_dump_json()
+        print("Json: ", json)
+        loaded = _Segments.model_validate_json(json)
+        assert loaded == model
+
+    def test_variables(self):
+        model = _Variables(variables=[IntegerVariable(value=1, name="int"), StringVariable(value="a", name="str")])
+        json = model.model_dump_json()
+        print("Json: ", json)
+        restored = _Variables.model_validate_json(json)
+        assert restored == model

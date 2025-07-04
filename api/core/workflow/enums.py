@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+from pydantic import Field, BaseModel
+
 
 class SystemVariableKey(StrEnum):
     """

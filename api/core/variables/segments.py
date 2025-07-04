@@ -1,9 +1,9 @@
 import json
 import sys
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Discriminator, Tag, field_validator
 
 from core.file import File
 
@@ -73,7 +73,7 @@ class StringSegment(Segment):
 
 
 class FloatSegment(Segment):
-    value_type: SegmentType = SegmentType.NUMBER
+    value_type: SegmentType = SegmentType.FLOAT
     value: float
     # NOTE(QuantumGhost): seems that the equality for FloatSegment with `NaN` value has some problems.
     # The following tests cannot pass.
@@ -92,7 +92,7 @@ class FloatSegment(Segment):
 
 
 class IntegerSegment(Segment):
-    value_type: SegmentType = SegmentType.NUMBER
+    value_type: SegmentType = SegmentType.INTEGER
     value: int
 
 
@@ -181,3 +181,38 @@ class ArrayFileSegment(ArraySegment):
     @property
     def text(self) -> str:
         return ""
+
+
+def get_segment_discriminator(v: Any) -> SegmentType | None:
+    if isinstance(v, Segment):
+        return v.value_type
+    elif isinstance(v, dict):
+        value_type = v.get("value_type")
+        if value_type is None:
+            return None
+        try:
+            seg_type = SegmentType(value_type)
+        except ValueError:
+            return None
+        return seg_type
+    else:
+        # return None if the discriminator value isn't found
+        return None
+
+
+SegmentUnion = Annotated[
+    (
+        Annotated[NoneSegment, Tag(SegmentType.NONE)]
+        | Annotated[StringSegment, Tag(SegmentType.STRING)]
+        | Annotated[FloatSegment, Tag(SegmentType.FLOAT)]
+        | Annotated[IntegerSegment, Tag(SegmentType.INTEGER)]
+        | Annotated[ObjectSegment, Tag(SegmentType.OBJECT)]
+        | Annotated[FileSegment, Tag(SegmentType.FILE)]
+        | Annotated[ArrayAnySegment, Tag(SegmentType.ARRAY_ANY)]
+        | Annotated[ArrayStringSegment, Tag(SegmentType.ARRAY_STRING)]
+        | Annotated[ArrayNumberSegment, Tag(SegmentType.ARRAY_NUMBER)]
+        | Annotated[ArrayObjectSegment, Tag(SegmentType.ARRAY_OBJECT)]
+        | Annotated[ArrayFileSegment, Tag(SegmentType.ARRAY_FILE)]
+    ),
+    Discriminator(get_segment_discriminator),
+]

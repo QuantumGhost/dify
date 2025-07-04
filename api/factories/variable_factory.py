@@ -119,6 +119,8 @@ def infer_segment_type_from_value(value: Any, /) -> SegmentType:
 
 
 def build_segment(value: Any, /) -> Segment:
+    # NOTE: If you have runtime type information available, consider using the `build_segment_with_type`
+    # below
     if value is None:
         return NoneSegment()
     if isinstance(value, str):

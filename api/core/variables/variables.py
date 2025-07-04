@@ -1,8 +1,8 @@
 from collections.abc import Sequence
-from typing import cast
+from typing import Annotated, TypeAlias, cast
 from uuid import uuid4
 
-from pydantic import Field
+from pydantic import Discriminator, Field, Tag
 
 from core.helper import encrypter
 
@@ -20,6 +20,7 @@ from .segments import (
     ObjectSegment,
     Segment,
     StringSegment,
+    get_segment_discriminator,
 )
 from .types import SegmentType
 
@@ -93,3 +94,21 @@ class FileVariable(FileSegment, Variable):
 
 class ArrayFileVariable(ArrayFileSegment, ArrayVariable):
     pass
+
+
+VariableUnion: TypeAlias = Annotated[
+    (
+        Annotated[NoneVariable, Tag(SegmentType.NONE)]
+        | Annotated[StringVariable, Tag(SegmentType.STRING)]
+        | Annotated[FloatVariable, Tag(SegmentType.FLOAT)]
+        | Annotated[IntegerVariable, Tag(SegmentType.INTEGER)]
+        | Annotated[ObjectVariable, Tag(SegmentType.OBJECT)]
+        | Annotated[FileVariable, Tag(SegmentType.FILE)]
+        | Annotated[ArrayAnyVariable, Tag(SegmentType.ARRAY_ANY)]
+        | Annotated[ArrayStringVariable, Tag(SegmentType.ARRAY_STRING)]
+        | Annotated[ArrayNumberVariable, Tag(SegmentType.ARRAY_NUMBER)]
+        | Annotated[ArrayObjectVariable, Tag(SegmentType.ARRAY_OBJECT)]
+        | Annotated[ArrayFileVariable, Tag(SegmentType.ARRAY_FILE)]
+    ),
+    Discriminator(get_segment_discriminator),
+]

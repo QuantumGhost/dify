@@ -11,6 +11,7 @@ from core.variables.consts import MIN_SELECTORS_LENGTH
 from core.variables.segments import FileSegment, NoneSegment
 from core.workflow.constants import CONVERSATION_VARIABLE_NODE_ID, ENVIRONMENT_VARIABLE_NODE_ID, SYSTEM_VARIABLE_NODE_ID
 from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from factories import variable_factory
 
 VariableValue = Union[str, int, float, dict, list, File]
@@ -27,14 +28,18 @@ class VariablePool(BaseModel):
         description="Variables mapping",
         default=defaultdict(dict),
     )
-    # TODO: This user inputs is not used for pool.
+
+    # The `user_inputs` is used only when constructing the inputs for the `StartNode`. It's not used elsewhere.
     user_inputs: Mapping[str, Any] = Field(
         description="User inputs",
         default_factory=dict,
     )
-    system_variables: Mapping[SystemVariableKey, Any] = Field(
+    # system_variables: Mapping[SystemVariableKey, Any] = Field(
+    #     description="System variables",
+    #     default_factory=dict,
+    # )
+    system_variables: SystemVariable = Field(
         description="System variables",
-        default_factory=dict,
     )
     environment_variables: Sequence[Variable] = Field(
         description="Environment variables.",
