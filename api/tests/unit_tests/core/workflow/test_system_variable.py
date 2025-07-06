@@ -1,11 +1,9 @@
 import json
-from dataclasses import dataclass
 from typing import Any
 
 from core.file.enums import FileTransferMethod, FileType
 from core.file.models import File
 from core.workflow.system_variable import SystemVariable
-
 
 # Test data constants for SystemVariable serialization tests
 VALID_BASE_DATA: dict[str, Any] = {

@@ -1,5 +1,4 @@
 from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.system_variable import SystemVariable
 from core.workflow.nodes.http_request import (
     BodyData,
     HttpRequestNodeAuthorization,
@@ -8,6 +7,7 @@ from core.workflow.nodes.http_request import (
 )
 from core.workflow.nodes.http_request.entities import HttpRequestNodeTimeout
 from core.workflow.nodes.http_request.executor import Executor
+from core.workflow.system_variable import SystemVariable
 
 
 def test_executor_with_json_body_and_number_variable():

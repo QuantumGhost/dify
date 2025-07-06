@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from email.policy import default
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 

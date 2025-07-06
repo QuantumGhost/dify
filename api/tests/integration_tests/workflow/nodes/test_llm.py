@@ -14,12 +14,12 @@ from core.model_runtime.entities.llm_entities import LLMResult, LLMUsage
 from core.model_runtime.entities.message_entities import AssistantPromptMessage
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
 from core.workflow.nodes.event import RunCompletedEvent
 from core.workflow.nodes.llm.node import LLMNode
+from core.workflow.system_variable import SystemVariable
 from extensions.ext_database import db
 from models.enums import UserFrom
 from models.workflow import WorkflowType

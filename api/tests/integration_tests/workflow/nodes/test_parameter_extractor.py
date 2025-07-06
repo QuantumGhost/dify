@@ -8,11 +8,11 @@ from core.app.entities.app_invoke_entities import InvokeFrom
 from core.model_runtime.entities import AssistantPromptMessage
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
 from core.workflow.nodes.parameter_extractor.parameter_extractor_node import ParameterExtractorNode
+from core.workflow.system_variable import SystemVariable
 from extensions.ext_database import db
 from models.enums import UserFrom
 from tests.integration_tests.workflow.nodes.__mock.model import get_mocked_fetch_model_config

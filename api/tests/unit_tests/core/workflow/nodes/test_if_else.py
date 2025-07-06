@@ -7,12 +7,12 @@ from core.file import File, FileTransferMethod, FileType
 from core.variables import ArrayFileSegment
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
 from core.workflow.nodes.if_else.entities import IfElseNodeData
 from core.workflow.nodes.if_else.if_else_node import IfElseNode
+from core.workflow.system_variable import SystemVariable
 from core.workflow.utils.condition.entities import Condition, SubCondition, SubVariableCondition
 from extensions.ext_database import db
 from models.enums import UserFrom

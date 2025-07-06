@@ -10,7 +10,6 @@ from core.variables import Segment, SegmentGroup, Variable
 from core.variables.consts import MIN_SELECTORS_LENGTH
 from core.variables.segments import FileSegment, NoneSegment
 from core.workflow.constants import CONVERSATION_VARIABLE_NODE_ID, ENVIRONMENT_VARIABLE_NODE_ID, SYSTEM_VARIABLE_NODE_ID
-from core.workflow.enums import SystemVariableKey
 from core.workflow.system_variable import SystemVariable
 from factories import variable_factory
 

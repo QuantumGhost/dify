@@ -7,7 +7,6 @@ from core.tools.entities.tool_entities import ToolInvokeMessage, ToolProviderTyp
 from core.tools.errors import ToolInvokeError
 from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.system_variable import SystemVariable
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
 from core.workflow.graph_engine import Graph, GraphInitParams, GraphRuntimeState
 from core.workflow.nodes.answer import AnswerStreamGenerateRoute
@@ -16,6 +15,7 @@ from core.workflow.nodes.enums import ErrorStrategy
 from core.workflow.nodes.event import RunCompletedEvent
 from core.workflow.nodes.tool import ToolNode
 from core.workflow.nodes.tool.entities import ToolNodeData
+from core.workflow.system_variable import SystemVariable
 from models import UserFrom, WorkflowType
 
 

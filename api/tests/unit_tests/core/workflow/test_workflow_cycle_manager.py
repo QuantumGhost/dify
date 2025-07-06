@@ -18,11 +18,10 @@ from core.workflow.entities.workflow_node_execution import (
     WorkflowNodeExecutionMetadataKey,
     WorkflowNodeExecutionStatus,
 )
-from core.workflow.enums import SystemVariableKey
-from core.workflow.system_variable import SystemVariable
 from core.workflow.nodes import NodeType
 from core.workflow.repositories.workflow_execution_repository import WorkflowExecutionRepository
 from core.workflow.repositories.workflow_node_execution_repository import WorkflowNodeExecutionRepository
+from core.workflow.system_variable import SystemVariable
 from core.workflow.workflow_cycle_manager import CycleManagerWorkflowInfo, WorkflowCycleManager
 from models.enums import CreatorUserRole
 from models.model import AppMode

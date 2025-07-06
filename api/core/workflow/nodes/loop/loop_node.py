@@ -4,8 +4,6 @@ from collections.abc import Generator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from six import reraise
-
 from configs import dify_config
 from core.variables import (
     ArrayNumberSegment,

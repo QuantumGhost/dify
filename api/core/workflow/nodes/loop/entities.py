@@ -7,7 +7,6 @@ from core.variables.types import SegmentType
 from core.workflow.nodes.base import BaseLoopNodeData, BaseLoopState, BaseNodeData
 from core.workflow.utils.condition.entities import Condition
 
-
 _VALID_VAR_TYPE = frozenset(
     [
         SegmentType.STRING,

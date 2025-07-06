@@ -7,12 +7,12 @@ from core.app.entities.app_invoke_entities import InvokeFrom
 from core.variables import ArrayStringVariable, StringVariable
 from core.workflow.conversation_variable_updater import ConversationVariableUpdater
 from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
 from core.workflow.nodes.variable_assigner.v1 import VariableAssignerNode
 from core.workflow.nodes.variable_assigner.v1.node_data import WriteMode
+from core.workflow.system_variable import SystemVariable
 from models.enums import UserFrom
 from models.workflow import WorkflowType
 

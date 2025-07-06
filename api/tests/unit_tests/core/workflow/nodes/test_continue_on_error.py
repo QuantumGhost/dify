@@ -3,7 +3,6 @@ from unittest.mock import patch
 from core.app.entities.app_invoke_entities import InvokeFrom
 from core.workflow.entities.node_entities import NodeRunResult, WorkflowNodeExecutionMetadataKey
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.event import (
     GraphRunPartialSucceededEvent,
     NodeRunExceptionEvent,
@@ -14,6 +13,7 @@ from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.graph_engine import GraphEngine
 from core.workflow.nodes.event.event import RunCompletedEvent, RunStreamChunkEvent
 from core.workflow.nodes.llm.node import LLMNode
+from core.workflow.system_variable import SystemVariable
 from models.enums import UserFrom
 from models.workflow import WorkflowType
 

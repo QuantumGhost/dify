@@ -7,7 +7,6 @@ from core.variables.segments import ArrayAnySegment, ArrayStringSegment
 from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
@@ -15,6 +14,7 @@ from core.workflow.nodes.event import RunCompletedEvent
 from core.workflow.nodes.iteration.entities import ErrorHandleMode
 from core.workflow.nodes.iteration.iteration_node import IterationNode
 from core.workflow.nodes.template_transform.template_transform_node import TemplateTransformNode
+from core.workflow.system_variable import SystemVariable
 from models.enums import UserFrom
 from models.workflow import WorkflowType
 

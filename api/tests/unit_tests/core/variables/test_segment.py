@@ -5,7 +5,6 @@ from core.variables.segments import FloatSegment, IntegerSegment, SegmentUnion, 
 from core.variables.variables import IntegerVariable, SecretVariable, StringVariable, VariableUnion
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.system_variable import SystemVariable
-from core.workflow.enums import SystemVariableKey
 
 
 def test_segment_group_to_text():
