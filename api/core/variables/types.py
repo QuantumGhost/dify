@@ -107,6 +107,13 @@ class SegmentType(StrEnum):
             return SegmentType.NUMBER
         return self
 
+    def is_subtype(self, other: "SegmentType"):
+        if self == other:
+            return True
+        if self in (SegmentType.FLOAT, SegmentType.INTEGER) and other == SegmentType.NUMBER:
+            return True
+        return False
+
 
 _ARRAY_TYPES = frozenset(
     [

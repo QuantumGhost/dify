@@ -19,7 +19,6 @@ from core.moderation.base import ModerationError
 from core.workflow.callbacks import WorkflowCallback, WorkflowLoggingCallback
 from core.workflow.entities import workflow_execution
 from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.enums import SystemVariableKey
 from core.workflow.system_variable import SystemVariable
 from core.workflow.variable_loader import VariableLoader
 from core.workflow.workflow_entry import WorkflowEntry

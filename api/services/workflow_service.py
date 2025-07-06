@@ -19,6 +19,7 @@ from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecution, WorkflowNodeExecutionStatus
 from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.errors import WorkflowNodeRunFailedError
 from core.workflow.graph_engine.entities.event import InNodeEvent
 from core.workflow.nodes import NodeType
@@ -356,8 +357,14 @@ class WorkflowService:
                 )
 
         else:
+            # Create minimal SystemVariable for non-START nodes
+            system_variables = SystemVariable(
+                user_id=account.id,
+                app_id=app_model.id,
+                workflow_id=draft_workflow.id,
+            )
             variable_pool = VariablePool(
-                system_variables={},
+                system_variables=system_variables,
                 user_inputs=user_inputs,
                 environment_variables=draft_workflow.environment_variables,
                 conversation_variables=[],
@@ -671,33 +678,39 @@ def _setup_variable_pool(
 ):
     # Only inject system variables for START node type.
     if node_type == NodeType.START:
-        # Create a variable pool.
-        system_inputs: dict[SystemVariableKey, Any] = {
-            # From inputs:
-            SystemVariableKey.FILES: files,
-            SystemVariableKey.USER_ID: user_id,
-            # From workflow model
-            SystemVariableKey.APP_ID: workflow.app_id,
-            SystemVariableKey.WORKFLOW_ID: workflow.id,
-            # Randomly generated.
-            SystemVariableKey.WORKFLOW_EXECUTION_ID: str(uuid.uuid4()),
+        # Create SystemVariable object with required fields
+        system_variable_data = {
+            # Required fields
+            "user_id": user_id,
+            "app_id": workflow.app_id,
+            "workflow_id": workflow.id,
+            # Optional fields
+            "files": files or [],
+            "workflow_execution_id": str(uuid.uuid4()),
         }
 
         # Only add chatflow-specific variables for non-workflow types
         if workflow.type != WorkflowType.WORKFLOW.value:
-            system_inputs.update(
+            system_variable_data.update(
                 {
-                    SystemVariableKey.QUERY: query,
-                    SystemVariableKey.CONVERSATION_ID: conversation_id,
-                    SystemVariableKey.DIALOGUE_COUNT: 0,
+                    "query": query,
+                    "conversation_id": conversation_id,
+                    "dialogue_count": 0,
                 }
             )
+
+        system_variables = SystemVariable(**system_variable_data)
     else:
-        system_inputs = {}
+        # Create minimal SystemVariable for non-START nodes
+        system_variables = SystemVariable(
+            user_id=user_id,
+            app_id=workflow.app_id,
+            workflow_id=workflow.id,
+        )
 
     # init variable pool
     variable_pool = VariablePool(
-        system_variables=system_inputs,
+        system_variables=system_variables,
         user_inputs=user_inputs,
         environment_variables=workflow.environment_variables,
         conversation_variables=conversation_variables,

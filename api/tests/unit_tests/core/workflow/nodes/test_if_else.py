@@ -7,7 +7,7 @@ from core.file import File, FileTransferMethod, FileType
 from core.variables import ArrayFileSegment
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
@@ -38,7 +38,7 @@ def test_execute_if_else_result_true():
 
     # construct variable pool
     pool = VariablePool(
-        system_variables={SystemVariableKey.FILES: [], SystemVariableKey.USER_ID: "aaa"}, user_inputs={}
+        system_variables=SystemVariable(user_id="aaa", app_id="1", workflow_id="1", files=[]), user_inputs={}
     )
     pool.add(["start", "array_contains"], ["ab", "def"])
     pool.add(["start", "array_not_contains"], ["ac", "def"])
@@ -157,7 +157,7 @@ def test_execute_if_else_result_false():
 
     # construct variable pool
     pool = VariablePool(
-        system_variables={SystemVariableKey.FILES: [], SystemVariableKey.USER_ID: "aaa"},
+        system_variables=SystemVariable(user_id="aaa", app_id="1", workflow_id="1", files=[]),
         user_inputs={},
         environment_variables=[],
     )

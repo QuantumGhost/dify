@@ -14,7 +14,7 @@ from core.model_runtime.entities.llm_entities import LLMResult, LLMUsage
 from core.model_runtime.entities.message_entities import AssistantPromptMessage
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
@@ -63,12 +63,14 @@ def init_llm_node(config: dict) -> LLMNode:
 
     # construct variable pool
     variable_pool = VariablePool(
-        system_variables={
-            SystemVariableKey.QUERY: "what's the weather today?",
-            SystemVariableKey.FILES: [],
-            SystemVariableKey.CONVERSATION_ID: "abababa",
-            SystemVariableKey.USER_ID: "aaa",
-        },
+        system_variables=SystemVariable(
+            user_id="aaa",
+            app_id=app_id,
+            workflow_id=workflow_id,
+            files=[],
+            query="what's the weather today?",
+            conversation_id="abababa",
+        ),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[],

@@ -7,6 +7,7 @@ from core.tools.entities.tool_entities import ToolInvokeMessage, ToolProviderTyp
 from core.tools.errors import ToolInvokeError
 from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
+from core.workflow.system_variable import SystemVariable
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
 from core.workflow.graph_engine import Graph, GraphInitParams, GraphRuntimeState
 from core.workflow.nodes.answer import AnswerStreamGenerateRoute
@@ -34,7 +35,7 @@ def _create_tool_node():
         version="1",
     )
     variable_pool = VariablePool(
-        system_variables={},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1"),
         user_inputs={},
     )
     node = ToolNode(

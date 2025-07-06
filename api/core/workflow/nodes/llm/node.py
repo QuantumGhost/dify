@@ -203,7 +203,7 @@ class LLMNode(BaseNode[LLMNodeData]):
             if self.node_data.memory:
                 query = self.node_data.memory.query_prompt_template
                 if not query and (
-                    query_variable := variable_pool.get((SYSTEM_VARIABLE_NODE_ID, SystemVariableKey.QUERY))
+                    query_variable := variable_pool.get((SYSTEM_VARIABLE_NODE_ID, SystemVariableKey.QUERY.value))
                 ):
                     query = query_variable.text
 

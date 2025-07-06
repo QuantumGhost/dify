@@ -96,7 +96,7 @@ class ToolNode(BaseNode[ToolNodeData]):
         )
 
         # get conversation id
-        conversation_id = self.graph_runtime_state.variable_pool.get(["sys", SystemVariableKey.CONVERSATION_ID])
+        conversation_id = self.graph_runtime_state.variable_pool.get(["sys", SystemVariableKey.CONVERSATION_ID.value])
 
         try:
             message_stream = ToolEngine.generic_invoke(

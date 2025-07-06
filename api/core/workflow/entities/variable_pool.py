@@ -51,8 +51,8 @@ class VariablePool(BaseModel):
     )
 
     def model_post_init(self, context: Any, /) -> None:
-        for key, value in self.system_variables.items():
-            self.add((SYSTEM_VARIABLE_NODE_ID, key.value), value)
+        # Create a mapping from field names to SystemVariableKey enum values
+        self._add_system_variables(self.system_variables)
         # Add environment variables to the variable pool
         for var in self.environment_variables:
             self.add((ENVIRONMENT_VARIABLE_NODE_ID, var.name), var)
@@ -89,6 +89,9 @@ class VariablePool(BaseModel):
             variable = variable_factory.segment_to_variable(segment=segment, selector=selector)
 
         hash_key = hash(tuple(selector[1:]))
+        # Ensure the first-level key exists in the dictionary
+        if selector[0] not in self.variable_dictionary:
+            self.variable_dictionary[selector[0]] = {}
         self.variable_dictionary[selector[0]][hash_key] = variable
 
     def get(self, selector: Sequence[str], /) -> Segment | None:
@@ -159,3 +162,14 @@ class VariablePool(BaseModel):
         if isinstance(segment, FileSegment):
             return segment
         return None
+
+    def _add_system_variables(self, system_variable: SystemVariable):
+        sys_var_mapping = system_variable.model_dump()
+        for key, value in sys_var_mapping.items():
+            if value is None:
+                continue
+            self.add((SYSTEM_VARIABLE_NODE_ID, key), value)  # type: ignore
+
+    @classmethod
+    def empty(cls) -> "VariablePool":
+        return cls(system_variables=SystemVariable.empty())

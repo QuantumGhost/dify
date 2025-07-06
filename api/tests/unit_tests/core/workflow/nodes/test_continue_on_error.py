@@ -3,7 +3,7 @@ from unittest.mock import patch
 from core.app.entities.app_invoke_entities import InvokeFrom
 from core.workflow.entities.node_entities import NodeRunResult, WorkflowNodeExecutionMetadataKey
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.event import (
     GraphRunPartialSucceededEvent,
     NodeRunExceptionEvent,
@@ -164,12 +164,9 @@ class ContinueOnErrorTestHelper:
         """Helper method to create a graph engine instance for testing"""
         graph = Graph.init(graph_config=graph_config)
         variable_pool = {
-            "system_variables": {
-                SystemVariableKey.QUERY: "clear",
-                SystemVariableKey.FILES: [],
-                SystemVariableKey.CONVERSATION_ID: "abababa",
-                SystemVariableKey.USER_ID: "aaa",
-            },
+            "system_variables": SystemVariable(
+                user_id="aaa", app_id="1", workflow_id="1", files=[], query="clear", conversation_id="abababa"
+            ),
             "user_inputs": user_inputs or {"uid": "takato"},
         }
 

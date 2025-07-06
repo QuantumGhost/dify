@@ -19,6 +19,7 @@ from core.workflow.entities.workflow_node_execution import (
     WorkflowNodeExecutionStatus,
 )
 from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.nodes import NodeType
 from core.workflow.repositories.workflow_execution_repository import WorkflowExecutionRepository
 from core.workflow.repositories.workflow_node_execution_repository import WorkflowNodeExecutionRepository
@@ -67,14 +68,14 @@ def real_app_generate_entity():
 
 @pytest.fixture
 def real_workflow_system_variables():
-    return {
-        SystemVariableKey.QUERY: "test query",
-        SystemVariableKey.CONVERSATION_ID: "test-conversation-id",
-        SystemVariableKey.USER_ID: "test-user-id",
-        SystemVariableKey.APP_ID: "test-app-id",
-        SystemVariableKey.WORKFLOW_ID: "test-workflow-id",
-        SystemVariableKey.WORKFLOW_EXECUTION_ID: "test-workflow-run-id",
-    }
+    return SystemVariable(
+        query="test query",
+        conversation_id="test-conversation-id",
+        user_id="test-user-id",
+        app_id="test-app-id",
+        workflow_id="test-workflow-id",
+        workflow_execution_id="test-workflow-run-id",
+    )
 
 
 @pytest.fixture

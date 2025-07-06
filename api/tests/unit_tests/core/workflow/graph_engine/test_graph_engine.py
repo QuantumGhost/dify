@@ -7,7 +7,7 @@ from core.app.entities.app_invoke_entities import InvokeFrom
 from core.workflow.entities.node_entities import NodeRunResult, WorkflowNodeExecutionMetadataKey
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.event import (
     BaseNodeEvent,
     GraphRunFailedEvent,
@@ -169,7 +169,8 @@ def test_run_parallel_in_workflow(mock_close, mock_remove):
     graph = Graph.init(graph_config=graph_config)
 
     variable_pool = VariablePool(
-        system_variables={SystemVariableKey.FILES: [], SystemVariableKey.USER_ID: "aaa"}, user_inputs={"query": "hi"}
+        system_variables=SystemVariable(user_id="aaa", app_id="1", workflow_id="1", files=[]),
+        user_inputs={"query": "hi"},
     )
 
     graph_engine = GraphEngine(
@@ -290,12 +291,14 @@ def test_run_parallel_in_chatflow(mock_close, mock_remove):
     graph = Graph.init(graph_config=graph_config)
 
     variable_pool = VariablePool(
-        system_variables={
-            SystemVariableKey.QUERY: "what's the weather in SF",
-            SystemVariableKey.FILES: [],
-            SystemVariableKey.CONVERSATION_ID: "abababa",
-            SystemVariableKey.USER_ID: "aaa",
-        },
+        system_variables=SystemVariable(
+            user_id="aaa",
+            app_id="1",
+            workflow_id="1",
+            files=[],
+            query="what's the weather in SF",
+            conversation_id="abababa",
+        ),
         user_inputs={},
     )
 
@@ -470,12 +473,9 @@ def test_run_branch(mock_close, mock_remove):
     graph = Graph.init(graph_config=graph_config)
 
     variable_pool = VariablePool(
-        system_variables={
-            SystemVariableKey.QUERY: "hi",
-            SystemVariableKey.FILES: [],
-            SystemVariableKey.CONVERSATION_ID: "abababa",
-            SystemVariableKey.USER_ID: "aaa",
-        },
+        system_variables=SystemVariable(
+            user_id="aaa", app_id="1", workflow_id="1", files=[], query="hi", conversation_id="abababa"
+        ),
         user_inputs={"uid": "takato"},
     )
 
@@ -799,18 +799,16 @@ def test_condition_parallel_correct_output(mock_close, mock_remove, app):
 
     # construct variable pool
     pool = VariablePool(
-        system_variables={
-            SystemVariableKey.QUERY: "dify",
-            SystemVariableKey.FILES: [],
-            SystemVariableKey.CONVERSATION_ID: "abababa",
-            SystemVariableKey.USER_ID: "1",
-        },
+        system_variables=SystemVariable(
+            user_id="1", app_id="1", workflow_id="1", files=[], query="dify", conversation_id="abababa"
+        ),
         user_inputs={},
         environment_variables=[],
     )
     pool.add(["pe", "list_output"], ["dify-1", "dify-2"])
     variable_pool = VariablePool(
-        system_variables={SystemVariableKey.FILES: [], SystemVariableKey.USER_ID: "aaa"}, user_inputs={"query": "hi"}
+        system_variables=SystemVariable(user_id="aaa", app_id="1", workflow_id="1", files=[]),
+        user_inputs={"query": "hi"},
     )
 
     graph_engine = GraphEngine(

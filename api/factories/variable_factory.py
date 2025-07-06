@@ -214,7 +214,7 @@ def build_segment_with_type(segment_type: SegmentType, value: Any) -> Segment:
     inferred_type = inferred_segment.value_type
 
     # Type compatibility checking
-    if inferred_type == segment_type:
+    if inferred_type.is_subtype(segment_type):
         return inferred_segment
 
     # Type mismatch - raise error with descriptive message

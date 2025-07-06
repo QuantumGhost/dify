@@ -6,12 +6,16 @@ from core.variables import FileSegment, StringSegment
 from core.workflow.constants import CONVERSATION_VARIABLE_NODE_ID, ENVIRONMENT_VARIABLE_NODE_ID
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from factories.variable_factory import build_segment, segment_to_variable
 
 
 @pytest.fixture
 def pool():
-    return VariablePool(system_variables={}, user_inputs={})
+    return VariablePool(
+        system_variables=SystemVariable(user_id="test_user_id", app_id="test_app_id", workflow_id="test_workflow_id"),
+        user_inputs={},
+    )
 
 
 @pytest.fixture
@@ -52,18 +56,28 @@ def test_use_long_selector(pool):
 
 class TestVariablePool:
     def test_constructor(self):
-        pool = VariablePool()
+        # Test with minimal required SystemVariable
+        minimal_system_vars = SystemVariable(
+            user_id="test_user_id", app_id="test_app_id", workflow_id="test_workflow_id"
+        )
+        pool = VariablePool(system_variables=minimal_system_vars)
+
+        # Test with all parameters
         pool = VariablePool(
             variable_dictionary={},
             user_inputs={},
-            system_variables={},
+            system_variables=minimal_system_vars,
             environment_variables=[],
             conversation_variables=[],
         )
 
+        # Test with more complex SystemVariable
+        complex_system_vars = SystemVariable(
+            user_id="test_user_id", app_id="test_app_id", workflow_id="test_workflow_id"
+        )
         pool = VariablePool(
             user_inputs={"key": "value"},
-            system_variables={SystemVariableKey.WORKFLOW_ID: "test_workflow_id"},
+            system_variables=complex_system_vars,
             environment_variables=[
                 segment_to_variable(
                     segment=build_segment(1),
@@ -81,5 +95,11 @@ class TestVariablePool:
         )
 
     def test_constructor_with_invalid_system_variable_key(self):
+        # Test that SystemVariable validation works properly
         with pytest.raises(ValidationError):
-            VariablePool(system_variables={"invalid_key": "value"})  # type: ignore
+            # This should fail because required fields are missing
+            SystemVariable()  # type: ignore
+
+        # Test that VariablePool requires system_variables
+        with pytest.raises(ValidationError):
+            VariablePool()  # type: ignore

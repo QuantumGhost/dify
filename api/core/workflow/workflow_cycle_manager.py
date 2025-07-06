@@ -23,6 +23,7 @@ from core.workflow.entities.workflow_node_execution import (
     WorkflowNodeExecutionMetadataKey,
     WorkflowNodeExecutionStatus,
 )
+from core.workflow.system_variable import SystemVariable
 from core.workflow.enums import SystemVariableKey
 from core.workflow.repositories.workflow_execution_repository import WorkflowExecutionRepository
 from core.workflow.repositories.workflow_node_execution_repository import WorkflowNodeExecutionRepository
@@ -43,7 +44,7 @@ class WorkflowCycleManager:
         self,
         *,
         application_generate_entity: Union[AdvancedChatAppGenerateEntity, WorkflowAppGenerateEntity],
-        workflow_system_variables: dict[SystemVariableKey, Any],
+        workflow_system_variables: SystemVariable,
         workflow_info: CycleManagerWorkflowInfo,
         workflow_execution_repository: WorkflowExecutionRepository,
         workflow_node_execution_repository: WorkflowNodeExecutionRepository,
@@ -56,17 +57,28 @@ class WorkflowCycleManager:
 
     def handle_workflow_run_start(self) -> WorkflowExecution:
         inputs = {**self._application_generate_entity.inputs}
-        for key, value in (self._workflow_system_variables or {}).items():
-            if key.value == "conversation":
-                continue
-            inputs[f"sys.{key.value}"] = value
+
+        # Iterate over SystemVariable fields using Pydantic's model_fields
+        if self._workflow_system_variables:
+            for field_name, field_info in self._workflow_system_variables.model_fields.items():
+                # Skip conversation field as per original logic
+                if field_name == "conversation_id":
+                    continue
+
+                # Get the actual value from the SystemVariable instance
+                value = getattr(self._workflow_system_variables, field_name)
+                # Only add non-None values
+                if value is not None:
+                    inputs[f"sys.{field_name}"] = value
 
         # handle special values
         inputs = dict(WorkflowEntry.handle_special_values(inputs) or {})
 
         # init workflow run
         # TODO: This workflow_run_id should always not be None, maybe we can use a more elegant way to handle this
-        execution_id = str(self._workflow_system_variables.get(SystemVariableKey.WORKFLOW_EXECUTION_ID) or uuid4())
+        execution_id = str(
+            self._workflow_system_variables.workflow_execution_id if self._workflow_system_variables else None
+        ) or str(uuid4())
         execution = WorkflowExecution.new(
             id_=execution_id,
             workflow_id=self._workflow_info.workflow_id,

@@ -4,6 +4,7 @@ from core.app.entities.app_invoke_entities import InvokeFrom
 from core.file import File, FileTransferMethod, FileType
 from core.variables import ArrayFileVariable, FileVariable
 from core.workflow.entities.variable_pool import VariablePool
+from core.workflow.system_variable import SystemVariable
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
 from core.workflow.graph_engine import Graph, GraphInitParams, GraphRuntimeState
 from core.workflow.nodes.answer import AnswerStreamGenerateRoute
@@ -40,7 +41,7 @@ def test_http_request_node_binary_file(monkeypatch):
         ),
     )
     variable_pool = VariablePool(
-        system_variables={},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1"),
         user_inputs={},
     )
     variable_pool.add(
@@ -128,7 +129,7 @@ def test_http_request_node_form_with_file(monkeypatch):
         ),
     )
     variable_pool = VariablePool(
-        system_variables={},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1"),
         user_inputs={},
     )
     variable_pool.add(
@@ -223,7 +224,7 @@ def test_http_request_node_form_with_multiple_files(monkeypatch):
     )
 
     variable_pool = VariablePool(
-        system_variables={},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1"),
         user_inputs={},
     )
 

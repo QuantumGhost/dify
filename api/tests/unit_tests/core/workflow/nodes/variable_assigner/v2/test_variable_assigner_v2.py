@@ -5,7 +5,7 @@ from uuid import uuid4
 from core.app.entities.app_invoke_entities import InvokeFrom
 from core.variables import ArrayStringVariable
 from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.graph import Graph
 from core.workflow.graph_engine.entities.graph_init_params import GraphInitParams
 from core.workflow.graph_engine.entities.graph_runtime_state import GraphRuntimeState
@@ -109,7 +109,7 @@ def test_remove_first_from_array():
     )
 
     variable_pool = VariablePool(
-        system_variables={SystemVariableKey.CONVERSATION_ID: "conversation_id"},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1", conversation_id="conversation_id"),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[conversation_variable],
@@ -196,7 +196,7 @@ def test_remove_last_from_array():
     )
 
     variable_pool = VariablePool(
-        system_variables={SystemVariableKey.CONVERSATION_ID: "conversation_id"},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1", conversation_id="conversation_id"),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[conversation_variable],
@@ -275,7 +275,7 @@ def test_remove_first_from_empty_array():
     )
 
     variable_pool = VariablePool(
-        system_variables={SystemVariableKey.CONVERSATION_ID: "conversation_id"},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1", conversation_id="conversation_id"),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[conversation_variable],
@@ -354,7 +354,7 @@ def test_remove_last_from_empty_array():
     )
 
     variable_pool = VariablePool(
-        system_variables={SystemVariableKey.CONVERSATION_ID: "conversation_id"},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1", conversation_id="conversation_id"),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[conversation_variable],

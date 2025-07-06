@@ -3,7 +3,7 @@ from collections.abc import Generator
 from datetime import UTC, datetime
 
 from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.enums import SystemVariableKey
+from core.workflow.system_variable import SystemVariable
 from core.workflow.graph_engine.entities.event import (
     GraphEngineEvent,
     NodeRunStartedEvent,
@@ -180,12 +180,14 @@ def test_process():
     graph = Graph.init(graph_config=graph_config)
 
     variable_pool = VariablePool(
-        system_variables={
-            SystemVariableKey.QUERY: "what's the weather in SF",
-            SystemVariableKey.FILES: [],
-            SystemVariableKey.CONVERSATION_ID: "abababa",
-            SystemVariableKey.USER_ID: "aaa",
-        },
+        system_variables=SystemVariable(
+            user_id="aaa",
+            app_id="1",
+            workflow_id="1",
+            files=[],
+            query="what's the weather in SF",
+            conversation_id="abababa",
+        ),
         user_inputs={},
     )
 

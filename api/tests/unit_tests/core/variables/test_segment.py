@@ -4,14 +4,13 @@ from core.helper import encrypter
 from core.variables.segments import FloatSegment, IntegerSegment, SegmentUnion, StringSegment
 from core.variables.variables import IntegerVariable, SecretVariable, StringVariable, VariableUnion
 from core.workflow.entities.variable_pool import VariablePool
+from core.workflow.system_variable import SystemVariable
 from core.workflow.enums import SystemVariableKey
 
 
 def test_segment_group_to_text():
     variable_pool = VariablePool(
-        system_variables={
-            SystemVariableKey("user_id"): "fake-user-id",
-        },
+        system_variables=SystemVariable(user_id="fake-user-id"),
         user_inputs={},
         environment_variables=[
             SecretVariable(name="secret_key", value="fake-secret-key"),
@@ -33,7 +32,7 @@ def test_segment_group_to_text():
 
 def test_convert_constant_to_segment_group():
     variable_pool = VariablePool(
-        system_variables={},
+        system_variables=SystemVariable(user_id="1", app_id="1", workflow_id="1"),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[],
@@ -46,9 +45,7 @@ def test_convert_constant_to_segment_group():
 
 def test_convert_variable_to_segment_group():
     variable_pool = VariablePool(
-        system_variables={
-            SystemVariableKey("user_id"): "fake-user-id",
-        },
+        system_variables=SystemVariable(user_id="fake-user-id"),
         user_inputs={},
         environment_variables=[],
         conversation_variables=[],

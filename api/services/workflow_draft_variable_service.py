@@ -326,7 +326,7 @@ class WorkflowDraftVariableService:
         draft_var = self._get_variable(
             app_id=app_id,
             node_id=SYSTEM_VARIABLE_NODE_ID,
-            name=str(SystemVariableKey.CONVERSATION_ID),
+            name=SystemVariableKey.CONVERSATION_ID.value,
         )
         if draft_var is None:
             return None
@@ -630,7 +630,7 @@ class DraftVariableSaver:
                 )
                 has_non_sys_variables = True
             else:
-                if name == SystemVariableKey.FILES:
+                if name == SystemVariableKey.FILES.value:
                     # Here we know the type of variable must be `array[file]`, we
                     # just build files from the value.
                     files = [File.model_validate(v) for v in value]
