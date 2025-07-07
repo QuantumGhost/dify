@@ -11,6 +11,11 @@ from .types import SegmentType
 
 
 class Segment(BaseModel):
+    """Segment is runtime type used during the execution of workflow.
+
+    Note: this class is abstract, you should use subclasses of this class instead.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     value_type: SegmentType

@@ -249,6 +249,6 @@ def segment_to_variable(
             name=name,
             description=description,
             value=segment.value,
-            selector=selector,
+            selector=list(selector),
         ),
     )

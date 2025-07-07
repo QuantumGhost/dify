@@ -9,6 +9,7 @@ from core.file import File, FileAttribute, file_manager
 from core.variables import Segment, SegmentGroup, Variable
 from core.variables.consts import MIN_SELECTORS_LENGTH
 from core.variables.segments import FileSegment, NoneSegment
+from core.variables.variables import VariableUnion
 from core.workflow.constants import CONVERSATION_VARIABLE_NODE_ID, ENVIRONMENT_VARIABLE_NODE_ID, SYSTEM_VARIABLE_NODE_ID
 from core.workflow.system_variable import SystemVariable
 from factories import variable_factory
@@ -23,7 +24,7 @@ class VariablePool(BaseModel):
     # The first element of the selector is the node id, it's the first-level key in the dictionary.
     # Other elements of the selector are the keys in the second-level dictionary. To get the key, we hash the
     # elements of the selector except the first one.
-    variable_dictionary: dict[str, dict[int, Segment]] = Field(
+    variable_dictionary: dict[str, dict[int, VariableUnion]] = Field(
         description="Variables mapping",
         default=defaultdict(dict),
     )
@@ -40,11 +41,11 @@ class VariablePool(BaseModel):
     system_variables: SystemVariable = Field(
         description="System variables",
     )
-    environment_variables: Sequence[Variable] = Field(
+    environment_variables: Sequence[VariableUnion] = Field(
         description="Environment variables.",
         default_factory=list,
     )
-    conversation_variables: Sequence[Variable] = Field(
+    conversation_variables: Sequence[VariableUnion] = Field(
         description="Conversation variables.",
         default_factory=list,
     )
@@ -87,11 +88,23 @@ class VariablePool(BaseModel):
             segment = variable_factory.build_segment(value)
             variable = variable_factory.segment_to_variable(segment=segment, selector=selector)
 
-        hash_key = hash(tuple(selector[1:]))
+        key, hash_key = self._selector_to_keys(selector)
         # Ensure the first-level key exists in the dictionary
-        if selector[0] not in self.variable_dictionary:
-            self.variable_dictionary[selector[0]] = {}
-        self.variable_dictionary[selector[0]][hash_key] = variable
+        if key not in self.variable_dictionary:
+            self.variable_dictionary[key] = {}
+        self.variable_dictionary[key][hash_key] = variable
+
+    @classmethod
+    def _selector_to_keys(cls, selector: Sequence[str]) -> tuple[str, int]:
+        return selector[0], hash(tuple(selector[1:]))
+
+    def _has(self, selector: Sequence[str]) -> bool:
+        key, hash_key = self._selector_to_keys(selector)
+        if key not in self.variable_dictionary:
+            return False
+        if hash_key not in self.variable_dictionary[key]:
+            return False
+        return True
 
     def get(self, selector: Sequence[str], /) -> Segment | None:
         """
@@ -109,8 +122,8 @@ class VariablePool(BaseModel):
         if len(selector) < MIN_SELECTORS_LENGTH:
             return None
 
-        hash_key = hash(tuple(selector[1:]))
-        value = self.variable_dictionary[selector[0]].get(hash_key)
+        key, hash_key = self._selector_to_keys(selector)
+        value = self.variable_dictionary[key].get(hash_key)
 
         if value is None:
             selector, attr = selector[:-1], selector[-1]
@@ -143,8 +156,9 @@ class VariablePool(BaseModel):
         if len(selector) == 1:
             self.variable_dictionary[selector[0]] = {}
             return
+        key, hash_key = self._selector_to_keys(selector)
         hash_key = hash(tuple(selector[1:]))
-        self.variable_dictionary[selector[0]].pop(hash_key, None)
+        self.variable_dictionary[key].pop(hash_key, None)
 
     def convert_template(self, template: str, /):
         parts = VARIABLE_PATTERN.split(template)
@@ -167,8 +181,24 @@ class VariablePool(BaseModel):
         for key, value in sys_var_mapping.items():
             if value is None:
                 continue
-            self.add((SYSTEM_VARIABLE_NODE_ID, key), value)  # type: ignore
+            selector = (SYSTEM_VARIABLE_NODE_ID, key)
+            # If the system variable already exists, do not add it again.
+            # This ensures that we can keep the id of the system variables intact.
+            if self._has(selector):
+                continue
+            self.add(selector, value)  # type: ignore
 
     @classmethod
     def empty(cls) -> "VariablePool":
         return cls(system_variables=SystemVariable.empty())
+
+    def dumps(self) -> str:
+        return self.model_dump_json()
+
+    @classmethod
+    def loads(cls, json_data: str) -> "VariablePool":
+        return VariablePool.model_validate_json(json_data)
+
+    def reload_storage_keys_for_file_types(self):
+        # TODO
+        pass
