@@ -1,5 +1,4 @@
 import json
-import time
 import uuid
 from collections.abc import Generator
 from decimal import Decimal
@@ -80,7 +79,9 @@ def init_llm_node(config: dict) -> LLMNode:
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
         graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+        graph_runtime_state=GraphRuntimeState(
+            variable_pool=variable_pool,
+        ),
         config=config,
     )
 

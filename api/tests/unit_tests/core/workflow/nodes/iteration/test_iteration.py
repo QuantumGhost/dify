@@ -1,4 +1,3 @@
-import time
 import uuid
 from unittest.mock import patch
 
@@ -166,7 +165,9 @@ def test_run():
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
         graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=pool, start_at=time.perf_counter()),
+        graph_runtime_state=GraphRuntimeState(
+            variable_pool=pool,
+        ),
         config={
             "data": {
                 "iterator_selector": ["pe", "list_output"],
@@ -383,7 +384,9 @@ def test_run_parallel():
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
         graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=pool, start_at=time.perf_counter()),
+        graph_runtime_state=GraphRuntimeState(
+            variable_pool=pool,
+        ),
         config={
             "data": {
                 "iterator_selector": ["pe", "list_output"],
@@ -599,7 +602,9 @@ def test_iteration_run_in_parallel_mode():
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
         graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=pool, start_at=time.perf_counter()),
+        graph_runtime_state=GraphRuntimeState(
+            variable_pool=pool,
+        ),
         config={
             "data": {
                 "iterator_selector": ["pe", "list_output"],
@@ -618,7 +623,9 @@ def test_iteration_run_in_parallel_mode():
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
         graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=pool, start_at=time.perf_counter()),
+        graph_runtime_state=GraphRuntimeState(
+            variable_pool=pool,
+        ),
         config={
             "data": {
                 "iterator_selector": ["pe", "list_output"],
@@ -822,7 +829,9 @@ def test_iteration_run_error_handle():
         id=str(uuid.uuid4()),
         graph_init_params=init_params,
         graph=graph,
-        graph_runtime_state=GraphRuntimeState(variable_pool=pool, start_at=time.perf_counter()),
+        graph_runtime_state=GraphRuntimeState(
+            variable_pool=pool,
+        ),
         config={
             "data": {
                 "iterator_selector": ["pe", "list_output"],

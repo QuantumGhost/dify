@@ -70,8 +70,7 @@ class WorkflowEntry:
             raise ValueError("Max workflow call depth {} reached.".format(workflow_call_max_depth))
 
         # init workflow run state
-        graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
-        self.graph_engine = GraphEngine(
+        graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool)
             tenant_id=tenant_id,
             app_id=app_id,
             workflow_type=workflow_type,
@@ -161,7 +160,7 @@ class WorkflowEntry:
                 call_depth=0,
             ),
             graph=graph,
-            graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+            graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool),
         )
 
         try:
@@ -277,7 +276,7 @@ class WorkflowEntry:
                 call_depth=0,
             ),
             graph=graph,
-            graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter()),
+            graph_runtime_state=GraphRuntimeState(variable_pool=variable_pool),
         )
 
         try:
