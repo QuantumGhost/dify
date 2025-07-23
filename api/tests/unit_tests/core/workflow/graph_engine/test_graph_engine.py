@@ -1082,7 +1082,7 @@ def test_suspend_and_resume():
     events = list(graph_engine.run())
     last_event = events[-1]
     assert isinstance(last_event, GraphRunSuspendedEvent)
-    assert last_event.next_node_id == _IF_ELSE_NODE_ID
+    assert last_event.current_node_id == _IF_ELSE_NODE_ID
     state = graph_engine.save()
     assert state != ""
 

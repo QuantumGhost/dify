@@ -1,0 +1,10 @@
+project-excludes = [
+    "**/core/model_runtime/model_providers/",
+    "**/tests/",
+    "**/migrations/",
+]
+replace-imports-with-any = [
+    "flask_login",
+    "flask_restful",
+    "flask_restful.inputs",
+]

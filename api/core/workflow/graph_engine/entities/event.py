@@ -44,7 +44,7 @@ class GraphRunPartialSucceededEvent(BaseGraphEvent):
 
 
 class GraphRunSuspendedEvent(BaseGraphEvent):
-    next_node_id: str = Field(..., description="the next node id to execute while resumed.")
+    current_node_id: str = Field(description="the current node (node just finished executing) while suspending.")
 
 
 ###########################################

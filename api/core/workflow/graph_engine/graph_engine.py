@@ -254,10 +254,9 @@ class GraphEngine:
             route_node_state = self.graph_runtime_state.node_run_state.create_node_state(node_id=next_node_id)
 
             # get node config
-            node_id = route_node_state.node_id
-            node_config = self.graph.node_id_config_mapping.get(node_id)
+            node_config = self.graph.node_id_config_mapping.get(route_node_state.node_id)
             if not node_config:
-                raise GraphRunFailedError(f"Node {node_id} config not found.")
+                raise GraphRunFailedError(f"Node {route_node_state.node_id} config not found.")
 
             # convert to specific node
             node_type = NodeType(node_config.get("data", {}).get("type"))
@@ -281,23 +280,7 @@ class GraphEngine:
                 thread_pool_id=self.thread_pool_id,
             )
             node.init_node_data(node_config.get("data", {}))
-            # Determine if the execution should be suspended or stopped at this point.
-            # If so, yield the corresponding event.
-            #
-            # Note: Suspension is not allowed while the graph engine is running in parallel mode.
-            if in_parallel_id is None:
-                command = self._command_source(CommandParams(next_node=node))
-                if isinstance(command, SuspendCommand):
-                    self.graph_runtime_state.record_suspend_state(next_node_id)
-                    yield GraphRunSuspendedEvent(next_node_id=next_node_id)
-                    return
-                elif isinstance(command, StopCommand):
-                    # TODO: STOP the execution of worklow.
-                    return
-                elif isinstance(command, ContinueCommand):
-                    pass
-                else:
-                    raise AssertionError("unreachable statement.")
+
             try:
                 # run node
                 generator = self._run_node(
@@ -351,117 +334,146 @@ class GraphEngine:
 
             previous_route_node_state = route_node_state
 
-            # get next node ids
-            edge_mappings = self.graph.edge_mapping.get(next_node_id)
-            if not edge_mappings:
-                break
+            # Determine if the execution should be suspended or stopped at this point.
+            # If so, yield the corresponding event.
+            #
+            # Note: Suspension is not allowed while the graph engine is running in parallel mode.
+            if in_parallel_id is None:
+                command = self._command_source(CommandParams(next_node=node))
+                if isinstance(command, SuspendCommand):
+                    self.graph_runtime_state.record_suspend_state(next_node_id)
+                    yield GraphRunSuspendedEvent(current_node_id=next_node_id)
+                    return
+                elif isinstance(command, StopCommand):
+                    # TODO: STOP the execution of worklow.
+                    return
+                elif isinstance(command, ContinueCommand):
+                    pass
+                else:
+                    raise AssertionError("unreachable statement.")
 
-            if len(edge_mappings) == 1:
-                edge = edge_mappings[0]
-                if (
-                    previous_route_node_state.status == RouteNodeState.Status.EXCEPTION
-                    and node.error_strategy == ErrorStrategy.FAIL_BRANCH
-                    and edge.run_condition is None
-                ):
-                    break
-                if edge.run_condition:
+    def _get_next_node_id(
+        self,
+        current_node_id: str,
+        node: BaseNode,
+        route_node_state: RouteNodeState,
+        in_parallel_id: Optional[str] = None,
+        parent_parallel_id: Optional[str] = None,
+        parallel_start_node_id: Optional[str] = None,
+        parent_parallel_start_node_id: Optional[str] = None,
+        handle_exceptions: list[str] = [],
+    ) -> str | None:
+        # get next node ids
+        edge_mappings = self.graph.edge_mapping.get(node.node_id)
+        if not edge_mappings:
+            return None
+
+        if len(edge_mappings) == 1:
+            edge = edge_mappings[0]
+            if (
+                route_node_state.status == RouteNodeState.Status.EXCEPTION
+                and node.error_strategy == ErrorStrategy.FAIL_BRANCH
+                and edge.run_condition is None
+            ):
+                return None
+            if edge.run_condition:
+                result = ConditionManager.get_condition_handler(
+                    init_params=self.init_params,
+                    graph=self.graph,
+                    run_condition=edge.run_condition,
+                ).check(
+                    graph_runtime_state=self.graph_runtime_state,
+                    previous_route_node_state=route_node_state,
+                )
+
+                if not result:
+                    return None
+
+            next_node_id = edge.target_node_id
+        else:
+            final_node_id = None
+
+            if any(edge.run_condition for edge in edge_mappings):
+                # if nodes has run conditions, get node id which branch to take based on the run condition results
+                condition_edge_mappings: dict[str, list[GraphEdge]] = {}
+                for edge in edge_mappings:
+                    if edge.run_condition:
+                        run_condition_hash = edge.run_condition.hash
+                        if run_condition_hash not in condition_edge_mappings:
+                            condition_edge_mappings[run_condition_hash] = []
+
+                        condition_edge_mappings[run_condition_hash].append(edge)
+
+                for _, sub_edge_mappings in condition_edge_mappings.items():
+                    if len(sub_edge_mappings) == 0:
+                        continue
+
+                    edge = cast(GraphEdge, sub_edge_mappings[0])
+                    if edge.run_condition is None:
+                        logger.warning(f"Edge {edge.target_node_id} run condition is None")
+                        continue
+
                     result = ConditionManager.get_condition_handler(
                         init_params=self.init_params,
                         graph=self.graph,
                         run_condition=edge.run_condition,
                     ).check(
                         graph_runtime_state=self.graph_runtime_state,
-                        previous_route_node_state=previous_route_node_state,
+                        previous_route_node_state=route_node_state,
                     )
 
                     if not result:
-                        break
+                        continue
 
-                next_node_id = edge.target_node_id
-            else:
-                final_node_id = None
-
-                if any(edge.run_condition for edge in edge_mappings):
-                    # if nodes has run conditions, get node id which branch to take based on the run condition results
-                    condition_edge_mappings: dict[str, list[GraphEdge]] = {}
-                    for edge in edge_mappings:
-                        if edge.run_condition:
-                            run_condition_hash = edge.run_condition.hash
-                            if run_condition_hash not in condition_edge_mappings:
-                                condition_edge_mappings[run_condition_hash] = []
-
-                            condition_edge_mappings[run_condition_hash].append(edge)
-
-                    for _, sub_edge_mappings in condition_edge_mappings.items():
-                        if len(sub_edge_mappings) == 0:
-                            continue
-
-                        edge = cast(GraphEdge, sub_edge_mappings[0])
-                        if edge.run_condition is None:
-                            logger.warning(f"Edge {edge.target_node_id} run condition is None")
-                            continue
-
-                        result = ConditionManager.get_condition_handler(
-                            init_params=self.init_params,
-                            graph=self.graph,
-                            run_condition=edge.run_condition,
-                        ).check(
-                            graph_runtime_state=self.graph_runtime_state,
-                            previous_route_node_state=previous_route_node_state,
+                    if len(sub_edge_mappings) == 1:
+                        final_node_id = edge.target_node_id
+                    else:
+                        parallel_generator = self._run_parallel_branches(
+                            edge_mappings=sub_edge_mappings,
+                            in_parallel_id=in_parallel_id,
+                            parallel_start_node_id=parallel_start_node_id,
+                            handle_exceptions=handle_exceptions,
                         )
 
-                        if not result:
-                            continue
+                        for parallel_result in parallel_generator:
+                            if isinstance(parallel_result, _ParallelBranchResult):
+                                final_node_id = parallel_result.final_node_id
+                            else:
+                                yield parallel_result
 
-                        if len(sub_edge_mappings) == 1:
-                            final_node_id = edge.target_node_id
-                        else:
-                            parallel_generator = self._run_parallel_branches(
-                                edge_mappings=sub_edge_mappings,
-                                in_parallel_id=in_parallel_id,
-                                parallel_start_node_id=parallel_start_node_id,
-                                handle_exceptions=handle_exceptions,
-                            )
-
-                            for parallel_result in parallel_generator:
-                                if isinstance(parallel_result, _ParallelBranchResult):
-                                    final_node_id = parallel_result.final_node_id
-                                else:
-                                    yield parallel_result
-
-                        break
-
-                    if not final_node_id:
-                        break
-
-                    next_node_id = final_node_id
-                elif (
-                    node.continue_on_error
-                    and node.error_strategy == ErrorStrategy.FAIL_BRANCH
-                    and previous_route_node_state.status == RouteNodeState.Status.EXCEPTION
-                ):
                     break
-                else:
-                    parallel_generator = self._run_parallel_branches(
-                        edge_mappings=edge_mappings,
-                        in_parallel_id=in_parallel_id,
-                        parallel_start_node_id=parallel_start_node_id,
-                        handle_exceptions=handle_exceptions,
-                    )
 
-                    for generated_item in parallel_generator:
-                        if isinstance(generated_item, _ParallelBranchResult):
-                            final_node_id = generated_item.final_node_id
-                        else:
-                            yield generated_item
+                if not final_node_id:
+                    break
 
-                    if not final_node_id:
-                        break
-
-                    next_node_id = final_node_id
-
-            if in_parallel_id and self.graph.node_parallel_mapping.get(next_node_id, "") != in_parallel_id:
+                next_node_id = final_node_id
+            elif (
+                node.continue_on_error
+                and node.error_strategy == ErrorStrategy.FAIL_BRANCH
+                and previous_route_node_state.status == RouteNodeState.Status.EXCEPTION
+            ):
                 break
+            else:
+                parallel_generator = self._run_parallel_branches(
+                    edge_mappings=edge_mappings,
+                    in_parallel_id=in_parallel_id,
+                    parallel_start_node_id=parallel_start_node_id,
+                    handle_exceptions=handle_exceptions,
+                )
+
+                for generated_item in parallel_generator:
+                    if isinstance(generated_item, _ParallelBranchResult):
+                        final_node_id = generated_item.final_node_id
+                    else:
+                        yield generated_item
+
+                if not final_node_id:
+                    break
+
+                next_node_id = final_node_id
+
+        if in_parallel_id and self.graph.node_parallel_mapping.get(next_node_id, "") != in_parallel_id:
+            break
 
     def _run_parallel_branches(
         self,

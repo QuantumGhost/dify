@@ -53,6 +53,14 @@ class Graph(BaseModel):
     answer_stream_generate_routes: AnswerStreamGenerateRoute = Field(..., description="answer stream generate routes")
     end_stream_param: EndStreamParam = Field(..., description="end stream param")
 
+    @staticmethod
+    def _build_one_edge(
+        edge_config: dict,
+        outgoing_edges_by_src_node_id: dict[str, list[GraphEdge]],
+        incoming_edges_by_target_node_id: dict[str, list[GraphEdge]],
+
+        ) ->
+
     @classmethod
     def init(cls, graph_config: Mapping[str, Any], root_node_id: Optional[str] = None) -> "Graph":
         """
@@ -75,8 +83,12 @@ class Graph(BaseModel):
         node_configs = cast(list, node_configs)
 
         # reorganize edges mapping
-        edge_mapping: dict[str, list[GraphEdge]] = {}
-        reverse_edge_mapping: dict[str, list[GraphEdge]] = {}
+        # A mapping from node_id to the outgoing edges originating from the corresponding node.
+        outgoing_edges_by_src_node_id: dict[str, list[GraphEdge]] = {}
+        # A mapping from node_id to the incoming edges that point to the corresponding node.
+        incoming_edges_by_target_node_id: dict[str, list[GraphEdge]] = {}
+
+        #
         target_edge_ids = set()
         fail_branch_source_node_id = [
             node["id"] for node in node_configs if node["data"].get("error_strategy") == "fail-branch"
@@ -86,15 +98,15 @@ class Graph(BaseModel):
             if not source_node_id:
                 continue
 
-            if source_node_id not in edge_mapping:
-                edge_mapping[source_node_id] = []
+            if source_node_id not in outgoing_edges_by_src_node_id:
+                outgoing_edges_by_src_node_id[source_node_id] = []
 
             target_node_id = edge_config.get("target")
             if not target_node_id:
                 continue
 
-            if target_node_id not in reverse_edge_mapping:
-                reverse_edge_mapping[target_node_id] = []
+            if target_node_id not in incoming_edges_by_target_node_id:
+                incoming_edges_by_target_node_id[target_node_id] = []
 
             target_edge_ids.add(target_node_id)
 
@@ -115,8 +127,8 @@ class Graph(BaseModel):
                 source_node_id=source_node_id, target_node_id=target_node_id, run_condition=run_condition
             )
 
-            edge_mapping[source_node_id].append(graph_edge)
-            reverse_edge_mapping[target_node_id].append(graph_edge)
+            outgoing_edges_by_src_node_id[source_node_id].append(graph_edge)
+            incoming_edges_by_target_node_id[target_node_id].append(graph_edge)
 
         # fetch nodes that have no predecessor node
         root_node_configs = []
@@ -149,11 +161,13 @@ class Graph(BaseModel):
             raise ValueError(f"Root node id {root_node_id} not found in the graph")
 
         # Check whether it is connected to the previous node
-        cls._check_connected_to_previous_node(route=[root_node_id], edge_mapping=edge_mapping)
+        cls._check_connected_to_previous_node(route=[root_node_id], edge_mapping=outgoing_edges_by_src_node_id)
 
         # fetch all node ids from root node
         node_ids = [root_node_id]
-        cls._recursively_add_node_ids(node_ids=node_ids, edge_mapping=edge_mapping, node_id=root_node_id)
+        cls._recursively_add_node_ids(
+            node_ids=node_ids, edge_mapping=outgoing_edges_by_src_node_id, node_id=root_node_id
+        )
 
         node_id_config_mapping = {node_id: all_node_id_config_mapping[node_id] for node_id in node_ids}
 
@@ -161,8 +175,8 @@ class Graph(BaseModel):
         parallel_mapping: dict[str, GraphParallel] = {}
         node_parallel_mapping: dict[str, str] = {}
         cls._recursively_add_parallels(
-            edge_mapping=edge_mapping,
-            reverse_edge_mapping=reverse_edge_mapping,
+            edge_mapping=outgoing_edges_by_src_node_id,
+            reverse_edge_mapping=incoming_edges_by_target_node_id,
             start_node_id=root_node_id,
             parallel_mapping=parallel_mapping,
             node_parallel_mapping=node_parallel_mapping,
@@ -179,13 +193,13 @@ class Graph(BaseModel):
 
         # init answer stream generate routes
         answer_stream_generate_routes = AnswerStreamGeneratorRouter.init(
-            node_id_config_mapping=node_id_config_mapping, reverse_edge_mapping=reverse_edge_mapping
+            node_id_config_mapping=node_id_config_mapping, reverse_edge_mapping=incoming_edges_by_target_node_id
         )
 
         # init end stream param
         end_stream_param = EndStreamGeneratorRouter.init(
             node_id_config_mapping=node_id_config_mapping,
-            reverse_edge_mapping=reverse_edge_mapping,
+            reverse_edge_mapping=incoming_edges_by_target_node_id,
             node_parallel_mapping=node_parallel_mapping,
         )
 
@@ -194,8 +208,8 @@ class Graph(BaseModel):
             root_node_id=root_node_id,
             node_ids=node_ids,
             node_id_config_mapping=node_id_config_mapping,
-            edge_mapping=edge_mapping,
-            reverse_edge_mapping=reverse_edge_mapping,
+            edge_mapping=outgoing_edges_by_src_node_id,
+            reverse_edge_mapping=incoming_edges_by_target_node_id,
             parallel_mapping=parallel_mapping,
             node_parallel_mapping=node_parallel_mapping,
             answer_stream_generate_routes=answer_stream_generate_routes,
