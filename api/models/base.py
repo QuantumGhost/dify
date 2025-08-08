@@ -1,7 +1,42 @@
-from sqlalchemy.orm import DeclarativeBase
+from datetime import datetime
+
+from api.libs.datetime_utils import naive_utc_now
+from api.libs.uuid_utils import uuidv7
+from sqlalchemy import DateTime, func, text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from models.engine import metadata
+
+from .types import StringUUID
 
 
 class Base(DeclarativeBase):
     metadata = metadata
+
+
+class ModelMixin:
+    id: Mapped[str] = mapped_column(
+        StringUUID,
+        primary_key=True,
+        # NOTE: The default and server_default serve as fallback mechanisms.
+        # The application can generate the `id` before saving to optimize
+        # the insertion process (especially for interdependent models)
+        # and reduce database roundtrips.
+        default_factory=uuidv7,
+        server_default=text("uuidv7()"),
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=naive_utc_now,
+        server_default=func.current_timestamp(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        __name_pos=DateTime,
+        nullable=False,
+        default=naive_utc_now,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )

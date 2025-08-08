@@ -19,7 +19,7 @@ from core.workflow.entities.workflow_suspension import StateVersion
 from core.workflow.nodes.enums import NodeType
 from factories.variable_factory import TypeMismatchError, build_segment_with_type
 from libs.datetime_utils import naive_utc_now
-from libs.helper import extract_tenant_id, generate_string
+from libs.helper import extract_tenant_id
 
 from ._workflow_exc import NodeNotFoundError, WorkflowDataError
 
@@ -527,7 +527,11 @@ class WorkflowRun(Base):
 
     # Represents the suspension details of a suspended workflow.
     # This field is non-null when `status == SUSPENDED` and null otherwise.
-    suspension_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
+    suspension_state_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
+
+    # suspension_state: Mapped["WorkflowSuspensionState"] = orm.relationship(
+    #     back_populates="workflow_execution", lazy="select", passive_deletes="all"
+    # )
 
     @property
     def created_by_account(self):
@@ -1261,15 +1265,8 @@ def is_system_variable_editable(name: str) -> bool:
     return name in _EDITABLE_SYSTEM_VARIABLE
 
 
-_SUSPENSION_FORM_CODE_LENGTH = 22
-
-
-def _generate_suspension_form_code():
-    return generate_string(_SUSPENSION_FORM_CODE_LENGTH)
-
-
-class WorkflowSuspension(Base):
-    __tablename__ = "workflow_suspensions"
+class WorkflowSuspensionState(Base):
+    __tablename__ = "workflow_suspension_states"
 
     # id is the unique identifier of a suspension
     id: Mapped[str] = mapped_column(
@@ -1340,15 +1337,6 @@ class WorkflowSuspension(Base):
         default=sa.null,
     )
 
-    # `next_node_id` specifies the next node to execute when the workflow resumes.
-    #
-    # Although this information is embedded within the `state` field, it is extracted
-    # into a separate field to facilitate debugging and data analysis.
-    next_node_id: Mapped[str] = mapped_column(
-        __name_pos=sa.String(length=255),
-        nullable=False,
-    )
-
     # The version of the serialized execution state data. Currently, the only supported value is `v1`.
     state_version: Mapped[StateVersion] = mapped_column(
         EnumText(StateVersion),
@@ -1359,20 +1347,4 @@ class WorkflowSuspension(Base):
     # capturing the workflow's execution context at the time of suspension.
     #
     # The value of `state` is a JSON-formatted string representing a JSON object (e.g., `{}`).
-    state: Mapped[str] = mapped_column(sa.Text, nullable=False)
-
-    # The inputs provided by the user when resuming the suspended workflow.
-    # These inputs are serialized as a JSON-formatted string (e.g., `{}`).
-    #
-    # This field is `NULL` if no inputs were submitted by the user.
-    inputs: Mapped[str] = mapped_column(sa.Text, nullable=True)
-
-    form_code: Mapped[str] = mapped_column(
-        # A 32-character string can store a base64-encoded value with 192 bits of entropy
-        # or a base62-encoded value with over 180 bits of entropy, providing sufficient
-        # uniqueness for most use cases.
-        sa.String(32),
-        nullable=False,
-        unique=True,
-        default=_generate_suspension_form_code,
-    )
+    state: Mapped[str] = mapped_column(sa.JSON, nullable=False)
