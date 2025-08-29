@@ -320,6 +320,7 @@ class NodeFinishStreamResponse(StreamResponse):
         inputs: Optional[Mapping[str, Any]] = None
         inputs_truncated: bool = False
         process_data: Optional[Mapping[str, Any]] = None
+        process_data_truncated: bool = False
         outputs: Optional[Mapping[str, Any]] = None
         outputs_truncated: bool = True
         status: str
@@ -391,6 +392,7 @@ class NodeRetryStreamResponse(StreamResponse):
         inputs: Optional[Mapping[str, Any]] = None
         inputs_truncated: bool = False
         process_data: Optional[Mapping[str, Any]] = None
+        process_data_truncated: bool = False
         outputs: Optional[Mapping[str, Any]] = None
         outputs_truncated: bool = False
         status: str
@@ -511,6 +513,7 @@ class IterationNodeStartStreamResponse(StreamResponse):
         extras: dict = {}
         metadata: Mapping = {}
         inputs: Mapping = {}
+        inputs_truncated: bool = False
         parallel_id: Optional[str] = None
         parallel_start_node_id: Optional[str] = None
 
@@ -562,9 +565,11 @@ class IterationNodeCompletedStreamResponse(StreamResponse):
         node_type: str
         title: str
         outputs: Optional[Mapping] = None
+        outputs_truncated: bool = False
         created_at: int
         extras: Optional[dict] = None
         inputs: Optional[Mapping] = None
+        inputs_truncated: bool = False
         status: WorkflowNodeExecutionStatus
         error: Optional[str] = None
         elapsed_time: float
@@ -598,6 +603,7 @@ class LoopNodeStartStreamResponse(StreamResponse):
         extras: dict = {}
         metadata: Mapping = {}
         inputs: Mapping = {}
+        inputs_truncated: bool = False
         parallel_id: Optional[str] = None
         parallel_start_node_id: Optional[str] = None
 
@@ -649,9 +655,11 @@ class LoopNodeCompletedStreamResponse(StreamResponse):
         node_type: str
         title: str
         outputs: Optional[Mapping] = None
+        outputs_truncated: bool = False
         created_at: int
         extras: Optional[dict] = None
         inputs: Optional[Mapping] = None
+        inputs_truncated: bool = False
         status: WorkflowNodeExecutionStatus
         error: Optional[str] = None
         elapsed_time: float

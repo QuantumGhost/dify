@@ -3,6 +3,7 @@ import json
 from collections.abc import Mapping
 from typing import Any, TypeAlias
 
+from configs import dify_config
 from core.variables.segments import (
     ArrayFileSegment,
     ArraySegment,
@@ -69,7 +70,15 @@ class VariableTruncator:
             raise ValueError("max_size_bytes should be greater than 0.")
         self._max_size_bytes = max_size_bytes
 
-    def truncate_inputs_outputs(self, v: Mapping[str, Any]) -> tuple[dict[str, Any], bool]:
+    @classmethod
+    def default(cls) -> "VariableTruncator":
+        return VariableTruncator(
+            max_size_bytes=dify_config.WORKFLOW_VARIABLE_TRUNCATION_MAX_SIZE,
+            array_element_limit=dify_config.WORKFLOW_VARIABLE_TRUNCATION_ARRAY_LENGTH,
+            string_length_limit=dify_config.WORKFLOW_VARIABLE_TRUNCATION_STRING_LENGTH,
+        )
+
+    def truncate_io_mapping(self, v: Mapping[str, Any]) -> tuple[Mapping[str, Any], bool]:
         """`truncate_inputs_output` is used to truncate the `inputs` / `outputs` of a WorkflowNodeExecution record."""
         size = self.calculate_json_size(v)
         if size < self._max_size_bytes:

@@ -2,12 +2,12 @@
 SQLAlchemy implementation of the WorkflowNodeExecutionRepository.
 """
 
-from concurrent.futures import ThreadPoolExecutor
 import dataclasses
 import json
 import logging
-from collections.abc import Mapping, Sequence
-from typing import Any, Optional, Union
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Optional, TypeVar, Union
 
 from sqlalchemy import UnaryExpression, asc, desc, select
 from sqlalchemy.engine import Engine
@@ -33,10 +33,11 @@ from models import (
     WorkflowNodeExecutionModel,
     WorkflowNodeExecutionTriggeredFrom,
 )
+from models.enums import ExecutionOffLoadType
 from models.model import UploadFile
 from models.workflow import WorkflowNodeExecutionOffload
 from services.file_service import FileService
-from services.variable_truncator import MaxDepthExceededError, VariableTruncator
+from services.variable_truncator import VariableTruncator
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 class _InputsOutputsTruncationResult:
     truncated_value: Mapping[str, Any]
     file: UploadFile
+    offload: WorkflowNodeExecutionOffload
 
 
 class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository):
@@ -164,14 +166,25 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
 
         offload_data = db_model.offload_data
         # Store truncated versions for API responses
-        if offload_data.inputs_file_id:
-            assert offload_data.inputs_file is not None
-            domain_model.inputs = self._load_file(offload_data.inputs_file)
+        # TODO: consider load content concurrently.
+
+        input_offload = _find_first(offload_data, _filter_by_offload_type(ExecutionOffLoadType.INPUTS))
+        if input_offload is not None:
+            assert input_offload.file is not None
+            domain_model.inputs = self._load_file(input_offload.file)
             domain_model.set_truncated_inputs(inputs)
-        if db_model.offload_data.outputs_file_id:
-            assert offload_data.outputs_file is not None
-            domain_model.outputs = self._load_file(offload_data.outputs_file)
+
+        outputs_offload = _find_first(offload_data, _filter_by_offload_type(ExecutionOffLoadType.OUTPUTS))
+        if outputs_offload is not None:
+            assert outputs_offload.file is not None
+            domain_model.outputs = self._load_file(outputs_offload.file)
             domain_model.set_truncated_outputs(outputs)
+
+        process_data_offload = _find_first(offload_data, _filter_by_offload_type(ExecutionOffLoadType.PROCESS_DATA))
+        if process_data_offload is not None:
+            assert process_data_offload.file is not None
+            domain_model.process_data = self._load_file(process_data_offload.file)
+            domain_model.set_truncated_process_data(process_data)
 
         return domain_model
 
@@ -186,7 +199,8 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
 
     def _to_db_model(self, domain_model: WorkflowNodeExecution) -> WorkflowNodeExecutionModel:
         """
-        Convert a domain model to a database model.
+        Convert a domain model to a database model. This copies the inputs /
+        process_data / outputs from domain model directly without applying truncation.
 
         Args:
             domain_model: The domain model to convert
@@ -201,6 +215,8 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
             raise ValueError("created_by is required in repository constructor")
         if not self._creator_user_role:
             raise ValueError("created_by_role is required in repository constructor")
+
+        converter = WorkflowRuntimeTypeConverter()
 
         # json_converter = WorkflowRuntimeTypeConverter()
         db_model = WorkflowNodeExecutionModel()
@@ -217,8 +233,22 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
         db_model.node_id = domain_model.node_id
         db_model.node_type = domain_model.node_type
         db_model.title = domain_model.title
-        # inputs and outputs are handled below
-        db_model.process_data = self._json_encode(domain_model.process_data) if domain_model.process_data else None
+        db_model.inputs = (
+            _deterministic_json_dump(converter.to_json_encodable(domain_model.inputs))
+            if domain_model.inputs is not None
+            else None
+        )
+        db_model.process_data = (
+            _deterministic_json_dump(converter.to_json_encodable(domain_model.process_data))
+            if domain_model.process_data is not None
+            else None
+        )
+        db_model.outputs = (
+            _deterministic_json_dump(converter.to_json_encodable(domain_model.outputs))
+            if domain_model.outputs is not None
+            else None
+        )
+        # inputs, process_data and outputs are handled below
         db_model.status = domain_model.status
         db_model.error = domain_model.error
         db_model.elapsed_time = domain_model.elapsed_time
@@ -230,46 +260,13 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
         db_model.created_by = self._creator_user_id
         db_model.finished_at = domain_model.finished_at
 
-        offload_data = WorkflowNodeExecutionOffload(
-            id=uuidv7(),
-            tenant_id=self._tenant_id,
-            app_id=self._app_id,
-        )
-
-        if domain_model.inputs is not None:
-            result = self._truncate_and_upload(
-                domain_model.inputs,
-                domain_model.id,
-                "_inputs",
-            )
-            if result is not None:
-                db_model.inputs = self._json_encode(result.truncated_value)
-                domain_model.set_truncated_inputs(result.truncated_value)
-                offload_data.inputs_file = result.file
-                offload_data.inputs_file_id = result.file.id
-            else:
-                db_model.inputs = self._json_encode(domain_model.inputs)
-
-        if domain_model.outputs is not None:
-            result = self._truncate_and_upload(
-                domain_model.outputs,
-                domain_model.id,
-                "_outputs",
-            )
-            if result is not None:
-                db_model.outputs = self._json_encode(result.truncated_value)
-                domain_model.set_truncated_outputs(result.truncated_value)
-                offload_data.outputs_file = result.file
-                offload_data.outputs_file_id = result.file.id
-            else:
-                db_model.outputs = self._json_encode(domain_model.outputs)
-
-        if any([offload_data.inputs_file, offload_data.outputs_file]):
-            db_model.offload_data = offload_data
         return db_model
 
     def _truncate_and_upload(
-        self, values: Mapping[str, Any] | None, execution_id: str, suffix: str
+        self,
+        values: Mapping[str, Any] | None,
+        execution_id: str,
+        type_: ExecutionOffLoadType,
     ) -> _InputsOutputsTruncationResult | None:
         if values is None:
             return None
@@ -277,21 +274,32 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
         converter = WorkflowRuntimeTypeConverter()
         json_encodable_value = converter.to_json_encodable(values)
         truncator = self._create_truncator()
-        truncated_values, truncated = truncator.truncate_inputs_outputs(json_encodable_value)
+        truncated_values, truncated = truncator.truncate_io_mapping(json_encodable_value)
         if not truncated:
             return None
 
-        value_json = json.dumps(json_encodable_value)
+        value_json = _deterministic_json_dump(json_encodable_value)
         assert value_json is not None, "value_json should be None here."
+
+        suffix = type_.value
         upload_file = self._file_service.upload_file(
-            filename=f"node_execution_{execution_id}{suffix}.json",
+            filename=f"node_execution_{execution_id}_{suffix}.json",
             content=value_json.encode("utf-8"),
             mimetype="application/json",
             user=self._user,
         )
+        offload = WorkflowNodeExecutionOffload(
+            id=uuidv7(),
+            tenant_id=self._tenant_id,
+            app_id=self._app_id,
+            node_execution_id=execution_id,
+            type_=type_,
+            file_id=upload_file.id,
+        )
         return _InputsOutputsTruncationResult(
             truncated_value=truncated_values,
             file=upload_file,
+            offload=offload,
         )
 
     def save(self, execution: WorkflowNodeExecution) -> None:
@@ -338,6 +346,66 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
             if db_model.node_execution_id:
                 logger.debug("Updating cache for node_execution_id: %s", db_model.node_execution_id)
                 self._node_execution_cache[db_model.node_execution_id] = db_model
+
+    def save_execution_data(self, execution: WorkflowNodeExecution):
+        domain_model = execution
+        with self._session_factory(expire_on_commit=False) as session:
+            query = WorkflowNodeExecutionModel.preload_offload_data(select(WorkflowNodeExecutionModel)).where(
+                WorkflowNodeExecutionModel.id == domain_model.id
+            )
+            db_model: WorkflowNodeExecutionModel | None = session.execute(query).scalars().first()
+
+        if db_model is not None:
+            offload_data = db_model.offload_data
+
+        else:
+            db_model = self._to_db_model(domain_model)
+            offload_data = []
+
+        offload_data = db_model.offload_data
+        if domain_model.inputs is not None:
+            result = self._truncate_and_upload(
+                domain_model.inputs,
+                domain_model.id,
+                ExecutionOffLoadType.INPUTS,
+            )
+            if result is not None:
+                db_model.inputs = self._json_encode(result.truncated_value)
+                domain_model.set_truncated_inputs(result.truncated_value)
+                offload_data = _replace_or_append_offload(offload_data, result.offload)
+            else:
+                db_model.inputs = self._json_encode(domain_model.inputs)
+
+        if domain_model.outputs is not None:
+            result = self._truncate_and_upload(
+                domain_model.outputs,
+                domain_model.id,
+                ExecutionOffLoadType.OUTPUTS,
+            )
+            if result is not None:
+                db_model.outputs = self._json_encode(result.truncated_value)
+                domain_model.set_truncated_outputs(result.truncated_value)
+                offload_data = _replace_or_append_offload(offload_data, result.offload)
+            else:
+                db_model.outputs = self._json_encode(domain_model.outputs)
+
+        if domain_model.process_data is not None:
+            result = self._truncate_and_upload(
+                domain_model.process_data,
+                domain_model.id,
+                ExecutionOffLoadType.PROCESS_DATA,
+            )
+            if result is not None:
+                db_model.process_data = self._json_encode(result.truncated_value)
+                domain_model.set_truncated_process_data(result.truncated_value)
+                offload_data = _replace_or_append_offload(offload_data, result.offload)
+            else:
+                db_model.process_data = self._json_encode(domain_model.process_data)
+
+        db_model.offload_data = offload_data
+        with self._session_factory() as session, session.begin():
+            session.merge(db_model)
+            session.flush()
 
     def get_db_models_by_workflow_run(
         self,
@@ -425,3 +493,42 @@ class SQLAlchemyWorkflowNodeExecutionRepository(WorkflowNodeExecutionRepository)
             domain_models = executor.map(self._to_domain_model, db_models, timeout=30)
 
         return list(domain_models)
+
+
+def _deterministic_json_dump(value: Mapping[str, Any]) -> str:
+    return json.dumps(value, sort_keys=True)
+
+
+_T = TypeVar("_T")
+
+
+def _find_first(seq: Sequence[_T], pred: Callable[[_T], bool]) -> _T | None:
+    filtered = [i for i in seq if pred(i)]
+    if filtered:
+        return filtered[0]
+    return None
+
+
+def _filter_by_offload_type(offload_type: ExecutionOffLoadType) -> Callable[[WorkflowNodeExecutionOffload], bool]:
+    def f(offload: WorkflowNodeExecutionOffload) -> bool:
+        return offload.type_ == offload_type
+
+    return f
+
+
+def _replace_or_append_offload(
+    seq: list[WorkflowNodeExecutionOffload], elem: WorkflowNodeExecutionOffload
+) -> list[WorkflowNodeExecutionOffload]:
+    """Replace all elements in `seq` that satisfy the equality condition defined by `eq_func` with `elem`.
+
+    Args:
+        seq: The sequence of elements to process.
+        elem: The new element to insert.
+        eq_func: A function that determines equality between elements.
+
+    Returns:
+        A new sequence with the specified elements replaced or appended.
+    """
+    ls = [i for i in seq if i.type_ != elem.type_]
+    ls.append(elem)
+    return ls

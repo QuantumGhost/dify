@@ -113,6 +113,7 @@ workflow_run_node_execution_fields = {
     "finished_at": TimestampField,
     "inputs_truncated": fields.Boolean,
     "outputs_truncated": fields.Boolean,
+    "process_data_truncated": fields.Boolean,
 }
 
 workflow_run_node_execution_list_fields = {

@@ -40,7 +40,7 @@ from libs import helper
 from .account import Account
 from .base import Base
 from .engine import db
-from .enums import CreatorUserRole, DraftVariableType
+from .enums import CreatorUserRole, DraftVariableType, ExecutionOffLoadType
 from .types import EnumText, StringUUID
 
 _logger = logging.getLogger(__name__)
@@ -731,10 +731,10 @@ class WorkflowNodeExecutionModel(Base):  # This model is expected to have `offlo
     created_by: Mapped[str] = mapped_column(StringUUID)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
-    offload_data: Mapped[Optional["WorkflowNodeExecutionOffload"]] = orm.relationship(
+    offload_data: Mapped[list["WorkflowNodeExecutionOffload"]] = orm.relationship(
         "WorkflowNodeExecutionOffload",
         primaryjoin="WorkflowNodeExecutionModel.id == foreign(WorkflowNodeExecutionOffload.node_execution_id)",
-        uselist=False,
+        uselist=True,
         lazy="raise",
         back_populates="execution",
     )
@@ -753,8 +753,7 @@ class WorkflowNodeExecutionModel(Base):  # This model is expected to have `offlo
             orm.selectinload(WorkflowNodeExecutionModel.offload_data).options(
                 # Using `joinedload` instead of `selectinload` to minimize database roundtrips,
                 # as `selectinload` would require separate queries for `inputs_file` and `outputs_file`.
-                orm.joinedload(WorkflowNodeExecutionOffload.inputs_file),
-                orm.joinedload(WorkflowNodeExecutionOffload.outputs_file),
+                orm.selectinload(WorkflowNodeExecutionOffload.file),
             )
         )
 
@@ -809,15 +808,23 @@ class WorkflowNodeExecutionModel(Base):  # This model is expected to have `offlo
 
         return extras
 
+    def _get_offload_by_type(self, type_: ExecutionOffLoadType) -> Optional["WorkflowNodeExecutionOffload"]:
+        return next(iter([i for i in self.offload_data if i.type_ == type_]), None)
+
     @property
     def inputs_truncated(self) -> bool:
         """Check if inputs were truncated (offloaded to external storage)."""
-        return self.offload_data is not None and self.offload_data.inputs_file_id is not None
+        return self._get_offload_by_type(ExecutionOffLoadType.INPUTS) is not None
 
     @property
     def outputs_truncated(self) -> bool:
         """Check if outputs were truncated (offloaded to external storage)."""
-        return self.offload_data is not None and self.offload_data.outputs_file_id is not None
+        return self._get_offload_by_type(ExecutionOffLoadType.OUTPUTS) is not None
+
+    @property
+    def process_data_truncated(self) -> bool:
+        """Check if process_data were truncated (offloaded to external storage)."""
+        return self._get_offload_by_type(ExecutionOffLoadType.PROCESS_DATA) is not None
 
     @staticmethod
     def _load_full_content(session: orm.Session, file_id: str, storage: Storage):
@@ -826,33 +833,43 @@ class WorkflowNodeExecutionModel(Base):  # This model is expected to have `offlo
         stmt = sa.select(UploadFile).where(UploadFile.id == file_id)
         file = session.scalars(stmt).first()
         assert file is not None, f"UploadFile with id {file_id} should exist but not"
-        content = storage.load(file_id)
+        content = storage.load(file.key)
         return json.loads(content)
 
     def load_full_inputs(self, session: orm.Session, storage: Storage) -> Mapping[str, Any] | None:
-        if self.offload_data is None:
+        offload = self._get_offload_by_type(ExecutionOffLoadType.INPUTS)
+        if offload is None:
             return self.inputs_dict
 
-        offload_data = self.offload_data
-        if offload_data.inputs_file_id is None:
-            return self.inputs_dict
-
-        return self._load_full_content(session, offload_data.inputs_file_id, storage)
+        return self._load_full_content(session, offload.file_id, storage)
 
     def load_full_outputs(self, session: orm.Session, storage: Storage) -> Mapping[str, Any] | None:
-        if self.offload_data is None:
+        offload: WorkflowNodeExecutionOffload | None = self._get_offload_by_type(ExecutionOffLoadType.OUTPUTS)
+        if offload is None:
             return self.outputs_dict
 
-        offload_data = self.offload_data
-        if offload_data.outputs_file_id is None:
-            return self.outputs_dict
+        return self._load_full_content(session, offload.file_id, storage)
 
-        return self._load_full_content(session, offload_data.outputs_file_id, storage)
+    def load_full_process_data(self, session: orm.Session, storage: Storage) -> Mapping[str, Any] | None:
+        offload: WorkflowNodeExecutionOffload | None = self._get_offload_by_type(ExecutionOffLoadType.PROCESS_DATA)
+        if offload is None:
+            return self.process_data_dict
+
+        return self._load_full_content(session, offload.file_id, storage)
 
 
 class WorkflowNodeExecutionOffload(Base):
     __tablename__ = "workflow_node_execution_offload"
-    __table_args__ = (UniqueConstraint("node_execution_id"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "node_execution_id",
+            "type",
+            # Treat `NULL` as distinct for this unique index, so
+            # we can have mutitple records with `NULL` node_exeution_id, simplify garbage collection process.
+            postgresql_nulls_not_distinct=False,
+        ),
+    )
+    _HASH_COL_SIZE = 64
 
     id: Mapped[str] = mapped_column(
         StringUUID,
@@ -867,7 +884,11 @@ class WorkflowNodeExecutionOffload(Base):
     tenant_id: Mapped[str] = mapped_column(StringUUID)
     app_id: Mapped[str] = mapped_column(StringUUID)
 
-    node_execution_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
+    # `node_execution_id` indicates the `WorkflowNodeExecutionModel` associated with this offload record.
+    # A value of `None` signifies that this offload record is not linked to any execution record
+    # and should be considered for garbage collection.
+    node_execution_id: Mapped[str | None] = mapped_column(StringUUID, nullable=True)
+    type_: Mapped[ExecutionOffLoadType] = mapped_column(EnumText(ExecutionOffLoadType), name="type", nullable=False)
 
     # Design Decision: Combining inputs and outputs into a single object was considered to reduce I/O
     # operations. However, due to the current design of `WorkflowNodeExecutionRepository`,
@@ -884,15 +905,8 @@ class WorkflowNodeExecutionOffload(Base):
     # Given these constraints, `inputs` and `outputs` are stored separately to maintain real-time
     # observability and system reliability.
 
-    # At least one of `inputs_file_id` or `outputs_file_id` must be non-NULL.
-
-    # `inputs_file_id` references to the offloaded storage object containing the node's input data.
-    # NULL if inputs are stored directly in the database (not offloaded).
-    inputs_file_id: Mapped[str] = mapped_column(StringUUID, nullable=True)
-
-    # `outputs_file_id` references to the offloaded storage object containing the node's output data.
-    # NULL if outputs are stored directly in the database (not offloaded).
-    outputs_file_id: Mapped[str] = mapped_column(StringUUID, nullable=True)
+    # `file_id` references to the offloaded storage object containing the data.
+    file_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
 
     execution: Mapped[WorkflowNodeExecutionModel] = orm.relationship(
         foreign_keys=[node_execution_id],
@@ -902,18 +916,11 @@ class WorkflowNodeExecutionOffload(Base):
         back_populates="offload_data",
     )
 
-    inputs_file: Mapped[Optional["UploadFile"]] = orm.relationship(
-        foreign_keys=[inputs_file_id],
+    file: Mapped[Optional["UploadFile"]] = orm.relationship(
+        foreign_keys=[file_id],
         lazy="raise",
         uselist=False,
-        primaryjoin="WorkflowNodeExecutionOffload.inputs_file_id == UploadFile.id",
-    )
-
-    outputs_file: Mapped[Optional["UploadFile"]] = orm.relationship(
-        foreign_keys=[outputs_file_id],
-        lazy="raise",
-        uselist=False,
-        primaryjoin="WorkflowNodeExecutionOffload.outputs_file_id == UploadFile.id",
+        primaryjoin="WorkflowNodeExecutionOffload.file_id == UploadFile.id",
     )
 
 

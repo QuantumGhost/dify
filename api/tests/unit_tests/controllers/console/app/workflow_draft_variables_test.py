@@ -5,6 +5,7 @@ from typing import Any, NamedTuple
 from unittest.mock import MagicMock, patch
 
 from flask_restful import marshal
+import pytest
 
 from controllers.console.app.workflow_draft_variable import (
     _WORKFLOW_DRAFT_VARIABLE_FIELDS,
@@ -58,13 +59,20 @@ class TestWorkflowDraftVariableFields:
 
     def test_serialize_full_content_handles_none_cases(self):
         """Test that _serialize_full_content handles None cases properly."""
-        from controllers.console.app.workflow_draft_variable import _serialize_full_content
 
         # Test with no file_id
-        mock_variable_no_file = MagicMock()
-        mock_variable_no_file.file_id = None
-        result = _serialize_full_content(mock_variable_no_file)
+        draft_var = WorkflowDraftVariable()
+        draft_var.file_id = None
+        result = _serialize_full_content(draft_var)
         assert result is None
+
+    def test_serialize_full_content_should_raises_when_file_id_exists_but_file_is_none(self):
+        # Test with no file_id
+        draft_var = WorkflowDraftVariable()
+        draft_var.file_id = str(uuid.uuid4())
+        draft_var.variable_file = None
+        with pytest.raises(AssertionError):
+            result = _serialize_full_content(draft_var)
 
     def test_conversation_variable(self):
         conv_var = WorkflowDraftVariable.new_conversation_variable(
