@@ -376,7 +376,9 @@ class WorkflowResponseConverter:
                 node_type=event.node_type.value,
                 title=event.node_data.title,
                 index=event.index,
-                pre_iteration_output=event.output,
+                # The `pre_iteration_output` field is not utilized by the frontend.
+                # Previously, it was assigned the value of `event.output`.
+                pre_iteration_output={},
                 created_at=int(time.time()),
                 extras={},
                 parallel_id=event.parallel_id,
@@ -465,7 +467,9 @@ class WorkflowResponseConverter:
                 node_type=event.node_type.value,
                 title=event.node_data.title,
                 index=event.index,
-                pre_loop_output=event.output,
+                # The `pre_loop_output` field is not utilized by the frontend.
+                # Previously, it was assigned the value of `event.output`.
+                pre_loop_output={},
                 created_at=int(time.time()),
                 extras={},
                 parallel_id=event.parallel_id,
