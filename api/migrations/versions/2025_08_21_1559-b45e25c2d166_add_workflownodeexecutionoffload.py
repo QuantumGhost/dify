@@ -41,25 +41,30 @@ def upgrade() -> None:
         sa.Column(
             "app_id",
             models.types.StringUUID(),
-             nullable=False,
+            nullable=False,
         ),
         sa.Column(
             "node_execution_id",
             models.types.StringUUID(),
+            nullable=True,
+        ),
+        sa.Column(
+            "type",
+            sa.String(20),
             nullable=False,
         ),
         sa.Column(
-            "inputs_file_id",
+            "file_id",
             models.types.StringUUID(),
-            nullable=True,
-        ),
-        sa.Column(
-            "outputs_file_id",
-            models.types.StringUUID(),
-            nullable=True,
+            nullable=False,
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("workflow_node_execution_offload_pkey")),
-        sa.UniqueConstraint("node_execution_id", name=op.f("workflow_node_execution_offload_node_execution_id_key")),
+        sa.UniqueConstraint(
+            "node_execution_id",
+            "type",
+            name=op.f("workflow_node_execution_offload_node_execution_id_key"),
+            postgresql_nulls_not_distinct=False,
+        ),
     )
 
 

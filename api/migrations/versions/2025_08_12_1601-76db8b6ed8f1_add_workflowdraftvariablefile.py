@@ -77,7 +77,7 @@ def upgrade():
                 "is_default_value",
                 sa.Boolean,
                 nullable=False,
-                server_default=sa.false(),
+                server_default=sa.text(text="FALSE"),
                 comment="Indicates whether the current value is the default for a conversation variable. Always `FALSE` for other types of variables.",
             )
         )
