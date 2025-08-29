@@ -29,14 +29,14 @@ from core.variables.segments import (
     ObjectSegment,
     StringSegment,
 )
-from services.workflow_draft_variable_service import (
+from services.variable_truncator import (
     ARRAY_CHAR_LIMIT,
     LARGE_VARIABLE_THRESHOLD,
     OBJECT_CHAR_LIMIT,
     TruncationResult,
     VariableTruncator,
-    _MaxDepthExceededError,
-    _UnknownTypeError,
+    MaxDepthExceededError,
+    UnknownTypeError,
 )
 
 
@@ -147,7 +147,7 @@ class TestCalculateJsonSize:
             current = current["next"]
 
         # Should either raise an error or handle gracefully
-        with pytest.raises(_MaxDepthExceededError):
+        with pytest.raises(MaxDepthExceededError):
             truncator.calculate_json_size(nested)
 
     def test_calculate_json_size_unknown_type(self, truncator):
@@ -156,7 +156,7 @@ class TestCalculateJsonSize:
         class CustomType:
             pass
 
-        with pytest.raises(_UnknownTypeError):
+        with pytest.raises(UnknownTypeError):
             truncator.calculate_json_size(CustomType())
 
 

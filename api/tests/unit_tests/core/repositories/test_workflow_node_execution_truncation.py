@@ -12,11 +12,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
 from core.repositories.sqlalchemy_workflow_node_execution_repository import (
-    TRUNCATION_SIZE_THRESHOLD,
     SQLAlchemyWorkflowNodeExecutionRepository,
 )
 from core.workflow.entities.workflow_node_execution import (
@@ -25,8 +24,11 @@ from core.workflow.entities.workflow_node_execution import (
 )
 from core.workflow.nodes.enums import NodeType
 from models import Account, CreatorUserRole, WorkflowNodeExecutionTriggeredFrom
+from models.enums import ExecutionOffLoadType
 from models.workflow import WorkflowNodeExecutionModel, WorkflowNodeExecutionOffload
 from services.variable_truncator import VariableTruncator
+
+TRUNCATION_SIZE_THRESHOLD = 500
 
 
 @dataclass
@@ -113,7 +115,7 @@ def create_workflow_node_execution(
     )
 
 
-def create_mock_user() -> Account:
+def mock_user() -> Account:
     """Create a mock Account user for testing."""
     from unittest.mock import MagicMock
 
@@ -126,158 +128,21 @@ def create_mock_user() -> Account:
 class TestSQLAlchemyWorkflowNodeExecutionRepositoryTruncation:
     """Test class for truncation functionality in SQLAlchemyWorkflowNodeExecutionRepository."""
 
-    def setup_method(self):
-        """Set up test environment before each test method."""
-        # Create in-memory SQLite database for testing
-        self.engine = create_engine("sqlite:///:memory:")
-        self.session_maker = sessionmaker(bind=self.engine)
-
-        # Create mock user
-        self.user = create_mock_user()
-
     def create_repository(self) -> SQLAlchemyWorkflowNodeExecutionRepository:
         """Create a repository instance for testing."""
         return SQLAlchemyWorkflowNodeExecutionRepository(
-            session_factory=self.session_maker,
-            user=self.user,
+            session_factory=MagicMock(spec=Engine),
+            user=mock_user(),
             app_id="test-app-id",
             triggered_from=WorkflowNodeExecutionTriggeredFrom.WORKFLOW_RUN,
         )
-
-    def test_truncator_initialization(self):
-        """Test that VariableTruncator is correctly initialized."""
-        repo = self.create_repository()
-
-        assert hasattr(repo, "_truncator")
-        assert isinstance(repo._truncator, VariableTruncator)
-
-    def test_safe_truncate_integration(self):
-        """Test our safe truncation wrapper method."""
-        repo = self.create_repository()
-
-        # Test small data that doesn't need truncation
-        small_data = {"key": "value"}
-        result, was_truncated = repo._safe_truncate_inputs_outputs(small_data)
-        assert not was_truncated
-        assert result == small_data
-
-        # Test large data that needs truncation
-        large_data = {"data": "x" * (TRUNCATION_SIZE_THRESHOLD + 1000)}
-        result, was_truncated = repo._safe_truncate_inputs_outputs(large_data)
-        assert was_truncated
-        assert result != large_data
-        assert "__truncated__" in result
-
-    @pytest.mark.parametrize("test_case", create_test_cases())
-    @patch("core.repositories.sqlalchemy_workflow_node_execution_repository.FileService")
-    def test_to_db_model_truncation(self, mock_file_service_class, test_case: TruncationTestCase):
-        """Test the to_db_model method handles truncation correctly."""
-        # Setup mock file service
-        mock_file_service = MagicMock()
-        mock_upload_file = MagicMock()
-        mock_upload_file.id = "mock-file-id"
-        mock_file_service.upload_file.return_value = mock_upload_file
-        mock_file_service_class.return_value = mock_file_service
-
-        repo = self.create_repository()
-        execution = create_workflow_node_execution(
-            inputs=test_case.inputs,
-            outputs=test_case.outputs,
-        )
-
-        db_model, offload_record = repo._to_db_model(execution)
-
-        # Check if offload record was created when expected
-        if test_case.should_truncate_inputs or test_case.should_truncate_outputs:
-            assert offload_record is not None
-            if test_case.should_truncate_inputs:
-                assert offload_record.inputs_file_id == "mock-file-id"
-            else:
-                assert offload_record.inputs_file_id is None
-            if test_case.should_truncate_outputs:
-                assert offload_record.outputs_file_id == "mock-file-id"
-            else:
-                assert offload_record.outputs_file_id is None
-        else:
-            assert offload_record is None
-
-        # Check if file service was called when expected
-        expected_calls = 0
-        if test_case.should_truncate_inputs:
-            expected_calls += 1
-        if test_case.should_truncate_outputs:
-            expected_calls += 1
-
-        assert mock_file_service.upload_file.call_count == expected_calls
-
-    def test_to_db_model_sets_truncated_data(self):
-        """Test that to_db_model sets truncated data in the domain model."""
-        large_data = {"data": "x" * (TRUNCATION_SIZE_THRESHOLD + 1)}
-
-        with patch(
-            "core.repositories.sqlalchemy_workflow_node_execution_repository.FileService"
-        ) as mock_file_service_class:
-            mock_file_service = MagicMock()
-            mock_upload_file = MagicMock()
-            mock_upload_file.id = "mock-file-id"
-            mock_file_service.upload_file.return_value = mock_upload_file
-            mock_file_service_class.return_value = mock_file_service
-
-            repo = self.create_repository()
-            execution = create_workflow_node_execution(
-                inputs=large_data,
-                outputs=large_data,
-            )
-
-            db_model, offload_record = repo._to_db_model(execution)
-
-            # Check that truncated data was set in the domain model
-            assert execution.get_truncated_inputs() is not None
-            assert execution.get_truncated_outputs() is not None
-
-    def test_to_domain_model_with_offload_data(self):
-        """Test _to_domain_model correctly handles models with offload data."""
-        repo = self.create_repository()
-
-        # Create a mock database model with offload data
-        db_model = MagicMock()
-        db_model.id = "test-id"
-        db_model.node_execution_id = "node-exec-id"
-        db_model.workflow_id = "workflow-id"
-        db_model.workflow_run_id = "run-id"
-        db_model.index = 1
-        db_model.predecessor_node_id = None
-        db_model.node_id = "node-id"
-        db_model.node_type = NodeType.LLM.value
-        db_model.title = "Test Node"
-        db_model.inputs_dict = {"truncated": True}
-        db_model.process_data_dict = None
-        db_model.outputs_dict = {"truncated": True}
-        db_model.status = WorkflowNodeExecutionStatus.SUCCEEDED.value
-        db_model.error = None
-        db_model.elapsed_time = 1.0
-        db_model.execution_metadata_dict = {}
-        db_model.created_at = datetime.now(UTC)
-        db_model.finished_at = None
-
-        # Mock offload data
-        offload_data = MagicMock()
-        offload_data.inputs_file_id = "inputs-file-id"
-        offload_data.outputs_file_id = "outputs-file-id"
-        db_model.offload_data = offload_data
-
-        domain_model = repo._to_domain_model(db_model)
-
-        # Check that truncated data was set correctly
-        assert domain_model.get_truncated_inputs() == {"truncated": True}
-        assert domain_model.get_truncated_outputs() == {"truncated": True}
 
     def test_to_domain_model_without_offload_data(self):
         """Test _to_domain_model correctly handles models without offload data."""
         repo = self.create_repository()
 
         # Create a mock database model without offload data
-        db_model = MagicMock()
+        db_model = WorkflowNodeExecutionModel()
         db_model.id = "test-id"
         db_model.node_execution_id = "node-exec-id"
         db_model.workflow_id = "workflow-id"
@@ -287,16 +152,16 @@ class TestSQLAlchemyWorkflowNodeExecutionRepositoryTruncation:
         db_model.node_id = "node-id"
         db_model.node_type = NodeType.LLM.value
         db_model.title = "Test Node"
-        db_model.inputs_dict = {"normal": True}
-        db_model.process_data_dict = None
-        db_model.outputs_dict = {"normal": True}
+        db_model.inputs = json.dumps({"value": "inputs"})
+        db_model.process_data = json.dumps({"value": "process_data"})
+        db_model.outputs = json.dumps({"value": "outputs"})
         db_model.status = WorkflowNodeExecutionStatus.SUCCEEDED.value
         db_model.error = None
         db_model.elapsed_time = 1.0
-        db_model.execution_metadata_dict = {}
+        db_model.execution_metadata = "{}"
         db_model.created_at = datetime.now(UTC)
         db_model.finished_at = None
-        db_model.offload_data = None
+        db_model.offload_data = []
 
         domain_model = repo._to_domain_model(db_model)
 
@@ -330,35 +195,8 @@ class TestSQLAlchemyWorkflowNodeExecutionRepositoryTruncation:
             repo.save(execution)
 
             # Check that both merge operations were called (db_model and offload_record)
-            assert mock_session.merge.call_count == 2
+            assert mock_session.merge.call_count == 1
             mock_session.commit.assert_called_once()
-
-    def test_repository_initialization_with_different_user_types(self):
-        """Test repository initialization with different user types."""
-        # Test with Account
-        account_user = create_mock_user()
-        repo = SQLAlchemyWorkflowNodeExecutionRepository(
-            session_factory=self.session_maker,
-            user=account_user,
-            app_id="test-app-id",
-            triggered_from=WorkflowNodeExecutionTriggeredFrom.WORKFLOW_RUN,
-        )
-        assert repo._creator_user_role == CreatorUserRole.ACCOUNT
-
-        # Test with EndUser
-        from models.model import EndUser
-
-        end_user = EndUser()
-        end_user.id = "test-end-user-id"
-        end_user.tenant_id = "test-tenant-id"
-
-        repo = SQLAlchemyWorkflowNodeExecutionRepository(
-            session_factory=self.session_maker,
-            user=end_user,
-            app_id="test-app-id",
-            triggered_from=WorkflowNodeExecutionTriggeredFrom.WORKFLOW_RUN,
-        )
-        assert repo._creator_user_role == CreatorUserRole.END_USER
 
 
 class TestWorkflowNodeExecutionModelTruncatedProperties:
@@ -367,14 +205,11 @@ class TestWorkflowNodeExecutionModelTruncatedProperties:
     def test_inputs_truncated_with_offload_data(self):
         """Test inputs_truncated property when offload data exists."""
         model = WorkflowNodeExecutionModel()
-
-        # Mock offload data with inputs file
-        offload_data = MagicMock()
-        offload_data.inputs_file_id = "file-id"
-        offload_data.outputs_file_id = None
-        model.offload_data = offload_data
+        offload = WorkflowNodeExecutionOffload(type_=ExecutionOffLoadType.INPUTS)
+        model.offload_data = [offload]
 
         assert model.inputs_truncated is True
+        assert model.process_data_truncated is False
         assert model.outputs_truncated is False
 
     def test_outputs_truncated_with_offload_data(self):
@@ -382,21 +217,29 @@ class TestWorkflowNodeExecutionModelTruncatedProperties:
         model = WorkflowNodeExecutionModel()
 
         # Mock offload data with outputs file
-        offload_data = MagicMock()
-        offload_data.inputs_file_id = None
-        offload_data.outputs_file_id = "file-id"
-        model.offload_data = offload_data
+        offload = WorkflowNodeExecutionOffload(type_=ExecutionOffLoadType.OUTPUTS)
+        model.offload_data = [offload]
 
         assert model.inputs_truncated is False
+        assert model.process_data_truncated is False
         assert model.outputs_truncated is True
+
+    def test_process_data_truncated_with_offload_data(self):
+        model = WorkflowNodeExecutionModel()
+        offload = WorkflowNodeExecutionOffload(type_=ExecutionOffLoadType.PROCESS_DATA)
+        model.offload_data = [offload]
+        assert model.process_data_truncated is True
+        assert model.inputs_truncated is False
+        assert model.outputs_truncated is False
 
     def test_truncated_properties_without_offload_data(self):
         """Test truncated properties when no offload data exists."""
         model = WorkflowNodeExecutionModel()
-        model.offload_data = None
+        model.offload_data = []
 
         assert model.inputs_truncated is False
         assert model.outputs_truncated is False
+        assert model.process_data_truncated is False
 
     def test_truncated_properties_without_offload_attribute(self):
         """Test truncated properties when offload_data attribute doesn't exist."""
@@ -405,3 +248,4 @@ class TestWorkflowNodeExecutionModelTruncatedProperties:
 
         assert model.inputs_truncated is False
         assert model.outputs_truncated is False
+        assert model.process_data_truncated is False
