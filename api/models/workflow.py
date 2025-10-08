@@ -14,7 +14,8 @@ from core.file.models import File
 from core.variables import utils as variable_utils
 from core.variables.variables import FloatVariable, IntegerVariable, StringVariable
 from core.workflow.constants import CONVERSATION_VARIABLE_NODE_ID, SYSTEM_VARIABLE_NODE_ID
-from core.workflow.enums import NodeType
+from core.workflow.entities.workflow_suspension import StateVersion
+from core.workflow.enums import NodeType, WorkflowExecutionStatus
 from extensions.ext_storage import Storage
 from factories.variable_factory import TypeMismatchError, build_segment_with_type
 from libs.datetime_utils import naive_utc_now
@@ -533,7 +534,10 @@ class WorkflowRun(Base):
     version: Mapped[str] = mapped_column(String(255))
     graph: Mapped[str | None] = mapped_column(sa.Text)
     inputs: Mapped[str | None] = mapped_column(sa.Text)
-    status: Mapped[str] = mapped_column(String(255))  # running, succeeded, failed, stopped, partial-succeeded
+    status: Mapped[str] = mapped_column(
+        EnumText(WorkflowExecutionStatus, length=255),
+        nullable=False,
+    )  # running, succeeded, failed, stopped, partial-succeeded
     outputs: Mapped[str | None] = mapped_column(sa.Text, default="{}")
     error: Mapped[str | None] = mapped_column(sa.Text)
     elapsed_time: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default=sa.text("0"))
@@ -544,6 +548,14 @@ class WorkflowRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     exceptions_count: Mapped[int] = mapped_column(sa.Integer, server_default=sa.text("0"), nullable=True)
+
+    # Represents the suspension details of a suspended workflow.
+    # This field is non-null when `status == SUSPENDED` and null otherwise.
+    suspension_state_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
+
+    # suspension_state: Mapped["WorkflowSuspensionState"] = orm.relationship(
+    #     back_populates="workflow_execution", lazy="select", passive_deletes="all"
+    # )
 
     @property
     def created_by_account(self):
@@ -1097,10 +1109,6 @@ class ConversationVariable(Base):
 _EDITABLE_SYSTEM_VARIABLE = frozenset(["query", "files"])
 
 
-def _naive_utc_datetime():
-    return naive_utc_now()
-
-
 class WorkflowDraftVariable(Base):
     """`WorkflowDraftVariable` record variables and outputs generated during
     debugging workflow or chatflow.
@@ -1134,14 +1142,14 @@ class WorkflowDraftVariable(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=_naive_utc_datetime,
+        default=naive_utc_now,
         server_default=func.current_timestamp(),
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=_naive_utc_datetime,
+        default=naive_utc_now,
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp(),
     )
@@ -1408,8 +1416,8 @@ class WorkflowDraftVariable(Base):
         file_id: str | None = None,
     ) -> "WorkflowDraftVariable":
         variable = WorkflowDraftVariable()
-        variable.created_at = _naive_utc_datetime()
-        variable.updated_at = _naive_utc_datetime()
+        variable.created_at = naive_utc_now()
+        variable.updated_at = naive_utc_now()
         variable.description = description
         variable.app_id = app_id
         variable.node_id = node_id
@@ -1514,7 +1522,7 @@ class WorkflowDraftVariableFile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=_naive_utc_datetime,
+        default=naive_utc_now,
         server_default=func.current_timestamp(),
     )
 
@@ -1579,3 +1587,88 @@ class WorkflowDraftVariableFile(Base):
 
 def is_system_variable_editable(name: str) -> bool:
     return name in _EDITABLE_SYSTEM_VARIABLE
+
+
+class WorkflowSuspensionState(Base):
+    __tablename__ = "workflow_suspension_states"
+
+    # id is the unique identifier of a suspension
+    id: Mapped[str] = mapped_column(
+        StringUUID,
+        primary_key=True,
+        # NOTE: The server default acts as a fallback mechanism.
+        # The application generates the ID for new `WorkflowSuspension` records
+        # to streamline the insertion process and minimize database roundtrips.
+        server_default=db.text("uuidv7()"),
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime,
+        nullable=False,
+        default=naive_utc_now,
+        server_default=func.current_timestamp(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime,
+        nullable=False,
+        default=naive_utc_now,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )
+
+    # `tenant_id` identifies the tenant associated with this suspension,
+    # corresponding to the `id` field in the `Tenant` model.
+    tenant_id: Mapped[str] = mapped_column(
+        StringUUID,
+        nullable=False,
+    )
+
+    # `app_id` represents the application identifier associated with this state.
+    # It corresponds to the `id` field in the `App` model.
+    #
+    # While this field is technically redundant (as the corresponding app can be
+    # determined by querying the `Workflow`), it is retained to simplify data
+    # cleanup and management processes.
+    app_id: Mapped[str] = mapped_column(
+        StringUUID,
+        nullable=False,
+    )
+
+    # `workflow_id` represents the unique identifier of the workflow associated with this suspension.
+    # It corresponds to the `id` field in the `Workflow` model.
+    #
+    # Since an application can have multiple versions of a workflow, each with its own unique ID,
+    # the `app_id` alone is insufficient to determine which workflow version should be loaded
+    # when resuming a suspended workflow.
+    workflow_id: Mapped[str] = mapped_column(
+        StringUUID,
+        nullable=False,
+    )
+
+    # `workflow_run_id` represents the identifier of the execution of workflow,
+    # correspond to the `id` field of `WorkflowNodeExecutionModel`.
+    workflow_run_id: Mapped[str] = mapped_column(
+        StringUUID,
+        nullable=False,
+    )
+
+    # `resumed_at` records the timestamp when the suspended workflow was resumed.
+    # It is set to `NULL` if the workflow has not been resumed.
+    resumed_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.DateTime,
+        nullable=True,
+        default=sa.null,
+    )
+
+    # The version of the serialized execution state data. Currently, the only supported value is `v1`.
+    state_version: Mapped[StateVersion] = mapped_column(
+        EnumText(StateVersion),
+        nullable=False,
+    )
+
+    # `state` contains the serialized runtime state of the `GraphEngine`,
+    # capturing the workflow's execution context at the time of suspension.
+    #
+    # The value of `state` is a JSON-formatted string representing a JSON object (e.g., `{}`).
+    state: Mapped[str] = mapped_column(sa.JSON, nullable=False)

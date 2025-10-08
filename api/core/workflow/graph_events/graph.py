@@ -26,3 +26,7 @@ class GraphRunAbortedEvent(BaseGraphEvent):
 
     reason: str | None = Field(default=None, description="reason for abort")
     outputs: dict[str, object] = Field(default_factory=dict, description="partial outputs if any")
+
+
+class GraphRunSuspendedEvent(BaseGraphEvent):
+    current_node_id: str = Field(description="the current node (node just finished executing) while suspending.")

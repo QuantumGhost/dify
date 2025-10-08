@@ -27,6 +27,7 @@ from .dataset import (
     Whitelist,
 )
 from .enums import CreatorUserRole, UserFrom, WorkflowRunTriggeredFrom
+from .human_input import HumanInputEmailDelivery, HumanInputForm
 from .model import (
     ApiRequest,
     ApiToken,

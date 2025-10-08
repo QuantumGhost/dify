@@ -8,6 +8,13 @@ from .variable_pool import VariablePool
 
 
 class GraphRuntimeState(BaseModel):
+    """`GraphRuntimeState` encapsulates the runtime state of workflow execution,
+    including scheduling details, variable values, and timing information.
+
+    Values that are initialized prior to workflow execution and remain constant
+    throughout the execution should be part of `GraphInitParams` instead.
+    """
+
     # Private attributes to prevent direct modification
     _variable_pool: VariablePool = PrivateAttr()
     _start_at: float = PrivateAttr()

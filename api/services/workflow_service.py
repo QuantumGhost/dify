@@ -210,6 +210,9 @@ class WorkflowService:
         # validate features structure
         self.validate_features_structure(app_model=app_model, features=features)
 
+        # validate graph structure and node data
+        self.validate_graph_structure(graph=graph)
+
         # create draft workflow if not found
         if not workflow:
             workflow = Workflow(
@@ -905,6 +908,42 @@ class WorkflowService:
             )
         else:
             raise ValueError(f"Invalid app mode: {app_model.mode}")
+
+    def validate_graph_structure(self, graph: dict) -> None:
+        """
+        Validate the graph structure and node data formats.
+
+        Args:
+            graph: The workflow graph dictionary
+
+        Raises:
+            ValueError: If any node data is invalid
+        """
+        nodes = graph.get("nodes", [])
+
+        for node in nodes:
+            node_data = node.get("data", {})
+            node_type = node_data.get("type")
+
+            if node_type == "human_input":
+                self._validate_human_input_node_data(node_data)
+
+    def _validate_human_input_node_data(self, node_data: dict) -> None:
+        """
+        Validate HumanInput node data format.
+
+        Args:
+            node_data: The node data dictionary
+
+        Raises:
+            ValueError: If the node data format is invalid
+        """
+        from core.workflow.nodes.human_input.entities import HumanInputNodeData
+
+        try:
+            HumanInputNodeData.model_validate(node_data)
+        except Exception as e:
+            raise ValueError(f"Invalid HumanInput node data: {str(e)}")
 
     def update_workflow(
         self, *, session: Session, workflow_id: str, tenant_id: str, account_id: str, data: dict
