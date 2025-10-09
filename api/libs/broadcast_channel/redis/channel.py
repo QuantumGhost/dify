@@ -1,16 +1,17 @@
-from collections.abc import Generator
 import dataclasses
 import logging
 import threading
-from typing import Iterator
+import types
+from collections.abc import Generator, Iterator
+from venv import logger
+
 from redis import Redis
 from redis.client import PubSub
 
-from libs.broadcast_channel.channel import Producer, Subscriber, Subscription
+from libs.broadcast_channel.channel import Overflow, Producer, Subscriber, Subscription
 from libs.broadcast_channel.exc import InvalidOperationError
 
-
-_logger= logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 class BroadcastChannel:
@@ -54,7 +55,6 @@ class Topic:
         return _RedisSubscription(
             self._client.pubsub(),
             self._topic,
-
         )
 
 
@@ -70,18 +70,21 @@ class _RedisSubscription:
     def __init__(self, pubsub: PubSub, topic: str):
         self._pubsub = pubsub
         self._topic = topic
-        self._closed = False
-        self._iter_gen: Generator[bytes, _Stop, None] =
+        self._closed = threading.Event()
+        self._iter_gen: Generator[bytes, _Stop, None] | None = None
 
     @staticmethod
-    def _yield_from_pubsub(pubsub: PubSub) -> Generator[bytes, _Stop, None]:
-
+    def _yield_from_pubsub(
+        pubsub: PubSub,
+        key: str,
+        close_event: threading.Event,
+    ) -> Generator[bytes, _Stop, None]:
         # Listen for messages using get_message with timeout
         while True:
-                    if self._cancel.is_set():
+            if close_event.is_set():
                 return
 
-            pubsub = self._pubsub
+            pubsub = pubsub
             if pubsub is None:
                 # Closed by other threads.
                 return
@@ -93,25 +96,24 @@ class _RedisSubscription:
                 continue
 
             channel_name = raw_message["channel"].decode("utf-8")
-            if channel_name != self._key:
-                raise AssertionError(f"expected message from {self._key}, got {channel_name}")
+            if channel_name != key:
+                raise AssertionError(f"expected message from {key}, got {channel_name}")
 
             # Return the raw bytes payload
             payload = raw_message["data"]
-            logger.debug("Received message from channel %s", self._key)
+            logger.debug("Received message from channel %s", key)
             yield payload
 
     def __iter__(self) -> Iterator[bytes]:
-        if self._closed:
+        if self._closed.is_set():
             raise InvalidOperationError("The RedisBroadcastChannel instance is closed")
-
-        self._iter_gen = _RedisSubscription._yield_from_pubsub(self._pubsub)
+        assert self._iter_gen is not None, "Subscription is not properly setup."
         return iter(self._iter_gen)
 
     def __enter__(self) -> "Subscription":
         self._pubsub.subscribe(self._topic)
         _logger.debug("Subscribed to channel %s", self._topic)
-        self._iter_gen =
+        self._iter_gen = self._iter_gen = _RedisSubscription._yield_from_pubsub(self._pubsub, self._topic, self._closed)
         return self
 
     def __exit__(
@@ -120,8 +122,10 @@ class _RedisSubscription:
         exc_value: BaseException | None,
         traceback: types.TracebackType | None,
     ) -> bool | None:
-        self._pubsub.close()
+        self.close()
         return None
 
     def close(self):
-        self._cancel.set()
+        self._closed.set()
+        self._pubsub.close()
+        self._iter_gen = None
