@@ -27,7 +27,7 @@ from .dataset import (
     Whitelist,
 )
 from .enums import CreatorUserRole, UserFrom, WorkflowRunTriggeredFrom
-from .human_input import HumanInputEmailDelivery, HumanInputForm
+from .human_input import HumanInputForm
 from .model import (
     ApiRequest,
     ApiToken,
@@ -134,6 +134,7 @@ __all__ = [
     "EndUser",
     "ExternalKnowledgeApis",
     "ExternalKnowledgeBindings",
+    "HumanInputForm",
     "IconType",
     "InstalledApp",
     "InvitationCode",

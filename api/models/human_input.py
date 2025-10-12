@@ -102,22 +102,22 @@ class HumanInputForm(ModelMixin, Base):
     submitter_email: Mapped[str] = mapped_column(sa.VARCHAR(_email_field_length), nullable=True)
 
 
-class HumanInputEmailDelivery(ModelMixin, Base):
-    # form_id refers to `HumanInputForm.id`
-    form_id: Mapped[str] = mapped_column(
-        StringUUID,
-        nullable=False,
-    )
+# class HumanInputEmailDelivery(ModelMixin, Base):
+#     # form_id refers to `HumanInputForm.id`
+#     form_id: Mapped[str] = mapped_column(
+#         StringUUID,
+#         nullable=False,
+#     )
 
-    # IF the submitter receives a email and
-    email: Mapped[str] = mapped_column(__name_pos=sa.VARCHAR(_email_field_length), nullable=False)
-    user_id: Mapped[str] = mapped_column(
-        StringUUID,
-        nullable=True,
-    )
+#     # IF the submitter receives a email and
+#     email: Mapped[str] = mapped_column(__name_pos=sa.VARCHAR(_email_field_length), nullable=False)
+#     user_id: Mapped[str] = mapped_column(
+#         StringUUID,
+#         nullable=True,
+#     )
 
-    email_link_token: Mapped[str] = mapped_column(
-        sa.VARCHAR(_token_field_length),
-        nullable=False,
-        default_factory=_generate_token,
-    )
+#     email_link_token: Mapped[str] = mapped_column(
+#         sa.VARCHAR(_token_field_length),
+#         nullable=False,
+#         default=_generate_token,
+#     )

@@ -6,7 +6,7 @@ import json
 import logging
 
 from flask import g, jsonify
-from flask_restful import Resource, reqparse
+from flask_restx import Resource, reqparse
 
 from controllers.console import api
 from controllers.console.wraps import account_initialization_required

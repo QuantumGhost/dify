@@ -557,6 +557,14 @@ class WorkflowRun(Base):
     #     back_populates="workflow_execution", lazy="select", passive_deletes="all"
     # )
 
+    # Represents the suspension details of a suspended workflow.
+    # This field is non-null when `status == SUSPENDED` and null otherwise.
+    suspension_state_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
+
+    # suspension_state: Mapped["WorkflowSuspensionState"] = orm.relationship(
+    #     back_populates="workflow_execution", lazy="select", passive_deletes="all"
+    # )
+
     @property
     def created_by_account(self):
         created_by_role = CreatorUserRole(self.created_by_role)

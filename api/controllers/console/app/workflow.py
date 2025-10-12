@@ -985,3 +985,8 @@ class DraftWorkflowNodeLastRunApi(Resource):
         if node_exec is None:
             raise NotFound("last run not found")
         return node_exec
+
+
+@console_ns.route("/events")
+class WorkflowEventAPI(Resource):
+    pass
