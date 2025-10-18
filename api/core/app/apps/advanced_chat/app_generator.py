@@ -60,6 +60,7 @@ class AdvancedChatAppGenerator(MessageBasedAppGenerator):
         user: Union[Account, EndUser],
         args: Mapping[str, Any],
         invoke_from: InvokeFrom,
+        workflow_run_id: uuid.UUID,
         streaming: Literal[False],
     ) -> Mapping[str, Any]: ...
 
@@ -69,8 +70,9 @@ class AdvancedChatAppGenerator(MessageBasedAppGenerator):
         app_model: App,
         workflow: Workflow,
         user: Union[Account, EndUser],
-        args: Mapping,
+        args: Mapping[str, Any],
         invoke_from: InvokeFrom,
+        workflow_run_id: uuid.UUID,
         streaming: Literal[True],
     ) -> Generator[Mapping | str, None, None]: ...
 
@@ -80,8 +82,9 @@ class AdvancedChatAppGenerator(MessageBasedAppGenerator):
         app_model: App,
         workflow: Workflow,
         user: Union[Account, EndUser],
-        args: Mapping,
+        args: Mapping[str, Any],
         invoke_from: InvokeFrom,
+        workflow_run_id: uuid.UUID,
         streaming: bool,
     ) -> Mapping[str, Any] | Generator[str | Mapping, None, None]: ...
 
@@ -90,8 +93,9 @@ class AdvancedChatAppGenerator(MessageBasedAppGenerator):
         app_model: App,
         workflow: Workflow,
         user: Union[Account, EndUser],
-        args: Mapping,
+        args: Mapping[str, Any],
         invoke_from: InvokeFrom,
+        workflow_run_id: uuid.UUID,
         streaming: bool = True,
     ) -> Mapping[str, Any] | Generator[str | Mapping, None, None]:
         """
@@ -156,7 +160,6 @@ class AdvancedChatAppGenerator(MessageBasedAppGenerator):
             # always enable retriever resource in debugger mode
             app_config.additional_features.show_retrieve_source = True  # type: ignore
 
-        workflow_run_id = str(uuid.uuid4())
         # init application generate entity
         application_generate_entity = AdvancedChatAppGenerateEntity(
             task_id=str(uuid.uuid4()),
@@ -174,7 +177,7 @@ class AdvancedChatAppGenerator(MessageBasedAppGenerator):
             invoke_from=invoke_from,
             extras=extras,
             trace_manager=trace_manager,
-            workflow_run_id=workflow_run_id,
+            workflow_run_id=str(workflow_run_id),
         )
         contexts.plugin_tool_providers.set({})
         contexts.plugin_tool_providers_lock.set(threading.Lock())

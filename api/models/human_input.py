@@ -2,8 +2,9 @@ from datetime import datetime
 from enum import StrEnum
 
 import sqlalchemy as sa
-from api.libs.helper import generate_string
 from sqlalchemy.orm import Mapped, mapped_column
+
+from libs.helper import generate_string
 
 from .base import Base, ModelMixin
 from .types import EnumText, StringUUID

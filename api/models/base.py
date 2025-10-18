@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from api.libs.datetime_utils import naive_utc_now
-from api.libs.uuid_utils import uuidv7
 from sqlalchemy import DateTime, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
+from libs.datetime_utils import naive_utc_now
+from libs.uuid_utils import uuidv7
 from models.engine import metadata
 
 from .types import StringUUID

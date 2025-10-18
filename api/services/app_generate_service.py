@@ -17,6 +17,7 @@ from services.billing_service import BillingService
 from services.errors.app import WorkflowIdFormatError, WorkflowNotFoundError
 from services.errors.llm import InvokeRateLimitError
 from services.workflow_service import WorkflowService
+from tasks.app_generate.workflow_execute_task import chatflow_execute_task
 
 
 class AppGenerateService:

@@ -36,7 +36,7 @@ from factories import variable_factory
 from libs import helper
 
 from .account import Account
-from .base import Base
+from .base import Base, ModelMixin
 from .engine import db
 from .enums import CreatorUserRole, DraftVariableType, ExecutionOffLoadType
 from .types import EnumText, StringUUID

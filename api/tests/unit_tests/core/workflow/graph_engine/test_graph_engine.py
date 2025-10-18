@@ -6,7 +6,6 @@ The core test framework is in test_table_runner.py.
 """
 
 import time
-from unittest.mock import patch
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
