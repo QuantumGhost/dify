@@ -102,12 +102,12 @@ class DeliveryMethod(BaseModel):
     enabled: bool = True
     config: Optional[DeliveryConfig] = None
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_config_type(self):
         """Validate that config matches the delivery method type."""
         if self.config is None:
             return self
-            
+
         if self.type == DeliveryMethodType.EMAIL:
             if isinstance(self.config, dict):
                 # Try to parse as EmailDeliveryConfig - this will raise validation errors
@@ -120,14 +120,14 @@ class DeliveryMethod(BaseModel):
                 raise ValueError("Config must be EmailDeliveryConfig for email delivery method")
         elif self.type == DeliveryMethodType.WEBAPP:
             if isinstance(self.config, dict):
-                # Try to parse as WebAppDeliveryConfig  
+                # Try to parse as WebAppDeliveryConfig
                 try:
                     self.config = WebAppDeliveryConfig.model_validate(self.config)
                 except Exception as e:
                     raise ValueError(f"Invalid webapp delivery configuration: {str(e)}")
             elif not isinstance(self.config, WebAppDeliveryConfig):
                 raise ValueError("Config must be WebAppDeliveryConfig for webapp delivery method")
-        
+
         return self
 
 

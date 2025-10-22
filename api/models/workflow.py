@@ -549,17 +549,13 @@ class WorkflowRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     exceptions_count: Mapped[int] = mapped_column(sa.Integer, server_default=sa.text("0"), nullable=True)
 
-    # Represents the suspension details of a suspended workflow.
-    # This field is non-null when `status == SUSPENDED` and null otherwise.
-    suspension_state_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
-
     # suspension_state: Mapped["WorkflowSuspensionState"] = orm.relationship(
     #     back_populates="workflow_execution", lazy="select", passive_deletes="all"
     # )
 
     # Represents the suspension details of a suspended workflow.
     # This field is non-null when `status == SUSPENDED` and null otherwise.
-    suspension_state_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
+    # suspension_state_id: Mapped[StringUUID] = mapped_column(StringUUID, nullable=True)
 
     # suspension_state: Mapped["WorkflowSuspensionState"] = orm.relationship(
     #     back_populates="workflow_execution", lazy="select", passive_deletes="all"

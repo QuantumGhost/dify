@@ -33,7 +33,7 @@ class _UserType(StrEnum):
 
 
 class _Account(BaseModel):
-    TYPE = _UserType.ACCOUNT
+    TYPE: _UserType = _UserType.ACCOUNT
 
     user_id: str
 
@@ -47,7 +47,7 @@ def _get_user_type_descriminator(value: Any):
     if isinstance(value, (_Account, _EndUser)):
         return value.TYPE
     elif isinstance(value, dict):
-        user_type_str = value.get("type")
+        user_type_str = value.get("TYPE")
         if user_type_str is None:
             return None
         try:
@@ -76,10 +76,35 @@ class ChatflowExecutionParams(BaseModel):
     invoke_from: InvokeFrom
     streaming: bool = True
     call_depth: int = 0
+    workflow_run_id: uuid.UUID = Field(default_factory=uuid.uuid4)
 
-
-def _make_channel_key(app_mode: AppMode, workflow_run_id: str) -> str:
-
+    @classmethod
+    def new(
+        cls,
+        app_model: App,
+        workflow: Workflow,
+        user: Union[Account, EndUser],
+        args: Mapping[str, Any],
+        invoke_from: InvokeFrom,
+        streaming: bool = True,
+    ):
+        user_params: _Account | _EndUser
+        if isinstance(user, Account):
+            user_params = _Account(user_id=user.id)
+        elif isinstance(user, EndUser):
+            user_params = _EndUser(end_user_id=user.id)
+        else:
+            raise AssertionError("this statement should be unreachable.")
+        return cls(
+            app_id=app_model.id,
+            workflow_id=workflow.id,
+            tenant_id=app_model.tenant_id,
+            user=user_params,
+            args=args,
+            invoke_from=invoke_from,
+            streaming=streaming,
+            workflow_run_id=uuid.uuid4(),
+        )
 
 
 class _ChatflowRunner:
@@ -121,7 +146,7 @@ class _ChatflowRunner:
                 args=exec_params.args,
                 invoke_from=exec_params.invoke_from,
                 streaming=exec_params.streaming,
-                workflow_run_id=workflow_run_id
+                workflow_run_id=workflow_run_id,
             )
             if not exec_params.streaming:
                 return response
@@ -152,45 +177,11 @@ class _ChatflowRunner:
         return user
 
 
-@overload
-def chatflow_execute_task(
-    app_model: App,
-    workflow: Workflow,
-    user: Union[Account, EndUser],
-    args: Mapping[str, Any],
-    invoke_from: InvokeFrom,
-    streaming: Literal[True],
-) -> None: ...
-
-
-@overload
-def chatflow_execute_task(
-    app_model: App,
-    workflow: Workflow,
-    user: Union[Account, EndUser],
-    args: Mapping[str, Any],
-    invoke_from: InvokeFrom,
-    streaming: Literal[False],
-) -> Mapping[str, Any]: ...
-
-
 @shared_task(queue="chatflow_execute")
 def chatflow_execute_task(payload: str) -> Mapping[str, Any] | None:
     exec_params = ChatflowExecutionParams.model_validate_json(payload)
 
+    print("chatflow_execute_task run with params", exec_params)
+
     runner = _ChatflowRunner(db.engine, exec_params=exec_params)
     return runner.run()
-
-
-def consume_event(app_mode: AppMode, task_id: str) -> Generator[str, None, None]:
-    channel_key = _make_channel_key(app_mode, task_id)
-    channel = RedisBroadcastChannel(redis_client=redis_client)
-    topic = channel.topic(channel_key)
-
-    def gen() -> Generator[str | Mapping[str, Any], None, None]:
-        with topic.subscribe() as subscription:
-            for event in subscription:
-                payload = _Payload.model_validate_json(event)
-                yield payload.value
-
-    return BaseAppGenerator.convert_to_event_stream(gen)
