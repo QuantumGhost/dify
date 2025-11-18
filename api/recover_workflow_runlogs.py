@@ -43,6 +43,7 @@ from models.model import (
 )
 from models.workflow import ConversationVariable, WorkflowAppLog, WorkflowNodeExecutionModel, WorkflowRun
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 2000
@@ -54,7 +55,7 @@ def _log_insert(
     if not rows:
         return
     keys = [key_builder(row) if key_builder else str(row.get("id")) for row in rows]
-    logger.info("Inserted %s rows into %s: %s", len(rows), table_name, keys)
+    logger.info("Inserted %s rows into %s", len(rows), table_name)
     for key in keys:
         logger.info("Inserted record into table, table_name=%s, id=%s", table_name, key)
 
