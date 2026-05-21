@@ -403,6 +403,8 @@ class ProviderConfiguration(BaseModel):
                 ProviderModelCredential.tenant_id == self.tenant_id,
                 ProviderModelCredential.provider_name.in_(self._get_provider_names()),
                 ProviderModelCredential.model_name == model,
+                # NOTE: model-type-compat
+                #
                 # While this is not a query returning one row, for
                 # API key name generation it's ok to keep both rows with canonical enum values
                 # and rows with legacy enum values.
@@ -1164,6 +1166,11 @@ class ProviderConfiguration(BaseModel):
                     ProviderModelCredential.tenant_id == self.tenant_id,
                     ProviderModelCredential.provider_name.in_(self._get_provider_names()),
                     ProviderModelCredential.model_name == model,
+                    # NOTE: model-type-compat
+                    #
+                    # Using COUNT with OR will yield a larger row count, which may prevent
+                    # the custom model record from being deleted.
+                    # IMO this is acceptable as long as it doesn't introduce other issues.
                     legacy_compatible_model_type_filter(ProviderModelCredential.model_type, model_type),
                 )
                 available_credentials_count = session.execute(count_stmt).scalar() or 0
@@ -1419,6 +1426,7 @@ class ProviderConfiguration(BaseModel):
             stmt = select(func.count(LoadBalancingModelConfig.id)).where(
                 LoadBalancingModelConfig.tenant_id == self.tenant_id,
                 LoadBalancingModelConfig.provider_name.in_(provider_names),
+                # NOTE: model-type-compat
                 legacy_compatible_model_type_filter(LoadBalancingModelConfig.model_type, model_type),
                 LoadBalancingModelConfig.model_name == model,
             )
