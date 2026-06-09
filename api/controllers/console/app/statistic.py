@@ -1,10 +1,21 @@
+"""Console app statistics endpoints backed by SQLAlchemy expressions.
+
+The legacy implementation assembled vendor-specific SQL strings inline. The
+queries below preserve that behaviour while moving to ORM-backed expressions so
+the statistics continue to match the historical raw SQL semantics pinned by the
+integration tests.
+"""
+
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Any, TypeVar
 
 import sqlalchemy as sa
 from flask import abort, jsonify, request
 from flask_restx import Resource, fields
 from pydantic import BaseModel, Field, field_validator
 
+from configs import dify_config
 from controllers.common.schema import register_schema_models
 from controllers.console import console_ns
 from controllers.console.app.wraps import get_app_model
@@ -12,11 +23,12 @@ from controllers.console.wraps import account_initialization_required, setup_req
 from core.app.entities.app_invoke_entities import InvokeFrom
 from extensions.ext_database import db
 from libs.datetime_utils import parse_time_range
-from libs.helper import convert_datetime_to_date
+from libs.helper import convert_datetime_to_date as _legacy_convert_datetime_to_date
 from libs.login import login_required
 from models import AppMode
 from models.account import Account
-from models.model import App
+from models.enums import FeedbackRating
+from models.model import App, Conversation, Message, MessageFeedback
 
 
 class StatisticTimeRangeQuery(BaseModel):
@@ -32,6 +44,90 @@ class StatisticTimeRangeQuery(BaseModel):
 
 
 register_schema_models(console_ns, StatisticTimeRangeQuery)
+
+
+def convert_datetime_to_date(field: str, target_timezone: str = ":tz") -> str:
+    """Compatibility shim kept for existing unit tests that monkeypatch this symbol."""
+    return _legacy_convert_datetime_to_date(field, target_timezone)
+
+
+def _build_local_date_bucket(field: sa.SQLColumnExpression[datetime]) -> sa.ColumnElement[date]:
+    """Match the legacy SQL day-bucketing semantics for each supported database."""
+    if dify_config.DB_TYPE == "postgresql":
+        return sa.cast(
+            sa.func.date_trunc(
+                "day",
+                sa.func.timezone(sa.bindparam("tz"), sa.func.timezone("UTC", field)),
+            ),
+            sa.Date,
+        )
+
+    if dify_config.DB_TYPE in {"mysql", "oceanbase", "seekdb"}:
+        return sa.func.date(sa.func.convert_tz(field, "UTC", sa.bindparam("tz")))
+
+    raise NotImplementedError(f"Unsupported database type: {dify_config.DB_TYPE}")
+
+
+def _get_time_range_or_abort(
+    args: StatisticTimeRangeQuery,
+    timezone: str,
+) -> tuple[datetime | None, datetime | None]:
+    try:
+        return parse_time_range(args.start, args.end, timezone)
+    except ValueError as e:
+        raise abort(400, description=str(e))
+
+
+def _apply_time_range_filters[T: tuple](
+    statement: sa.Select[T],
+    field: sa.SQLColumnExpression[datetime],
+    start_datetime_utc: datetime | None,
+    end_datetime_utc: datetime | None,
+) -> sa.Select[T]:
+    if start_datetime_utc is not None:
+        statement = statement.where(field >= sa.bindparam("start"))
+
+    if end_datetime_utc is not None:
+        statement = statement.where(field < sa.bindparam("end"))
+
+    return statement
+
+
+def _message_statistic_base(
+    *columns: sa.ColumnExpressionArgument[Any],
+) -> tuple[sa.ColumnElement[date], sa.Select[tuple[Any, ...]]]:
+    date_bucket = _build_local_date_bucket(Message.created_at).label("date")
+    statement = (
+        sa.select(date_bucket, *columns)
+        .select_from(Message)
+        .where(
+            Message.app_id == sa.bindparam("app_id"),
+            Message.invoke_from != sa.bindparam("invoke_from"),
+        )
+    )
+    return date_bucket, statement
+
+
+def _build_statistic_parameters(
+    account: Account,
+    app_model: App,
+    start_datetime_utc: datetime | None,
+    end_datetime_utc: datetime | None,
+) -> dict[str, Any]:
+    assert account.timezone is not None
+    parameters: dict[str, Any] = {
+        "tz": account.timezone,
+        "app_id": app_model.id,
+        "invoke_from": InvokeFrom.DEBUGGER,
+    }
+
+    if start_datetime_utc is not None:
+        parameters["start"] = start_datetime_utc
+
+    if end_datetime_utc is not None:
+        parameters["end"] = end_datetime_utc
+
+    return parameters
 
 
 @console_ns.route("/apps/<uuid:app_id>/statistics/daily-messages")
@@ -52,42 +148,17 @@ class DailyMessageStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    COUNT(*) AS message_count
-FROM
-    messages
-WHERE
-    app_id = :app_id
-    AND invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        date_bucket, statement = _message_statistic_base(sa.func.count().label("message_count"))
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append({"date": str(i.date), "message_count": i.message_count})
 
@@ -112,41 +183,18 @@ class DailyConversationStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    COUNT(DISTINCT conversation_id) AS conversation_count
-FROM
-    messages
-WHERE
-    app_id = :app_id
-    AND invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        date_bucket, statement = _message_statistic_base(
+            sa.func.count(sa.distinct(Message.conversation_id)).label("conversation_count")
+        )
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append({"date": str(i.date), "conversation_count": i.conversation_count})
 
@@ -171,42 +219,19 @@ class DailyTerminalsStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    COUNT(DISTINCT messages.from_end_user_id) AS terminal_count
-FROM
-    messages
-WHERE
-    app_id = :app_id
-    AND invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        date_bucket, statement = _message_statistic_base(
+            sa.func.count(sa.distinct(Message.from_end_user_id)).label("terminal_count")
+        )
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append({"date": str(i.date), "terminal_count": i.terminal_count})
 
@@ -231,43 +256,21 @@ class DailyTokenCostStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    (SUM(messages.message_tokens) + SUM(messages.answer_tokens)) AS token_count,
-    SUM(total_price) AS total_price
-FROM
-    messages
-WHERE
-    app_id = :app_id
-    AND invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        token_count = (sa.func.sum(Message.message_tokens) + sa.func.sum(Message.answer_tokens)).label("token_count")
+        date_bucket, statement = _message_statistic_base(
+            token_count,
+            sa.func.sum(Message.total_price).label("total_price"),
+        )
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append(
                     {"date": str(i.date), "token_count": i.token_count, "total_price": i.total_price, "currency": "USD"}
@@ -294,59 +297,48 @@ class AverageSessionInteractionStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("c.created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    AVG(subquery.message_count) AS interactions
-FROM
-    (
-        SELECT
-            m.conversation_id,
-            COUNT(m.id) AS message_count
-        FROM
-            conversations c
-        JOIN
-            messages m
-            ON c.id = m.conversation_id
-        WHERE
-            c.app_id = :app_id
-            AND m.invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND c.created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND c.created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += """
-        GROUP BY m.conversation_id
-    ) subquery
-LEFT JOIN
-    conversations c
-    ON c.id = subquery.conversation_id
-GROUP BY
-    date
-ORDER BY
-    date"""
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        date_bucket = _build_local_date_bucket(Conversation.created_at).label("date")
+        session_message_counts = (
+            sa.select(
+                Message.conversation_id.label("conversation_id"),
+                sa.func.count(Message.id).label("message_count"),
+            )
+            .select_from(Conversation)
+            .join(Message, Conversation.id == Message.conversation_id)
+            .where(
+                Conversation.app_id == sa.bindparam("app_id"),
+                Message.invoke_from != sa.bindparam("invoke_from"),
+            )
+        )
+        session_message_counts = _apply_time_range_filters(
+            session_message_counts,
+            Conversation.created_at,
+            start_datetime_utc,
+            end_datetime_utc,
+        )
+        session_message_counts_subquery = session_message_counts.group_by(Message.conversation_id).subquery("subquery")
+        statement = (
+            sa.select(
+                date_bucket,
+                sa.func.avg(session_message_counts_subquery.c.message_count).label("interactions"),
+            )
+            .select_from(
+                session_message_counts_subquery.outerjoin(
+                    Conversation,
+                    Conversation.id == session_message_counts_subquery.c.conversation_id,
+                )
+            )
+            .group_by(date_bucket)
+            .order_by(date_bucket)
+        )
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append(
                     {"date": str(i.date), "interactions": float(i.interactions.quantize(Decimal("0.01")))}
@@ -373,46 +365,36 @@ class UserSatisfactionRateStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("m.created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    COUNT(m.id) AS message_count,
-    COUNT(mf.id) AS feedback_count
-FROM
-    messages m
-LEFT JOIN
-    message_feedbacks mf
-    ON mf.message_id=m.id AND mf.rating='like'
-WHERE
-    m.app_id = :app_id
-    AND m.invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND m.created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND m.created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        date_bucket = _build_local_date_bucket(Message.created_at).label("date")
+        statement = (
+            sa.select(
+                date_bucket,
+                sa.func.count(Message.id).label("message_count"),
+                sa.func.count(MessageFeedback.id).label("feedback_count"),
+            )
+            .select_from(Message)
+            .outerjoin(
+                MessageFeedback,
+                sa.and_(
+                    MessageFeedback.message_id == Message.id,
+                    MessageFeedback.rating == FeedbackRating.LIKE,
+                ),
+            )
+            .where(
+                Message.app_id == sa.bindparam("app_id"),
+                Message.invoke_from != sa.bindparam("invoke_from"),
+            )
+        )
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append(
                     {
@@ -442,42 +424,19 @@ class AverageResponseTimeStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    AVG(provider_response_latency) AS latency
-FROM
-    messages
-WHERE
-    app_id = :app_id
-    AND invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        date_bucket, statement = _message_statistic_base(
+            sa.func.avg(Message.provider_response_latency).label("latency"),
+        )
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append({"date": str(i.date), "latency": round(i.latency * 1000, 4)})
 
@@ -502,45 +461,23 @@ class TokensPerSecondStatistic(Resource):
     @with_current_user
     def get(self, account: Account, app_model: App):
         args = StatisticTimeRangeQuery.model_validate(request.args.to_dict(flat=True))
-
-        converted_created_at = convert_datetime_to_date("created_at")
-        sql_query = f"""SELECT
-    {converted_created_at} AS date,
-    CASE
-        WHEN SUM(provider_response_latency) = 0 THEN 0
-        ELSE (SUM(answer_tokens) / SUM(provider_response_latency))
-    END as tokens_per_second
-FROM
-    messages
-WHERE
-    app_id = :app_id
-    AND invoke_from != :invoke_from"""
         assert account.timezone is not None
-        arg_dict: dict[str, object] = {
-            "tz": account.timezone,
-            "app_id": app_model.id,
-            "invoke_from": InvokeFrom.DEBUGGER,
-        }
-
-        try:
-            start_datetime_utc, end_datetime_utc = parse_time_range(args.start, args.end, account.timezone)
-        except ValueError as e:
-            abort(400, description=str(e))
-
-        if start_datetime_utc:
-            sql_query += " AND created_at >= :start"
-            arg_dict["start"] = start_datetime_utc
-
-        if end_datetime_utc:
-            sql_query += " AND created_at < :end"
-            arg_dict["end"] = end_datetime_utc
-
-        sql_query += " GROUP BY date ORDER BY date"
+        start_datetime_utc, end_datetime_utc = _get_time_range_or_abort(args, account.timezone)
+        parameters = _build_statistic_parameters(account, app_model, start_datetime_utc, end_datetime_utc)
+        total_latency = sa.func.sum(Message.provider_response_latency)
+        date_bucket, statement = _message_statistic_base(
+            sa.case(
+                (total_latency == 0, 0),
+                else_=(sa.func.sum(Message.answer_tokens) / total_latency),
+            ).label("tokens_per_second"),
+        )
+        statement = _apply_time_range_filters(statement, Message.created_at, start_datetime_utc, end_datetime_utc)
+        statement = statement.group_by(date_bucket).order_by(date_bucket)
 
         response_data = []
 
         with db.engine.begin() as conn:
-            rs = conn.execute(sa.text(sql_query), arg_dict)
+            rs = conn.execute(statement, parameters)
             for i in rs:
                 response_data.append({"date": str(i.date), "tps": round(i.tokens_per_second, 4)})
 
