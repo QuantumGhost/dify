@@ -25,6 +25,7 @@ import DeleteAccount from '../delete-account'
 
 import AvatarWithEdit from './AvatarWithEdit'
 import EmailChangeModal from './email-change-modal'
+import FeishuBindingCard from './feishu-binding-card'
 
 const titleClassName = `
   system-sm-semibold text-text-secondary
@@ -211,6 +212,7 @@ export default function AccountPage() {
           </div>
         )
       }
+      <FeishuBindingCard />
       <div className="mb-6 border border-divider-subtle" />
       <div className="mb-8">
         <div className={titleClassName}>{t('account.langGeniusAccount', { ns: 'common' })}</div>
