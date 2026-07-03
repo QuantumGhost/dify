@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.repositories.account_im_binding_repository import AccountIMBindingSnapshot
 from core.repositories.human_input_repository import (
     FormCreateParams,
     FormNotFoundError,
@@ -26,13 +27,16 @@ from core.workflow.human_input_adapter import (
     EmailDeliveryMethod,
     EmailRecipients,
     ExternalRecipient,
+    IMDeliveryConfig,
+    IMDeliveryMethod,
+    IMRecipients,
     MemberRecipient,
     WebAppDeliveryMethod,
 )
 from graphon.nodes.human_input.entities import HumanInputNodeData, UserActionConfig
 from graphon.nodes.human_input.enums import HumanInputFormKind, HumanInputFormStatus
 from libs.datetime_utils import naive_utc_now
-from models.human_input import HumanInputFormRecipient, RecipientType
+from models.human_input import HumanInputFormRecipient, IMMemberRecipientPayload, RecipientType
 
 
 @pytest.fixture(autouse=True)
@@ -377,6 +381,70 @@ def test_delivery_method_to_model_email_uses_build_email_recipients(monkeypatch:
     assert called["delivery_id"] == "del-1"
 
 
+def test_delivery_method_to_model_im_uses_build_im_recipients(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
+    monkeypatch.setattr("core.repositories.human_input_repository.uuidv7", lambda: "del-1")
+    called: dict[str, Any] = {}
+
+    def fake_build(*, session: Any, form_id: str, delivery_id: str, recipients_config: Any) -> list[Any]:
+        called.update(
+            {"session": session, "form_id": form_id, "delivery_id": delivery_id, "recipients_config": recipients_config}
+        )
+        return ["im-r"]
+
+    monkeypatch.setattr(repo, "_build_im_recipients", fake_build)
+
+    method = IMDeliveryMethod(
+        config=IMDeliveryConfig(
+            recipients=IMRecipients(
+                include_bound_group=False,
+                items=[MemberRecipient(reference_id="u1")],
+            ),
+        )
+    )
+    result = repo._delivery_method_to_model(session="sess", form_id="form-1", delivery_method=method)
+    assert result.recipients == ["im-r"]
+    assert called["delivery_id"] == "del-1"
+
+
+def test_create_im_recipients_from_resolved_uses_binding_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    created: list[SimpleNamespace] = []
+
+    def fake_new(cls, form_id: str, delivery_id: str, payload: Any):  # type: ignore[no-untyped-def]
+        recipient = SimpleNamespace(
+            id=f"{payload.TYPE}-{len(created)}",
+            form_id=form_id,
+            delivery_id=delivery_id,
+            recipient_type=payload.TYPE,
+            recipient_payload=payload.model_dump_json(),
+            access_token="tok",
+        )
+        created.append(recipient)
+        return recipient
+
+    monkeypatch.setattr("core.repositories.human_input_repository.HumanInputFormRecipient.new", classmethod(fake_new))
+
+    repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
+    recipients = repo._create_im_recipients_from_resolved(  # type: ignore[attr-defined]
+        form_id="f",
+        delivery_id="d",
+        bindings=[
+            AccountIMBindingSnapshot(
+                binding_id="binding-1",
+                tenant_id="tenant",
+                account_id="account-1",
+                provider="feishu",
+                open_id="open-1",
+                user_id="user-1",
+            ),
+        ],
+    )
+
+    assert [r.recipient_type for r in recipients] == [RecipientType.IM_MEMBER]
+    payload = IMMemberRecipientPayload.model_validate_json(recipients[0].recipient_payload)
+    assert payload.binding_id == "binding-1"
+
+
 def test_build_email_recipients_uses_all_members_when_whole_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
     monkeypatch.setattr(
@@ -413,6 +481,72 @@ def test_build_email_recipients_uses_selected_members_when_not_whole_workspace(m
         ),
     )
     assert recipients == ["ok"]
+
+
+def test_build_im_recipients_uses_selected_member_bindings(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
+
+    monkeypatch.setattr(
+        "core.repositories.human_input_repository.list_account_im_bindings_by_account_ids",
+        lambda *, session, tenant_id, account_ids, provider: [
+            AccountIMBindingSnapshot(
+                binding_id="binding-1",
+                tenant_id=tenant_id,
+                account_id=account_ids[0],
+                provider=provider,
+                open_id="open-1",
+                user_id="user-1",
+            )
+        ],
+    )
+    monkeypatch.setattr(repo, "_create_im_recipients_from_resolved", lambda **_: ["im-ok"])
+
+    recipients = repo._build_im_recipients(
+        session=MagicMock(),
+        form_id="f",
+        delivery_id="d",
+        recipients_config=IMRecipients(
+            include_bound_group=False,
+            items=[MemberRecipient(reference_id="u1")],
+        ),
+    )
+    assert recipients == ["im-ok"]
+
+
+def test_build_im_recipients_uses_all_workspace_members_when_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
+
+    monkeypatch.setattr(
+        repo,
+        "_query_all_workspace_members",
+        lambda *, session: [
+            _WorkspaceMemberInfo(user_id="u1", email="a@example.com"),
+            _WorkspaceMemberInfo(user_id="u2", email="b@example.com"),
+        ],
+    )
+    monkeypatch.setattr(
+        "core.repositories.human_input_repository.list_account_im_bindings_by_account_ids",
+        lambda *, session, tenant_id, account_ids, provider: [
+            AccountIMBindingSnapshot(
+                binding_id=f"binding-{account_id}",
+                tenant_id=tenant_id,
+                account_id=account_id,
+                provider=provider,
+                open_id=f"open-{account_id}",
+                user_id=f"user-{account_id}",
+            )
+            for account_id in account_ids
+        ],
+    )
+    monkeypatch.setattr(repo, "_create_im_recipients_from_resolved", lambda **_: ["im-ok"])
+
+    recipients = repo._build_im_recipients(
+        session=MagicMock(),
+        form_id="f",
+        delivery_id="d",
+        recipients_config=IMRecipients(include_bound_group=True, items=[]),
+    )
+    assert recipients == ["im-ok"]
 
 
 def test_get_form_returns_entity_and_none_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:

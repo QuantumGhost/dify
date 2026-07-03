@@ -138,6 +138,7 @@ class ApprovalChannel(StrEnum):
     """Where a paused human input form can be approved, surfaced to API callers."""
 
     EMAIL = "email"
+    IM = "im"
     WEB_APP = "web_app"
     CONSOLE = "console"
 
@@ -146,6 +147,7 @@ class RecipientType(StrEnum):
     # Second value = the approval channel this recipient maps to (surfaced in `approval_channels`).
     EMAIL_MEMBER = "email_member", ApprovalChannel.EMAIL
     EMAIL_EXTERNAL = "email_external", ApprovalChannel.EMAIL
+    IM_MEMBER = "im_member", ApprovalChannel.IM
     # STANDALONE_WEB_APP is used by the standalone web app.
     #
     # It's not used while running workflows / chatflows containing HumanInput
@@ -186,6 +188,13 @@ class EmailExternalRecipientPayload(BaseModel):
 
 
 @final
+class IMMemberRecipientPayload(BaseModel):
+    TYPE: Literal[RecipientType.IM_MEMBER] = RecipientType.IM_MEMBER
+    account_id: str
+    binding_id: str
+
+
+@final
 class StandaloneWebAppRecipientPayload(BaseModel):
     TYPE: Literal[RecipientType.STANDALONE_WEB_APP] = RecipientType.STANDALONE_WEB_APP
 
@@ -211,6 +220,7 @@ class ConsoleDeliveryPayload(BaseModel):
 RecipientPayload = Annotated[
     EmailMemberRecipientPayload
     | EmailExternalRecipientPayload
+    | IMMemberRecipientPayload
     | StandaloneWebAppRecipientPayload
     | ConsoleRecipientPayload
     | BackstageRecipientPayload,

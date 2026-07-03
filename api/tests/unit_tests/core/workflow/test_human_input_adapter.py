@@ -8,6 +8,9 @@ from core.workflow.human_input_adapter import (
     EmailDeliveryConfig,
     EmailDeliveryMethod,
     EmailRecipients,
+    IMDeliveryConfig,
+    IMDeliveryMethod,
+    IMRecipients,
     WebAppDeliveryMethod,
     _WebAppDeliveryConfig,
     adapt_human_input_node_data_for_graph,
@@ -59,6 +62,17 @@ def test_email_delivery_config_helpers_with_recipients_and_without_variable_pool
     )
 
 
+def test_im_delivery_config_with_recipients() -> None:
+    recipients = IMRecipients(include_bound_group=True, items=[])
+    config = IMDeliveryConfig(
+        recipients=IMRecipients(include_bound_group=False, items=[]),
+    )
+
+    updated = config.with_recipients(recipients)
+
+    assert updated.recipients == recipients
+
+
 def test_parse_human_input_delivery_methods_normalizes_legacy_recipient_keys() -> None:
     methods = parse_human_input_delivery_methods(
         {
@@ -89,6 +103,31 @@ def test_parse_human_input_delivery_methods_normalizes_legacy_recipient_keys() -
 
 def test_parse_human_input_delivery_methods_returns_empty_for_non_lists() -> None:
     assert parse_human_input_delivery_methods({"delivery_methods": None}) == []
+
+
+def test_parse_human_input_delivery_methods_normalizes_im_recipient_keys() -> None:
+    methods = parse_human_input_delivery_methods(
+        {
+            "delivery_methods": [
+                {
+                    "type": DeliveryMethodType.IM,
+                    "config": {
+                        "recipients": {
+                            "whole_workspace": True,
+                            "items": [
+                                {"type": "member", "user_id": "user-1"},
+                            ],
+                        },
+                    },
+                }
+            ]
+        }
+    )
+
+    assert len(methods) == 1
+    assert isinstance(methods[0], IMDeliveryMethod)
+    assert methods[0].config.recipients.include_bound_group is True
+    assert methods[0].config.recipients.items[0].reference_id == "user-1"
 
 
 def test_is_human_input_webapp_enabled_checks_enabled_delivery_methods() -> None:

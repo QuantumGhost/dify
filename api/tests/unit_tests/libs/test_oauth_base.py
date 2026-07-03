@@ -29,5 +29,13 @@ def test_oauth_state_round_trips_invite_token_timezone_and_language():
     }
 
 
+def test_oauth_state_round_trips_link_token():
+    state = encode_oauth_state(link_token="link-token-123")
+
+    assert decode_oauth_state(state) == {
+        "link_token": "link-token-123",
+    }
+
+
 def test_oauth_state_returns_empty_payload_for_invalid_state():
     assert decode_oauth_state("invalid-state") == {}

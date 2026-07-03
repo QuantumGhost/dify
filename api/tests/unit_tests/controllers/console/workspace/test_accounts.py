@@ -1,4 +1,5 @@
 import inspect
+from types import SimpleNamespace
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -15,6 +16,10 @@ from controllers.console.workspace.account import (
     AccountAvatarApi,
     AccountDeleteApi,
     AccountDeleteVerifyApi,
+    AccountIMBindingApi,
+    AccountIMBindingFeishuOAuthAuthorizeApi,
+    AccountIMBindingFeishuOAuthLinkApi,
+    AccountIMBindingListApi,
     AccountInitApi,
     AccountIntegrateApi,
     AccountInterfaceLanguageApi,
@@ -35,6 +40,8 @@ from controllers.console.workspace.error import (
 from models import Account
 from models.account import AccountStatus
 from models.enums import CreatorUserRole
+from services.account_im_binding_oauth_service import AccountIMBindingOAuthStateError
+from services.errors.account import AccountIMBindingConflictError
 from services.errors.account import CurrentPasswordIncorrectError as ServicePwdError
 
 
@@ -286,6 +293,153 @@ class TestAccountIntegrateApi:
 
         assert "data" in result
         assert len(result["data"]) == 2
+
+
+class TestAccountIMBindingApi:
+    def test_get_bindings(self, app: Flask):
+        api = AccountIMBindingListApi()
+        method = inspect.unwrap(api.get)
+
+        account = make_account("acc1")
+
+        with (
+            app.test_request_context("/"),
+            patch(
+                "controllers.console.workspace.account.AccountIMBindingService.list_bindings_by_account_ids",
+                return_value=[
+                    SimpleNamespace(
+                        tenant_id="tenant-1",
+                        account_id="acc1",
+                        provider="feishu",
+                        open_id="open-1",
+                        user_id="user-1",
+                    )
+                ],
+            ),
+        ):
+            result = method(api, "tenant-1", account)
+
+        assert result["data"][0]["provider"] == "feishu"
+        assert result["data"][0]["open_id"] == "open-1"
+
+    def test_put_binding(self, app: Flask):
+        api = AccountIMBindingApi()
+        method = inspect.unwrap(api.put)
+
+        account = make_account("acc1")
+        payload = {"open_id": "open-1", "user_id": "user-1"}
+
+        with (
+            app.test_request_context("/", json=payload),
+            patch(
+                "controllers.console.workspace.account.AccountIMBindingService.upsert_binding",
+                return_value=SimpleNamespace(
+                    tenant_id="tenant-1",
+                    account_id="acc1",
+                    provider="feishu",
+                    open_id="open-1",
+                    user_id="user-1",
+                ),
+            ),
+        ):
+            result = method(api, "feishu", "tenant-1", account)
+
+        assert result["provider"] == "feishu"
+        assert result["user_id"] == "user-1"
+
+    def test_put_binding_rejects_unknown_provider(self, app: Flask):
+        api = AccountIMBindingApi()
+        method = inspect.unwrap(api.put)
+        account = make_account("acc1")
+
+        with app.test_request_context("/", json={"open_id": "open-1"}):
+            with pytest.raises(NotFound):
+                method(api, "slack", "tenant-1", account)
+
+    def test_put_binding_returns_conflict(self, app: Flask):
+        api = AccountIMBindingApi()
+        method = inspect.unwrap(api.put)
+        account = make_account("acc1")
+
+        with (
+            app.test_request_context("/", json={"open_id": "open-1"}),
+            patch(
+                "controllers.console.workspace.account.AccountIMBindingService.upsert_binding",
+                side_effect=AccountIMBindingConflictError("IM identity is already bound to another account."),
+            ),
+        ):
+            result, status = method(api, "feishu", "tenant-1", account)
+
+        assert status == 409
+        assert result["code"] == "im_binding_conflict"
+
+    def test_get_feishu_oauth_link_redirects_to_provider(self, app: Flask):
+        api = AccountIMBindingFeishuOAuthLinkApi()
+        method = inspect.unwrap(api.get)
+        account = make_account("acc1")
+
+        with (
+            app.test_request_context("/"),
+            patch(
+                "controllers.console.workspace.account.AccountIMBindingOAuthService.get_feishu_authorization_url",
+                return_value="https://accounts.feishu.cn/open-apis/authen/v1/authorize?client_id=demo",
+            ),
+        ):
+            response = method(api, "tenant-1", account)
+
+        assert response.status_code == 302
+        assert response.location == "https://accounts.feishu.cn/open-apis/authen/v1/authorize?client_id=demo"
+
+    def test_get_feishu_oauth_link_redirects_to_callback_error_when_start_fails(self, app: Flask):
+        api = AccountIMBindingFeishuOAuthLinkApi()
+        method = inspect.unwrap(api.get)
+        account = make_account("acc1")
+
+        with (
+            app.test_request_context("/"),
+            patch("controllers.console.workspace.account.dify_config.CONSOLE_WEB_URL", "https://console.example.com"),
+            patch(
+                "controllers.console.workspace.account.AccountIMBindingOAuthService.get_feishu_authorization_url",
+                side_effect=AccountIMBindingOAuthStateError("bad request"),
+            ),
+        ):
+            response = method(api, "tenant-1", account)
+
+        assert response.status_code == 302
+        assert response.location == "https://console.example.com/oauth-callback?error=im_binding_oauth_failed&error_description=bad+request"
+
+    def test_get_feishu_oauth_authorize_redirects_to_callback_on_success(self, app: Flask):
+        api = AccountIMBindingFeishuOAuthAuthorizeApi()
+        method = inspect.unwrap(api.get)
+
+        with (
+            app.test_request_context("/?code=oauth-code&state=state-token"),
+            patch("controllers.console.workspace.account.dify_config.CONSOLE_WEB_URL", "https://console.example.com"),
+            patch(
+                "controllers.console.workspace.account.AccountIMBindingOAuthService.complete_feishu_oauth_binding",
+                return_value=None,
+            ),
+        ):
+            response = method(api)
+
+        assert response.status_code == 302
+        assert response.location == "https://console.example.com/oauth-callback"
+
+    def test_get_feishu_oauth_authorize_redirects_to_callback_error_when_code_missing(self, app: Flask):
+        api = AccountIMBindingFeishuOAuthAuthorizeApi()
+        method = inspect.unwrap(api.get)
+
+        with (
+            app.test_request_context("/"),
+            patch("controllers.console.workspace.account.dify_config.CONSOLE_WEB_URL", "https://console.example.com"),
+        ):
+            response = method(api)
+
+        assert response.status_code == 302
+        assert response.location == (
+            "https://console.example.com/oauth-callback"
+            "?error=im_binding_oauth_failed&error_description=Authorization+code+is+required"
+        )
 
 
 class TestAccountDeleteApi:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import urllib.parse
 from datetime import datetime
 from typing import Any, Literal
 
 import pytz
-from flask import request
+from flask import redirect, request
 from flask_restx import Resource
 from pydantic import BaseModel, Field, RootModel, field_validator, model_validator
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from configs import dify_config
 from constants.languages import supported_language
 from controllers.common.fields import (
     AvatarUrlResponse,
+    RedirectResponse,
     SimpleResultDataResponse,
     SimpleResultResponse,
     VerificationTokenResponse,
@@ -56,6 +58,8 @@ from models import Account, AccountIntegrate, InvitationCode
 from models.account import AccountStatus, InvitationCodeStatus
 from models.enums import CreatorUserRole
 from models.model import UploadFile
+from services.account_im_binding_oauth_service import AccountIMBindingOAuthService
+from services.account_im_binding_service import AccountIMBindingService
 from services.account_service import AccountService
 from services.billing_service import BillingService
 from services.entities.auth_entities import (
@@ -63,6 +67,11 @@ from services.entities.auth_entities import (
     ChangeEmailNewEmailVerifiedToken,
     ChangeEmailOldEmailToken,
     ChangeEmailOldEmailVerifiedToken,
+)
+from services.errors.account import (
+    AccountIMBindingConflictError,
+    AccountIMBindingOAuthConfigurationError,
+    AccountIMBindingOAuthStateError,
 )
 from services.errors.account import CurrentPasswordIncorrectError as ServiceCurrentPasswordIncorrectError
 
@@ -173,6 +182,24 @@ class CheckEmailUniquePayload(BaseModel):
     email: EmailStr
 
 
+class AccountIMBindingPayload(BaseModel):
+    open_id: str | None = None
+    user_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> AccountIMBindingPayload:
+        if not self.open_id and not self.user_id:
+            raise ValueError("open_id or user_id is required")
+        return self
+
+
+class AccountIMBindingOAuthCallbackQuery(BaseModel):
+    code: str | None = Field(default=None, description="Authorization code from Feishu")
+    state: str | None = Field(default=None, description="Opaque OAuth state carrying the link token")
+    error: str | None = Field(default=None, description="Provider callback error code")
+    error_description: str | None = Field(default=None, description="Provider callback error description")
+
+
 register_schema_models(
     console_ns,
     AccountInitPayload,
@@ -191,6 +218,8 @@ register_schema_models(
     ChangeEmailValidityPayload,
     ChangeEmailResetPayload,
     CheckEmailUniquePayload,
+    AccountIMBindingPayload,
+    AccountIMBindingOAuthCallbackQuery,
 )
 
 
@@ -212,6 +241,16 @@ class AccountIntegrateResponse(ResponseModel):
 
 class AccountIntegrateListResponse(ResponseModel):
     data: list[AccountIntegrateResponse]
+
+
+class AccountIMBindingResponse(ResponseModel):
+    provider: str
+    open_id: str | None = None
+    user_id: str | None = None
+
+
+class AccountIMBindingListResponse(ResponseModel):
+    data: list[AccountIMBindingResponse]
 
 
 class EducationVerifyResponse(ResponseModel):
@@ -244,6 +283,8 @@ register_schema_models(
     console_ns,
     AccountIntegrateResponse,
     AccountIntegrateListResponse,
+    AccountIMBindingResponse,
+    AccountIMBindingListResponse,
     EducationVerifyResponse,
     EducationStatusResponse,
     EducationAutocompleteResponse,
@@ -256,7 +297,25 @@ register_response_schema_models(
     SimpleResultDataResponse,
     SimpleResultResponse,
     VerificationTokenResponse,
+    RedirectResponse,
 )
+
+
+def _build_im_binding_oauth_callback_redirect(*, error: str | None = None, error_description: str | None = None):
+    callback_url = f"{dify_config.CONSOLE_WEB_URL.rstrip('/')}/oauth-callback"
+    params = urllib.parse.urlencode(
+        {
+            key: value
+            for key, value in {
+                "error": error,
+                "error_description": error_description,
+            }.items()
+            if value
+        }
+    )
+    if params:
+        callback_url = f"{callback_url}?{params}"
+    return redirect(callback_url)
 
 
 @console_ns.route("/account/init")
@@ -498,6 +557,132 @@ class AccountIntegrateApi(Resource):
         return AccountIntegrateListResponse(
             data=[AccountIntegrateResponse.model_validate(item) for item in integrate_data]
         ).model_dump(mode="json")
+
+
+@console_ns.route("/account/im-bindings")
+class AccountIMBindingListApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @console_ns.response(200, "Success", console_ns.models[AccountIMBindingListResponse.__name__])
+    @with_current_user
+    @with_current_tenant_id
+    def get(self, current_tenant_id: str, account: Account):
+        bindings = AccountIMBindingService.list_bindings_by_account_ids(
+            session=db.session,
+            tenant_id=current_tenant_id,
+            account_ids=[account.id],
+            provider="feishu",
+        )
+        return AccountIMBindingListResponse(
+            data=[
+                AccountIMBindingResponse(
+                    provider=binding.provider,
+                    open_id=binding.open_id,
+                    user_id=binding.user_id,
+                )
+                for binding in bindings
+            ]
+        ).model_dump(mode="json")
+
+
+@console_ns.route("/account/im-bindings/<string:provider>")
+class AccountIMBindingApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @console_ns.expect(console_ns.models[AccountIMBindingPayload.__name__])
+    @console_ns.response(200, "Success", console_ns.models[AccountIMBindingResponse.__name__])
+    @with_current_user
+    @with_current_tenant_id
+    def put(self, provider: str, current_tenant_id: str, account: Account):
+        if provider != "feishu":
+            raise NotFound()
+        payload = console_ns.payload or {}
+        args = AccountIMBindingPayload.model_validate(payload)
+        try:
+            binding = AccountIMBindingService.upsert_binding(
+                session=db.session,
+                tenant_id=current_tenant_id,
+                account_id=account.id,
+                provider=provider,
+                open_id=args.open_id,
+                user_id=args.user_id,
+            )
+        except AccountIMBindingConflictError as exc:
+            return {"code": "im_binding_conflict", "message": str(exc)}, 409
+        return AccountIMBindingResponse(
+            provider=binding.provider,
+            open_id=binding.open_id,
+            user_id=binding.user_id,
+        ).model_dump(mode="json")
+
+
+@console_ns.route("/account/im-bindings/feishu/oauth-link")
+class AccountIMBindingFeishuOAuthLinkApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @console_ns.response(
+        302,
+        "Redirect to Feishu OAuth authorization URL",
+        console_ns.models[RedirectResponse.__name__],
+    )
+    @with_current_user
+    @with_current_tenant_id
+    def get(self, current_tenant_id: str, account: Account):
+        try:
+            authorization_url = AccountIMBindingOAuthService.get_feishu_authorization_url(
+                account=account,
+                tenant_id=current_tenant_id,
+            )
+        except (AccountIMBindingOAuthConfigurationError, AccountIMBindingOAuthStateError) as exc:
+            return _build_im_binding_oauth_callback_redirect(
+                error="im_binding_oauth_failed",
+                error_description=str(exc),
+            )
+        return redirect(authorization_url)
+
+
+@console_ns.route("/account/im-bindings/feishu/oauth-authorize")
+class AccountIMBindingFeishuOAuthAuthorizeApi(Resource):
+    @setup_required
+    @console_ns.doc(params=query_params_from_model(AccountIMBindingOAuthCallbackQuery))
+    @console_ns.response(302, "Redirect to OAuth callback bridge", console_ns.models[RedirectResponse.__name__])
+    def get(self):
+        provider_error = request.args.get("error")
+        provider_error_description = request.args.get("error_description")
+        if provider_error:
+            return _build_im_binding_oauth_callback_redirect(
+                error="im_binding_oauth_failed",
+                error_description=provider_error_description or provider_error,
+            )
+
+        code = request.args.get("code")
+        state = request.args.get("state")
+        if not code:
+            return _build_im_binding_oauth_callback_redirect(
+                error="im_binding_oauth_failed",
+                error_description="Authorization code is required",
+            )
+
+        try:
+            AccountIMBindingOAuthService.complete_feishu_oauth_binding(
+                session=db.session,
+                code=code,
+                state=state,
+            )
+        except (
+            AccountIMBindingConflictError,
+            AccountIMBindingOAuthConfigurationError,
+            AccountIMBindingOAuthStateError,
+        ) as exc:
+            return _build_im_binding_oauth_callback_redirect(
+                error="im_binding_oauth_failed",
+                error_description=str(exc),
+            )
+
+        return _build_im_binding_oauth_callback_redirect()
 
 
 @console_ns.route("/account/delete/verify")

@@ -29,6 +29,18 @@ class LinkAccountIntegrateError(BaseServiceError):
     pass
 
 
+class AccountIMBindingConflictError(BaseServiceError):
+    pass
+
+
+class AccountIMBindingOAuthConfigurationError(BaseServiceError):
+    pass
+
+
+class AccountIMBindingOAuthStateError(BaseServiceError):
+    pass
+
+
 class TenantNotFoundError(BaseServiceError):
     pass
 

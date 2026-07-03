@@ -1,6 +1,7 @@
 from .account import (
     Account,
     AccountIntegrate,
+    AccountIMBinding,
     AccountStatus,
     InvitationCode,
     Tenant,
@@ -153,6 +154,7 @@ __all__ = [
     "APIBasedExtensionPoint",
     "Account",
     "AccountIntegrate",
+    "AccountIMBinding",
     "AccountStatus",
     "AccountTrialAppRecord",
     "Agent",

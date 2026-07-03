@@ -26,6 +26,7 @@ from graphon.variables.consts import SELECTORS_LENGTH
 class DeliveryMethodType(enum.StrEnum):
     WEBAPP = enum.auto()
     EMAIL = enum.auto()
+    IM = enum.auto()
 
 
 class EmailRecipientType(enum.StrEnum):
@@ -64,6 +65,16 @@ class EmailRecipients(BaseModel):
         validation_alias=AliasChoices("include_bound_group", "whole_workspace"),
     )
     items: list[EmailRecipient] = Field(default_factory=list)
+
+
+class IMRecipients(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include_bound_group: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("include_bound_group", "whole_workspace"),
+    )
+    items: list[BoundRecipient] = Field(default_factory=list)
 
 
 class EmailDeliveryConfig(BaseModel):
@@ -141,6 +152,15 @@ class EmailDeliveryConfig(BaseModel):
         return " ".join(sanitized.split())
 
 
+class IMDeliveryConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipients: IMRecipients
+
+    def with_recipients(self, recipients: IMRecipients) -> IMDeliveryConfig:
+        return self.model_copy(update={"recipients": recipients})
+
+
 class _DeliveryMethodBase(BaseModel):
     enabled: bool = True
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
@@ -170,10 +190,18 @@ class EmailDeliveryMethod(_DeliveryMethodBase):
         return selectors
 
 
+class IMDeliveryMethod(_DeliveryMethodBase):
+    type: Literal[DeliveryMethodType.IM] = DeliveryMethodType.IM
+    config: IMDeliveryConfig
+
+
 WebAppDeliveryMethod = InteractiveSurfaceDeliveryMethod
 _WebAppDeliveryConfig = _InteractiveSurfaceDeliveryConfig
 
-DeliveryChannelConfig = Annotated[InteractiveSurfaceDeliveryMethod | EmailDeliveryMethod, Field(discriminator="type")]
+DeliveryChannelConfig = Annotated[
+    InteractiveSurfaceDeliveryMethod | EmailDeliveryMethod | IMDeliveryMethod,
+    Field(discriminator="type"),
+]
 
 _DELIVERY_METHODS_ADAPTER = TypeAdapter(list[DeliveryChannelConfig])
 
@@ -206,7 +234,10 @@ def adapt_human_input_node_data_for_graph(node_data: Mapping[str, Any] | BaseMod
         if config_mapping is not None:
             recipients_mapping = _copy_mapping(config_mapping.get("recipients"))
             if recipients_mapping is not None:
-                config_mapping["recipients"] = _normalize_email_recipients(recipients_mapping)
+                if method_mapping.get("type") == DeliveryMethodType.EMAIL:
+                    config_mapping["recipients"] = _normalize_email_recipients(recipients_mapping)
+                elif method_mapping.get("type") == DeliveryMethodType.IM:
+                    config_mapping["recipients"] = _normalize_bound_recipients(recipients_mapping)
             method_mapping["config"] = config_mapping
 
         normalized_methods.append(method_mapping)
@@ -368,6 +399,33 @@ def _normalize_email_recipients(recipients: Mapping[str, Any]) -> dict[str, Any]
     return normalized
 
 
+def _normalize_bound_recipients(recipients: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = dict(recipients)
+
+    legacy_include_bound_group = normalized.pop("whole_workspace", None)
+    if "include_bound_group" not in normalized and legacy_include_bound_group is not None:
+        normalized["include_bound_group"] = legacy_include_bound_group
+
+    items = normalized.get("items")
+    if not isinstance(items, list):
+        return normalized
+
+    normalized_items: list[Any] = []
+    for item in items:
+        item_mapping = _copy_mapping(item)
+        if item_mapping is None:
+            normalized_items.append(item)
+            continue
+
+        legacy_reference_id = item_mapping.pop("user_id", None)
+        if "reference_id" not in item_mapping and legacy_reference_id is not None:
+            item_mapping["reference_id"] = legacy_reference_id
+        normalized_items.append(item_mapping)
+
+    normalized["items"] = normalized_items
+    return normalized
+
+
 __all__ = [
     "BoundRecipient",
     "DeliveryChannelConfig",
@@ -377,6 +435,9 @@ __all__ = [
     "EmailRecipientType",
     "EmailRecipients",
     "ExternalRecipient",
+    "IMDeliveryConfig",
+    "IMDeliveryMethod",
+    "IMRecipients",
     "MemberRecipient",
     "WebAppDeliveryMethod",
     "_WebAppDeliveryConfig",

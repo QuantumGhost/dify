@@ -34,6 +34,7 @@ class OAuthState(TypedDict, total=False):
     invite_token: str
     timezone: str
     language: str
+    link_token: str
 
 
 class GitHubEmailRecord(TypedDict, total=False):
@@ -54,11 +55,19 @@ class GoogleRawUserInfo(TypedDict):
     email: str
 
 
+class FeishuRawUserInfo(TypedDict, total=False):
+    name: str
+    email: str
+    open_id: str
+    user_id: str
+
+
 ACCESS_TOKEN_RESPONSE_ADAPTER = TypeAdapter(AccessTokenResponse)
 OAUTH_STATE_ADAPTER = TypeAdapter(OAuthState)
 GITHUB_RAW_USER_INFO_ADAPTER = TypeAdapter(GitHubRawUserInfo)
 GITHUB_EMAIL_RECORDS_ADAPTER = TypeAdapter(list[GitHubEmailRecord])
 GOOGLE_RAW_USER_INFO_ADAPTER = TypeAdapter(GoogleRawUserInfo)
+FEISHU_RAW_USER_INFO_ADAPTER = TypeAdapter(FeishuRawUserInfo)
 
 
 @dataclass
@@ -72,6 +81,7 @@ def encode_oauth_state(
     invite_token: str | None = None,
     timezone: str | None = None,
     language: str | None = None,
+    link_token: str | None = None,
 ) -> str | None:
     state: OAuthState = {}
     if invite_token:
@@ -80,6 +90,8 @@ def encode_oauth_state(
         state["timezone"] = timezone
     if language:
         state["language"] = language
+    if link_token:
+        state["link_token"] = link_token
     if not state:
         return None
 
@@ -291,3 +303,75 @@ class GoogleOAuth(OAuth):
     def _transform_user_info(self, raw_info: JsonObject) -> OAuthUserInfo:
         payload = GOOGLE_RAW_USER_INFO_ADAPTER.validate_python(raw_info)
         return OAuthUserInfo(id=str(payload["sub"]), name="", email=payload["email"])
+
+
+class FeishuOAuth(OAuth):
+    _AUTH_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
+    _TOKEN_URL = "https://accounts.feishu.cn/oauth/v3/token"
+    _USER_INFO_URL = "https://open.feishu.cn/open-apis/authen/v1/user_info"
+
+    @override
+    def get_authorization_url(
+        self,
+        invite_token: str | None = None,
+        timezone: str | None = None,
+        language: str | None = None,
+        link_token: str | None = None,
+    ) -> str:
+        params = {
+            "client_id": self.client_id,
+            "response_type": "code",
+            "redirect_uri": self.redirect_uri,
+            "prompt": "consent",
+        }
+        state = encode_oauth_state(
+            invite_token=invite_token,
+            timezone=timezone,
+            language=language,
+            link_token=link_token,
+        )
+        if state:
+            params["state"] = state
+        return f"{self._AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+    @override
+    def get_access_token(self, code: str) -> str:
+        data = {
+            "grant_type": "authorization_code",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "redirect_uri": self.redirect_uri,
+        }
+        headers = {"Accept": "application/json", "Content-Type": "application/json; charset=utf-8"}
+        response = _http_client.post(self._TOKEN_URL, json=data, headers=headers)
+
+        response_json = ACCESS_TOKEN_RESPONSE_ADAPTER.validate_python(_json_object(response))
+        access_token = response_json.get("access_token")
+        if not access_token:
+            raise ValueError(f"Error in Feishu OAuth: {response_json}")
+        return access_token
+
+    @override
+    def get_raw_user_info(self, token: str) -> JsonObject:
+        response = _http_client.get(
+            self._USER_INFO_URL,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = _json_object(response)
+        if payload.get("code") not in (0, None):
+            raise ValueError(f"Error in Feishu user info: {payload}")
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise ValueError(f"Error in Feishu user info: {payload}")
+        return data
+
+    @override
+    def _transform_user_info(self, raw_info: JsonObject) -> OAuthUserInfo:
+        payload = FEISHU_RAW_USER_INFO_ADAPTER.validate_python(raw_info)
+        open_id = str(payload.get("open_id") or "")
+        return OAuthUserInfo(
+            id=open_id,
+            name=str(payload.get("name") or ""),
+            email=str(payload.get("email") or f"{open_id}@users.noreply.feishu.cn"),
+        )

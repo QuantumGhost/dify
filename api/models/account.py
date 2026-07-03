@@ -339,6 +339,32 @@ class AccountIntegrate(TypeBase):
     )
 
 
+class AccountIMBinding(TypeBase):
+    __tablename__ = "account_im_bindings"
+    __table_args__ = (
+        sa.PrimaryKeyConstraint("id", name="account_im_binding_pkey"),
+        sa.UniqueConstraint("tenant_id", "account_id", "provider", name="unique_account_im_binding"),
+        sa.UniqueConstraint("tenant_id", "provider", "open_id", name="unique_account_im_binding_open_id"),
+        sa.UniqueConstraint("tenant_id", "provider", "user_id", name="unique_account_im_binding_user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        StringUUID, insert_default=lambda: str(uuid4()), default_factory=lambda: str(uuid4()), init=False
+    )
+    tenant_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
+    account_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    open_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.current_timestamp(), nullable=False, init=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.current_timestamp(), nullable=False, init=False, onupdate=func.current_timestamp()
+    )
+
+
 class InvitationCodeStatus(enum.StrEnum):
     UNUSED = "unused"
     USED = "used"

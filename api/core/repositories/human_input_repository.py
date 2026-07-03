@@ -8,12 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from core.db.session_factory import session_factory
+from core.repositories.account_im_binding_repository import (
+    AccountIMBindingSnapshot,
+    list_account_im_bindings_by_account_ids,
+)
 from core.workflow.human_input_adapter import (
     BoundRecipient,
     DeliveryChannelConfig,
     EmailDeliveryMethod,
     EmailRecipients,
     ExternalRecipient,
+    IMDeliveryMethod,
+    IMRecipients,
     InteractiveSurfaceDeliveryMethod,
     is_human_input_webapp_enabled,
 )
@@ -32,6 +38,7 @@ from models.human_input import (
     HumanInputDelivery,
     HumanInputForm,
     HumanInputFormRecipient,
+    IMMemberRecipientPayload,
     RecipientType,
     StandaloneWebAppRecipientPayload,
 )
@@ -315,6 +322,16 @@ class HumanInputFormRepositoryImpl:
                         recipients_config=email_recipients_config,
                     )
                 )
+            case IMDeliveryMethod():
+                im_recipients_config = delivery_method.config.recipients
+                recipients.extend(
+                    self._build_im_recipients(
+                        session=session,
+                        form_id=form_id,
+                        delivery_id=delivery_id,
+                        recipients_config=im_recipients_config,
+                    )
+                )
 
         return _DeliveryAndRecipients(delivery=delivery_model, recipients=recipients)
 
@@ -341,6 +358,39 @@ class HumanInputFormRepositoryImpl:
             delivery_id=delivery_id,
             members=members,
             external_emails=external_emails,
+        )
+
+    def _build_im_recipients(
+        self,
+        session: Session,
+        form_id: str,
+        delivery_id: str,
+        recipients_config: IMRecipients,
+    ) -> list[HumanInputFormRecipient]:
+        if recipients_config.include_bound_group:
+            members = self._query_all_workspace_members(session=session)
+            account_ids = [member.user_id for member in members]
+        else:
+            account_ids = [recipient.reference_id for recipient in recipients_config.items]
+
+        binding_snapshots = list_account_im_bindings_by_account_ids(
+            session=session,
+            tenant_id=self._tenant_id,
+            account_ids=account_ids,
+            provider="feishu",
+        )
+        bindings = [
+            IMMemberRecipientPayload(
+                binding_id=binding.binding_id,
+                account_id=binding.account_id,
+            )
+            for binding in binding_snapshots
+            if binding.open_id or binding.user_id
+        ]
+        return self._create_im_recipients_from_resolved(
+            form_id=form_id,
+            delivery_id=delivery_id,
+            bindings=bindings,
         )
 
     @staticmethod
@@ -380,6 +430,33 @@ class HumanInputFormRepositoryImpl:
                     form_id=form_id,
                     delivery_id=delivery_id,
                     payload=EmailExternalRecipientPayload(email=email),
+                )
+            )
+
+        return recipient_models
+
+    @staticmethod
+    def _create_im_recipients_from_resolved(
+        *,
+        form_id: str,
+        delivery_id: str,
+        bindings: Sequence[AccountIMBindingSnapshot],
+    ) -> list[HumanInputFormRecipient]:
+        recipient_models: list[HumanInputFormRecipient] = []
+        seen_accounts: set[str] = set()
+
+        for binding in bindings:
+            if binding.account_id in seen_accounts:
+                continue
+            seen_accounts.add(binding.account_id)
+            recipient_models.append(
+                HumanInputFormRecipient.new(
+                    form_id=form_id,
+                    delivery_id=delivery_id,
+                    payload=IMMemberRecipientPayload(
+                        account_id=binding.account_id,
+                        binding_id=binding.binding_id,
+                    ),
                 )
             )
 

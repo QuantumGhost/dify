@@ -903,6 +903,31 @@ class AuthConfig(BaseSettings):
         default=None,
     )
 
+    LARK_APP_ID: str | None = Field(
+        description="Feishu app ID used by IM delivery and as the OAuth fallback credential",
+        default=None,
+    )
+
+    LARK_APP_SECRET: str | None = Field(
+        description="Feishu app secret used by IM delivery and as the OAuth fallback credential",
+        default=None,
+    )
+
+    FEISHU_CLIENT_ID: str | None = Field(
+        description="Feishu OAuth client ID; falls back to LARK_APP_ID when unset",
+        default=None,
+    )
+
+    FEISHU_CLIENT_SECRET: str | None = Field(
+        description="Feishu OAuth client secret; falls back to LARK_APP_SECRET when unset",
+        default=None,
+    )
+
+    FEISHU_OAUTH_LINK_TOKEN_EXPIRY_MINUTES: PositiveInt = Field(
+        description="Expiration time for Feishu OAuth account link tokens in minutes",
+        default=10,
+    )
+
     ACCESS_TOKEN_EXPIRE_MINUTES: PositiveInt = Field(
         description="Expiration time for access tokens in minutes",
         default=60,
