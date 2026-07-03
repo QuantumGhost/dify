@@ -72,7 +72,10 @@ def test_handle_pause_event_enqueues_im_task(monkeypatch: pytest.MonkeyPatch):
     runner = WorkflowBasedAppRunner(queue_manager=queue_manager, app_id="app-id")
     workflow_entry = _DummyWorkflowEntry()
 
-    reason = HumanInputRequired(
+    graph_reason = HitlRequired(session_id="form-123", node_id="node-1", node_title="Review")
+    event = GraphRunPausedEvent(reasons=[graph_reason], outputs={})
+
+    enriched_reason = HumanInputRequired(
         form_id="form-123",
         form_content="content",
         inputs=[],
@@ -80,10 +83,13 @@ def test_handle_pause_event_enqueues_im_task(monkeypatch: pytest.MonkeyPatch):
         node_id="node-1",
         node_title="Review",
     )
-    event = GraphRunPausedEvent(reasons=[reason], outputs={})
 
     email_task = MagicMock()
     im_task = MagicMock()
+    monkeypatch.setattr(
+        "core.app.apps.workflow_app_runner.enrich_graph_pause_reasons",
+        lambda **_: [enriched_reason],
+    )
     monkeypatch.setattr("core.app.apps.workflow_app_runner.dispatch_human_input_email_task", email_task)
     monkeypatch.setattr("core.app.apps.workflow_app_runner.dispatch_human_input_im_task", im_task)
 

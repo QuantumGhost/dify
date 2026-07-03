@@ -117,3 +117,63 @@ def test_dispatcher_falls_back_to_user_id_when_open_id_missing(monkeypatch):
             {"receive_id_type": "user_id"},
         )
     ]
+
+
+def test_dispatcher_rebuilds_channel_when_secret_changes(monkeypatch):
+    built_channels = []
+
+    class _FakeChannel:
+        async def send(self, to, message, opts=None):
+            return SimpleNamespace(success=True, message_id=f"om_{to}", error=None)
+
+    monkeypatch.setattr(
+        "services.human_input_im.dispatcher.build_feishu_card_payload",
+        lambda job: FeishuCardBuildResult(mode="inline_card", payload={"schema": "2.0", "body": {"elements": []}}),
+    )
+
+    def _build_channel(config):
+        built_channels.append((config.app_id, config.app_secret, config.ingress_mode))
+        return _FakeChannel()
+
+    monkeypatch.setattr("services.human_input_im.dispatcher._build_feishu_channel", _build_channel)
+
+    dispatcher = HumanInputIMDispatcher()
+    job = HumanInputIMNotificationJob(
+        form_id="form-1",
+        node_id="node-1",
+        node_title="Approval",
+        rendered_content="Please review",
+        fields=(HumanInputIMField(name="comment", label="Comment", field_type="paragraph", required=False),),
+        actions=(HumanInputIMAction(id="approve", title="Approve"),),
+        recipient=HumanInputIMRecipient(
+            account_id="account-1",
+            provider="feishu",
+            open_id="open-1",
+            user_id="user-1",
+            form_token="token-1",
+        ),
+    )
+
+    dispatcher.send_form_notification(
+        config=HumanInputIMProviderConfig(
+            provider=HumanInputIMProvider.FEISHU,
+            ingress_mode=HumanInputIMIngressMode.WEBHOOK,
+            app_id="app-id",
+            app_secret="secret-v1",
+        ),
+        job=job,
+    )
+    dispatcher.send_form_notification(
+        config=HumanInputIMProviderConfig(
+            provider=HumanInputIMProvider.FEISHU,
+            ingress_mode=HumanInputIMIngressMode.WEBHOOK,
+            app_id="app-id",
+            app_secret="secret-v2",
+        ),
+        job=job,
+    )
+
+    assert built_channels == [
+        ("app-id", "secret-v1", HumanInputIMIngressMode.WEBHOOK),
+        ("app-id", "secret-v2", HumanInputIMIngressMode.WEBHOOK),
+    ]

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Hashable
 from typing import Any
 
 from services.human_input_im.config_store import (
@@ -15,7 +14,7 @@ from services.human_input_im.providers.feishu_card_builder import build_feishu_c
 
 class HumanInputIMDispatcher:
     def __init__(self) -> None:
-        self._channels: dict[tuple[Hashable, ...], Any] = {}
+        self._channels: dict[HumanInputIMProviderConfig, Any] = {}
 
     def send_form_notification(
         self,
@@ -40,17 +39,12 @@ class HumanInputIMDispatcher:
             raise RuntimeError(f"Failed to send IM card notification for form {job.form_id}")
 
     def _get_channel(self, config: HumanInputIMProviderConfig):
-        cache_key = (
-            config.provider,
-            config.ingress_mode,
-            config.app_id,
-        )
-        channel = self._channels.get(cache_key)
+        channel = self._channels.get(config)
         if channel is not None:
             return channel
 
         channel = _build_feishu_channel(config)
-        self._channels[cache_key] = channel
+        self._channels[config] = channel
         return channel
 
 

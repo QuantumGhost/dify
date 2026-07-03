@@ -188,6 +188,8 @@ class AccountIMBindingPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_identity(self) -> AccountIMBindingPayload:
+        self.open_id = self.open_id.strip() or None if self.open_id is not None else None
+        self.user_id = self.user_id.strip() or None if self.user_id is not None else None
         if not self.open_id and not self.user_id:
             raise ValueError("open_id or user_id is required")
         return self

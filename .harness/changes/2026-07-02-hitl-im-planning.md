@@ -81,3 +81,23 @@
 - True polling-mode support for card interaction return paths still needs implementation-stage validation if it is added later.
 - The current demo config still resolves to `webhook`, so long-connection mode is implemented but not yet the active deployed path.
 - Feishu provider installation/config ownership is still env-backed; tenant-scoped persisted provider config remains the main production follow-up.
+
+## Mergeability follow-up
+
+- After refreshing `upstream/main`, a non-destructive merge rehearsal confirmed that `feat/hitl-im` still merges cleanly into the latest `upstream/main` (`c080e2c3b8`) even though the branch is now behind by 35 commits.
+- A real merge from `upstream/main` was then completed on `feat/hitl-im` after backing up the conflicting local untracked files under `/tmp/dify-human-input-backup-20260703-132019`.
+- The resulting merge commit is `d402febffb`.
+- Two merge-after-fixups were required:
+  - switch `api/tasks/human_input_im_delivery_task.py` to Dify-owned HITL entities after graphon `0.6.0`
+  - align the workflow app runner notification test with the new pause reason enrichment flow
+- A non-destructive merge rehearsal also confirmed that `feat/hitl-im` merges cleanly into `upstream/feat/hitl-file-in-body`.
+- A rehearsal against `upstream/feat/agent-hitl-ask-human` produced conflicts in shared HITL persistence/runtime files, especially:
+  - `api/core/repositories/human_input_repository.py`
+  - `api/models/human_input.py`
+  - several Agent v2 ask-human runtime files
+- The conflict-heavy branch is built on an older base and changes Agent v2 ask-human pause/resume semantics, so the current IM slice is still mergeable there, but not cheaply.
+- A local untracked HITL node refactor still reuses `core.workflow.human_input_adapter.DeliveryChannelConfig`, which is a positive sign that the IM delivery channel extension can survive the newer node structure with moderate follow-up work rather than a rewrite.
+- Post-review hardening also fixed:
+  - OAuth link token revocation timing
+  - dispatcher cache invalidation on provider credential rotation
+  - manual binding whitespace normalization

@@ -131,3 +131,30 @@ def test_complete_feishu_oauth_binding_requires_open_id():
                 code="oauth-code",
                 state="eyJsaW5rX3Rva2VuIjoibGluay10b2tlbiJ9",
             )
+
+
+def test_complete_feishu_oauth_binding_keeps_link_token_when_exchange_fails():
+    session = MagicMock()
+    session.scalar.return_value = "account-1"
+    oauth_client = MagicMock()
+    oauth_client.get_access_token.side_effect = ValueError("boom")
+
+    with (
+        patch(
+            "services.account_im_binding_oauth_service.TokenManager.get_token_data",
+            return_value={"account_id": "account-1", "tenant_id": "tenant-1", "provider": "feishu"},
+        ),
+        patch("services.account_im_binding_oauth_service.TokenManager.revoke_token") as revoke_token,
+        patch(
+            "services.account_im_binding_oauth_service.AccountIMBindingOAuthService._build_feishu_oauth_client",
+            return_value=oauth_client,
+        ),
+    ):
+        with pytest.raises(AccountIMBindingOAuthStateError, match="exchange failed"):
+            AccountIMBindingOAuthService.complete_feishu_oauth_binding(
+                session=session,
+                code="oauth-code",
+                state="eyJsaW5rX3Rva2VuIjoibGluay10b2tlbiJ9",
+            )
+
+    revoke_token.assert_not_called()

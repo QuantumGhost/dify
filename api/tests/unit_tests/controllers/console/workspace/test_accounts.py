@@ -373,6 +373,15 @@ class TestAccountIMBindingApi:
         assert status == 409
         assert result["code"] == "im_binding_conflict"
 
+    def test_put_binding_rejects_whitespace_only_identity(self, app: Flask):
+        api = AccountIMBindingApi()
+        method = inspect.unwrap(api.put)
+        account = make_account("acc1")
+
+        with app.test_request_context("/", json={"open_id": "   ", "user_id": "   "}):
+            with pytest.raises(ValueError, match="open_id or user_id is required"):
+                method(api, "feishu", "tenant-1", account)
+
     def test_get_feishu_oauth_link_redirects_to_provider(self, app: Flask):
         api = AccountIMBindingFeishuOAuthLinkApi()
         method = inspect.unwrap(api.get)

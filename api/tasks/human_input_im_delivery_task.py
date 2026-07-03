@@ -8,14 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.repositories.account_im_binding_repository import get_account_im_binding_by_id
-from extensions.ext_database import db
-from graphon.nodes.human_input.entities import (
+from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
     FileListInputConfig,
     FormDefinition,
     ParagraphInputConfig,
     SelectInputConfig,
 )
+from extensions.ext_database import db
 from models.human_input import HumanInputDelivery, HumanInputForm, HumanInputFormRecipient, IMMemberRecipientPayload
 from services.human_input_im.config_store import EnvBackedProviderConfigStore, ProviderConfigStore
 from services.human_input_im.dispatcher import HumanInputIMDispatcher

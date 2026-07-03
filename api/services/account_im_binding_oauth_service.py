@@ -68,7 +68,6 @@ class AccountIMBindingOAuthService:
 
         link_token = cls._get_required_link_token(state)
         token_data = cls._get_required_link_token_data(link_token)
-        TokenManager.revoke_token(link_token, cls.FEISHU_OAUTH_LINK_TOKEN_TYPE)
 
         account_id = cls._require_token_field(token_data, "account_id")
         tenant_id = cls._require_token_field(token_data, "tenant_id")
@@ -97,6 +96,7 @@ class AccountIMBindingOAuthService:
             open_id=open_id,
             user_id=user_id,
         )
+        TokenManager.revoke_token(link_token, cls.FEISHU_OAUTH_LINK_TOKEN_TYPE)
 
     @classmethod
     def _build_feishu_oauth_client(cls) -> FeishuOAuth:

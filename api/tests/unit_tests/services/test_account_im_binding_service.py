@@ -162,3 +162,33 @@ def test_upsert_binding_translates_integrity_error_to_domain_conflict():
         )
 
     assert session.rollback_count == 1
+
+
+def test_upsert_binding_normalizes_identity_whitespace():
+    session = _FakeSession(scalar_result=None)
+
+    binding = AccountIMBindingService.upsert_binding(
+        session=session,
+        tenant_id="tenant-1",
+        account_id="account-1",
+        provider="feishu",
+        open_id="  open-1  ",
+        user_id="   ",
+    )
+
+    assert binding.open_id == "open-1"
+    assert binding.user_id is None
+
+
+def test_upsert_binding_rejects_blank_identity_after_normalization():
+    session = _FakeSession(scalar_result=None)
+
+    with pytest.raises(ValueError, match="open_id or user_id is required"):
+        AccountIMBindingService.upsert_binding(
+            session=session,
+            tenant_id="tenant-1",
+            account_id="account-1",
+            provider="feishu",
+            open_id="   ",
+            user_id="   ",
+        )

@@ -185,3 +185,82 @@
 - `polling` 已从配置面删除，不再作为可选运行模式暴露。
 - 现有 self-binding API 足够 demo，但若要支持 workspace 内多人通知，需要再补成员级 binding 管理面。
 - 当前前端账户页只提供最小 binding surface，没有 provider config 管理页。
+
+## 2026-07-03 Mergeability Check
+
+### 当前状态
+
+- Status: merged and stabilized
+- Merge target health:
+  - `upstream/main`: clean after rebasing expectation update
+  - `upstream/feat/hitl-file-in-body`: clean
+  - `upstream/feat/agent-hitl-ask-human`: conflict-heavy
+
+### 已完成
+
+1. `fetch` 并复核了当前可见的上游 HITL 相关远端分支。
+2. 首次检查时确认当前分支 `feat/hitl-im` 与旧的 `upstream/main` merge-base 是 `51156fef07`。
+3. 在用户提醒后重新 `fetch upstream main`，确认 `upstream/main` 已前进到 `c080e2c3b8`，当前分支相对它是：
+   - ahead `4`
+   - behind `35`
+4. 在临时 worktree 中做了四次非破坏性合并演练：
+   - `latest upstream/main(c080e2c3b8) <- feat/hitl-im`
+   - `upstream/main <- feat/hitl-im`
+   - `upstream/feat/hitl-file-in-body <- feat/hitl-im`
+   - `upstream/feat/agent-hitl-ask-human <- feat/hitl-im`
+5. 读取了本地未跟踪的 `api/core/workflow/nodes/human_input/` 重构目录，确认它仍然复用了：
+   - `core.workflow.human_input_adapter.DeliveryChannelConfig`
+   - 现有 Human Input 事件/模型语义
+
+### 关键发现
+
+- 当前分支合并到最新的 `upstream/main(c080e2c3b8)` 仍然是干净的，没有文本冲突。
+- 这意味着当前分支虽然落后 `upstream/main` 35 个提交，但从合并成本上看仍然属于“容易合并”。
+- 在当前工作树里执行真实 `git merge upstream/main` 时，最初被本地未跟踪文件阻塞：
+  - `api/core/workflow/nodes/human_input/__init__.py`
+  - `api/core/workflow/nodes/human_input/_exc.py`
+  - `api/core/workflow/nodes/human_input/entities.py`
+  - `api/core/workflow/nodes/human_input/enums.py`
+- 这些未跟踪文件会被 `upstream/main` 上已跟踪的同路径文件覆盖，所以 Git 按预期中止了首次合并尝试。
+- 随后已将这 4 个本地文件安全备份到：
+  - `/tmp/dify-human-input-backup-20260703-132019`
+- 在保留本地独有的 `form_processing.py`、`hitl.py`、`node.py` 前提下，`upstream/main` 已成功真实合并到当前分支，merge commit 为：
+  - `d402febffb`
+- 当前分支合并到 `upstream/feat/hitl-file-in-body` 也是干净的，没有文本冲突。
+- 当前分支合并到 `upstream/feat/agent-hitl-ask-human` 会产生多处冲突，但主要集中在：
+  - agent app runtime / request builder
+  - `agent_v2/ask_human_hitl.py`
+  - `resume_agent_app_task.py`
+  - `api/models/human_input.py`
+  - `api/core/repositories/human_input_repository.py`
+- 这些冲突大多不是 IM delivery 本身引起的，而是因为 `feat/agent-hitl-ask-human` 建立在较老的基线上，同时又深改了 ask-human 的暂停 / 恢复链路。
+- 本地未跟踪的 `api/core/workflow/nodes/human_input/` 重构并没有绕开 `human_input_adapter`，这说明我们在 `DeliveryChannelConfig` / `ApprovalChannel.IM` 上的扩展仍然有较高概率能复用到那套结构。
+
+### 验证说明
+
+- 已完成真实 merge，并修复 merge 后暴露出的两处兼容问题：
+  - `api/tasks/human_input_im_delivery_task.py` 改为依赖 Dify-owned HITL entities，而不是旧的 `graphon.nodes.human_input.entities`
+  - `api/tests/unit_tests/core/app/apps/test_workflow_app_runner_notifications.py` 对齐新的 pause reason / enrich 流程
+- 同时修复了 reviewer 指出的两项高优先级实现问题：
+  - Feishu OAuth link token 仅在绑定成功后撤销
+  - IM dispatcher channel cache key 纳入完整 provider config
+- 并补了输入边界收口：
+  - 手工绑定 API / service 对 `open_id`、`user_id` 做 `strip + 非空` 规范化
+- 使用的验证方式：
+  - `git fetch` / 远端分支检查
+  - `git rev-list --left-right --count`
+  - 临时 `git worktree` + `git merge --no-commit --no-ff`
+  - 读取本地未跟踪的 HITL node 重构目录
+  - `uv run --project api pytest ...`（定向 121 项）
+  - `uv run --project api pytest ...`（针对 P1 / 边界修复的 46 项）
+  - `uv run --project api ruff check ...`
+  - `pnpm -C web test 'app/account/(commonLayout)/account-page/__tests__/feishu-binding-card.spec.tsx'`
+  - `pnpm -C web exec eslint 'app/account/(commonLayout)/account-page/feishu-binding-card.tsx' 'app/account/(commonLayout)/account-page/client.ts' 'app/account/(commonLayout)/account-page/__tests__/feishu-binding-card.spec.tsx'`
+
+### 建议
+
+1. 当前分支已经可以继续以 `upstream/main` 为基线开发。
+2. 需要尽快处理 architecture reviewer 标出的两项边界问题：
+   - `core.repositories.human_input_repository` 中硬编码 `provider="feishu"`
+   - dispatcher 同时承担 outbound sender 与 ingress transport 选择
+3. 如果未来要叠到 `upstream/feat/agent-hitl-ask-human`，仍建议先把 IM 相关逻辑从当前 `human_input_repository` / `models.human_input` 的具体字段耦合中再收紧一层，否则后续 ask-human / agent-v2 继续演进时还会反复碰撞。
