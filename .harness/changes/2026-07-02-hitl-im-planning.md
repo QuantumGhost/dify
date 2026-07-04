@@ -101,3 +101,14 @@
   - OAuth link token revocation timing
   - dispatcher cache invalidation on provider credential rotation
   - manual binding whitespace normalization
+
+## Untracked code convergence follow-up
+
+- The untracked `api/core/workflow/nodes/human_input/form_processing.py`, `hitl.py`, and `node.py` files are currently not imported by any tracked code.
+- Those files overlap conceptually with the tracked Dify-owned HITL boundary/callback modules and with graphon's human-input runtime, so they are best treated as an unintegrated spike, not as a second live implementation.
+- The `create_user_tenant` helper chain is different:
+  - `api/dev/create_user_tenant.py`
+  - `dev/create-user-tenant`
+  - `api/tests/unit_tests/dev/test_create_user_tenant.py`
+  form a coherent, internally used slice and should be either tracked together or removed together.
+- `api/test_isinstance.py` and `api/controllers/web/hitl-service-api-file.sh` appear to be scratch / manual-debug artifacts and should be removed unless someone explicitly wants to preserve them outside the main runtime tree.

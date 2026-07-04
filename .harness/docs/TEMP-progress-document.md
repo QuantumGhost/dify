@@ -264,3 +264,81 @@
    - `core.repositories.human_input_repository` 中硬编码 `provider="feishu"`
    - dispatcher 同时承担 outbound sender 与 ingress transport 选择
 3. 如果未来要叠到 `upstream/feat/agent-hitl-ask-human`，仍建议先把 IM 相关逻辑从当前 `human_input_repository` / `models.human_input` 的具体字段耦合中再收紧一层，否则后续 ask-human / agent-v2 继续演进时还会反复碰撞。
+
+## 2026-07-03 Untracked Code Convergence
+
+### 当前状态
+
+- Status: assessed
+- Scope: current untracked code only
+
+### 已完成
+
+1. 盘点了当前所有未跟踪代码相关路径。
+2. 对未跟踪 `api/core/workflow/nodes/human_input/*` 做了外部引用扫描。
+3. 对 `create_user_tenant` helper 链条做了关联扫描。
+4. 对 `api/test_isinstance.py`、`api/controllers/web/hitl-service-api-file.sh`、`openspec/config.yaml` 做了用途判断。
+
+### 关键发现
+
+- 当前未跟踪代码中，最需要收敛的是这两组：
+  1. `api/core/workflow/nodes/human_input/form_processing.py`
+  2. `api/core/workflow/nodes/human_input/hitl.py`
+  3. `api/core/workflow/nodes/human_input/node.py`
+  4. `api/dev/create_user_tenant.py`
+  5. `dev/create-user-tenant`
+  6. `api/tests/unit_tests/dev/test_create_user_tenant.py`
+- `api/core/workflow/nodes/human_input/form_processing.py` / `hitl.py` / `node.py`
+  - 这三份文件当前没有任何外部引用。
+  - `node.py` 只自引用 `form_processing.py` 与 `hitl.py`。
+  - 它们属于“未接线的 Dify-owned HITL runtime 草稿”，与当前已跟踪的：
+    - `api/core/workflow/nodes/human_input/callback.py`
+    - `api/core/workflow/nodes/human_input/boundary.py`
+    - `graphon.nodes.human_input.human_input_node`
+    在职责上存在明显重叠。
+  - 它们不是当前 Feishu IM 功能运行依赖。
+- `api/dev/create_user_tenant.py` / `dev/create-user-tenant` / `api/tests/unit_tests/dev/test_create_user_tenant.py`
+  - 这三项是同一条完整 slice，不是无主草稿。
+  - shell wrapper 调用 Python helper，单测也显式覆盖该 helper。
+  - 它们当前确实“被彼此使用”，只是还没有正式纳入仓库追踪。
+- `api/test_isinstance.py`
+  - 是一次协议 / benchmark 实验文件。
+  - 当前真实代码使用的是 `graphon.nodes.llm.runtime_protocols.LLMPollingCapableProtocol`。
+  - 这份文件没有被任何生产代码或测试入口引用。
+- `api/controllers/web/hitl-service-api-file.sh`
+  - 是手工 curl 调试脚本，没有代码引用。
+  - 它与当前 repo 中已有的 HITL 设计/实现文档一起看，更像一次性联调残留。
+- `openspec/config.yaml`
+  - 是工具配置，不参与运行时。
+  - 当前只看到这一个孤立配置文件，没有成体系的 openspec 变更在继续推进。
+
+### 收敛建议
+
+1. 立即删除或移出主仓的“未接线 runtime 草稿”：
+   - `api/core/workflow/nodes/human_input/form_processing.py`
+   - `api/core/workflow/nodes/human_input/hitl.py`
+   - `api/core/workflow/nodes/human_input/node.py`
+   原因：
+   - 当前无外部引用
+   - 与已跟踪 runtime/boundary 职责重叠
+   - 继续留在正式模块路径下，只会制造“看起来存在第二套实现”的错觉
+2. `create_user_tenant` helper 链条二选一，但必须整体处理：
+   - 保留方案：把 `api/dev/create_user_tenant.py`、`dev/create-user-tenant`、`api/tests/unit_tests/dev/test_create_user_tenant.py` 一起纳入版本控制，明确它是受支持的本地运维/dev helper。
+   - 删除方案：三者一起删除，不要只留 shell wrapper 或只留测试。
+   推荐：保留，因为它已经有测试、边界清晰、且不侵入主运行时。
+3. 立即删除明显的一次性实验/联调残留：
+   - `api/test_isinstance.py`
+   - `api/controllers/web/hitl-service-api-file.sh`
+4. `openspec/config.yaml` 单独决策：
+   - 如果后续不走 openspec 工作流，直接删除。
+   - 如果要继续走，就必须补齐成体系的 openspec artifacts，而不是只留一个孤立 config。
+
+### 建议的执行顺序
+
+1. 先删：
+   - `api/test_isinstance.py`
+   - `api/controllers/web/hitl-service-api-file.sh`
+2. 再处理 `api/core/workflow/nodes/human_input/{form_processing.py,hitl.py,node.py}`：
+   - 默认从主工作树移除
+   - 如需保留草稿，转移到单独 worktree / patch / 设计目录，不再占用正式 runtime 包路径
+3. 最后对 `create_user_tenant` helper 做“保留并正式纳入”或“整组删除”的明确决定。
