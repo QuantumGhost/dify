@@ -1,0 +1,211 @@
+## Context
+
+现有 HITL 已有可复用的 runtime 基础：
+
+- `DifyHITLCallback` 在 workflow pause 时创建 `HumanInputForm`、`HumanInputDelivery` 和 `HumanInputFormRecipient`。
+- `HumanInputService.submit_form_by_token` 负责 form active/submitted/expired 校验、提交数据规范化，并根据 `workflow_run_id` 或 `conversation_id` enqueue resume。
+- workflow resume 已经由现有 task 和 runtime snapshot 机制接管，IM callback 不应直接操作 graph runtime。
+
+新的产品方向与旧 HITL delivery 配置不同：新 HITL 需要新 `NodeType`、新 `Version` 和新的 runtime 实现，节点配置 Contact recipients，而不是配置发送渠道。Contact 是 Workspace-scoped 新对象：member Contact 关联 Dify `Account`，external Contact 只支持 `name` 和单个 `email`。member Contact 可绑定 IM；external Contact 短期只支持 email。
+
+部署版本和 IM app 分发也会影响数据模型：
+
+- CE：只支持 deployment global 的企业自建 IM app。
+- EE：首期可只支持 deployment global 的企业自建 IM app；模型预留 tenant override，解析顺序为 tenant override > deployment global。
+- Cloud：首期需要支持 Slack ISV install 和钉钉企业自建应用；两种模式不要求同一个 tenant 同时启用。模型需要预留后续 provider 同时支持 ISV 和企业自建的空间。
+- demo provider：飞书企业自建应用。
+
+当前 demo 的所有前端编排仍必须在现有前端代码中完成，或只做极少非结构性调整。新的 Contact recipient 配置 UI、Contact 管理 UI、IM binding/config UI 和 HumanInput v2 前端配置面不属于 demo 范围。为此需要一个 transitional compatibility layer：前端仍使用现有 HumanInput v1 编排界面并提交 v1 node config；后端/runtime 在执行前将 v1 config 映射为 HumanInput v2 runtime model，并使用新的 v2 runtime 执行。该 compatibility layer 不能成为正式 v2 schema 的长期边界。
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- 用飞书企业自建应用完成 demo 闭环：账号绑定、HITL 表单投递到 IM、IM 侧填写、callback 回 Dify、workflow 继续执行。
+- 新增 Contact 模型和 Contact-based HITL runtime，支撑后续从旧 HITL opt-in 升级。
+- 避免全量迁移 `TenantAccountJoin` 到 Contact 表；demo 阶段提供一个从现有 Workspace members 创建 Contact 的脚本，用于测试和演示数据准备。
+- 复用 `HumanInputForm`、`HumanInputFormRecipient`、`HumanInputService.submit_form_by_token` 和已有 resume 机制。
+- 支持原 HITL 表单类型：paragraph、select、file、file-list 和 actions。IM 不支持的 file/file-list 可通过 Web form fallback 完成。
+- IM 未绑定时运行时 fallback 到 email；email 缺失时 skip，并把结果暂记到节点 `process_data`。
+- 多收件人维持 first valid submission wins；IM 卡片如果允许，应更新状态，更新失败进入异步补偿。
+- 实现 `Allow Current Initiator to Approve`，按调用来源识别 `Account` 或 `EndUser`。
+
+**Non-Goals:**
+
+- 正式 v2 前端配置面不属于 demo 范围；demo 前端编排复用现有 HumanInput v1 配置面。
+- 不在第一阶段支持多人审批、复杂审批流或外部 IM identity。
+- 不把 IM callback 设计成新的 workflow resume 通道。
+- 不要求 Cloud 同一 tenant 同时支持 Slack ISV 和钉钉企业自建。
+- 不在第一阶段把旧 HITL 自动迁移到新 HITL。
+
+## Decisions
+
+### 1. 使用新的 Contact-based HITL node，而不是扩展旧 delivery method
+
+正式实现新增 HITL `NodeType` 和 `Version`。新 node config 使用 Contact recipients，并增加 `allow_current_initiator_to_approve`。旧 HITL delivery methods 保持现状，后续提供 opt-in migration。
+
+demo 阶段必须增加 transitional compatibility layer：现有前端继续提交 HumanInput v1 node config，后端/runtime 将整个 v1 config 转换为 HumanInput v2 runtime model，再交给新的 v2 runtime 执行。这个 mapping 不只是 recipient mapping；它需要覆盖 demo 所需的 form content、inputs、actions、timeout、member recipients，以及 v2 runtime 所需的 Contact/IM recipient model。
+
+该 compatibility layer 的约束：
+
+- demo 的 workflow/HITL 编排仍通过现有前端 v1 配置面完成。
+- demo 不依赖新的 v2 Contact recipient 配置 UI。
+- mapping 只作为 demo 和迁移过渡路径存在，不作为正式 v2 schema 的持久设计。
+- v2 runtime 是唯一执行目标，不能因为 demo 复用 v1 config 而回退到 v1 runtime。
+
+替代方案是在旧 HITL 上新增 `DeliveryMethodType.IM`。该方案会把新产品模型继续绑定到旧 delivery channel 配置，不符合“节点配置 Contact 接收者”的目标。
+
+### 2. 引入 Workspace-scoped Contact，并保留 runtime snapshot
+
+Contact 模型建议包含：
+
+- `tenant_id`
+- `type`：`member` 或 `external`
+- `account_id`：member Contact 使用，external 为空
+- `name`
+- `email`
+- `status`
+- `source`：例如 current workspace member、EE deployment member、manual external
+- `created_at`
+- `updated_at`
+
+不做一次性全量迁移。demo 阶段提供一个从现有 Workspace members 创建 member Contact 的脚本，用于测试和演示数据准备。Contact 自动同步、lazy materialization、projection fallback 以及正式迁移/投影策略不属于 demo 范围，后续单独设计。
+
+HITL runtime 必须保存 Contact snapshot，至少包含 `contact_id`、`type`、`account_id`、`name`、`email`、`source` 和当时的 provider/binding 信息。这样 Contact 后续删除、失效或资料变化不会破坏历史表单、审计和排障。
+
+### 3. IM binding 绑定 Account 和 credential scope，但授权入口是 Contact recipient
+
+第一期只有 member Contact 可绑定 IM。binding 不强制引用统一的 `app_installation_id`，而是保存一组稳定的 credential scope 字段，用来描述“这个绑定属于哪套 IM app 配置”。这样 CE/EE 的 deployment global 自建应用可以直接来自配置文件或 secret manager，不必为了少量部署级配置创建 DB row；Cloud Slack ISV、未来 tenant self-built config 等需要生命周期管理的场景再由 resolver 映射到 DB 存储。
+
+binding 表面向 `Account`、credential scope 和 provider identity：
+
+- `account_id`
+- `provider`
+- `install_mode`：`self_built` 或 `isv`
+- `scope_type`：`deployment` 或 `tenant`
+- `scope_id`：例如 `deployment` 或具体 `tenant_id`
+- `provider_workspace_id`
+- `provider_user_id`
+- `provider_union_id`
+- `status`
+- `created_at`
+- `updated_at`
+
+这组字段替代第一阶段的 `app_installation_id` 外键。后续如果引入统一 install/config 表，可以通过 `(provider, install_mode, scope_type, scope_id, provider_workspace_id)` 映射或迁移到外键，但当前业务代码应依赖 resolver 返回的运行时 app context，而不是直接依赖某张安装表。
+
+DB 允许多 provider，为未来同一 Account 绑定飞书、钉钉、Slack 留空间。第一期“一种 active IM”由 service 层事务校验实现，因为 MySQL 不能依赖 partial unique constraint。
+
+callback 授权不能只看 Account membership，必须确认 callback provider user 对应的 Account 是当前 form recipient snapshot/Contact 授权的接收人。EE 跨 Workspace Contact 的细节仍单独记录在 `ee-cross-workspace-contact-question.md`。
+
+### 4. IM app config 按版本和 install mode 解析
+
+引入 provider app config resolver 和运行时 value object，例如 `IMAppContext`。它至少区分：
+
+- `provider`
+- `install_mode`：`self_built` 或 `isv`
+- `scope_type`：`deployment` 或 `tenant`
+- `scope_id`：`deployment` 或具体 `tenant_id`
+- `provider_workspace_id`
+- `credential_source`：例如 deployment config、tenant DB config、ISV install DB row
+- provider credentials / token fields
+- token refresh state
+- install status
+
+配置来源不要求统一落库：
+
+- deployment global self-built app 可以来自 `dify_config`、env 或 secret manager。
+- tenant override self-built app 后续可来自 DB。
+- ISV install 因为有 install/uninstall/token refresh 生命周期，通常需要 DB 存储。
+
+运行时解析：
+
+- CE：deployment global self-built。
+- EE：tenant override self-built > deployment global self-built；第一期可以只实现 deployment global，但 schema/service 预留 override。
+- Cloud：Slack 使用 ISV install；钉钉使用 tenant self-built。两者无需同一 tenant 同时启用。
+- Demo：飞书使用 self-built app config。
+
+### 5. HITL delivery 以 Contact recipient 为中心
+
+新 runtime 根据 Contact recipients 生成 form recipients 和 snapshots：
+
+- member Contact：如果有 active IM binding，发送 IM；无 binding 时 fallback 到 email；如果 email 也不可用则 skip。
+- external Contact：只发送 email。
+- `Allow Current Initiator to Approve`：为当前发起者增加可提交路径，但不等同于 Contact recipient。
+
+fallback/skip 状态暂存到节点 `process_data`，后续可迁移到更稳定的 execution extra content 或 delivery status model。
+
+### 6. IM callback 只提交 form，不直接 resume workflow
+
+callback controller 推荐放在 `api/controllers/trigger/human_input_im.py` 或同等外部 webhook namespace。处理顺序：
+
+1. 按 provider 和 app config 校验 signature、timestamp、challenge。
+2. 解析 callback，拿到 provider user、provider event id、message/action private metadata。
+3. 查找 IM message correlation、form recipient、Contact snapshot 和 interaction mapping snapshot。
+4. 校验 provider user 对应的 Account / binding 与原始 Contact recipient 匹配。
+5. 使用 interaction mapping snapshot 将 provider component/action id 翻译为 Dify 的 `selected_action_id` 和 `form_data`。
+6. 调用 `HumanInputService.submit_form_by_token(...)`，写入 `submission_user_id` 或 `submission_end_user_id`。
+7. 更新 IM message status；如果 provider card update 失败，写入补偿任务。
+
+发送 IM message/card 时必须持久化 interaction mapping snapshot。该 snapshot 是 callback 翻译的唯一可信来源，用于把 provider-local component/action id 映射到 Dify form 语义：
+
+```json
+{
+  "schema_version": 1,
+  "inputs": {
+    "provider_component_reason": {
+      "output_variable_name": "reason",
+      "type": "paragraph"
+    }
+  },
+  "actions": {
+    "provider_action_approve": {
+      "action_id": "approve"
+    }
+  }
+}
+```
+
+callback payload 不应直接携带并决定 Dify 的 `action_id` 或 `output_variable_name`。即使 callback signature 有效，也只能证明 payload 来自 provider，不能证明其中的 Dify 字段名被当前 form recipient 授权。callback 中出现 snapshot 不认识的 component/action id 时，系统必须拒绝该提交。
+
+这个 snapshot 同时解决一致性问题：如果卡片发送后 HITL node config、form definition 或 provider card rendering 逻辑发生变化，旧卡片的 callback 仍按发送当时保存的 mapping 解释，而不是读取最新配置重新解释。
+
+### 7. Initiator approval 使用来源特定 actor
+
+`Allow Current Initiator to Approve` 的 actor 解析规则：
+
+- Console：`Account`
+- CLI OpenAPI：`Account`
+- Web App：`EndUser`
+- Service API：通过 API 提交的 `EndUser`
+
+该路径仍应复用 Human Input submission service。它只是新增一个 authorized submission actor，不改变 first valid submission wins。
+
+### 8. 幂等在 callback event、form submission、card update 三层处理
+
+Provider callback 层按 provider event id 去重。Form submission 层保证 form 只从 waiting 转 submitted 一次，避免并发 callback 重复 enqueue resume。Card update 层使用异步补偿，workflow 不等待卡片更新成功。
+
+## Risks / Trade-offs
+
+- [Demo 使用 v1 config compatibility mapping] → 明确标注 transitional path，正式新 HITL schema 不依赖旧 v1 config shape；测试必须证明 v1 frontend-submitted config 最终走 v2 runtime。
+- [Contact 不做全量迁移] → demo 使用显式 seed script 准备 Contact 测试数据；Contact 自动同步和 lazy materialization 后续单独设计，避免把 demo 脚本误当正式迁移方案。
+- [MySQL 无 partial unique constraint] → 多 provider 数据模型靠普通唯一键保护 provider identity；第一期 active provider 限制放在 service 层。
+- [EE 跨 Workspace Contact 权限复杂] → 单独保留待决文档；实现时基于 Contact recipient 授权，不假设存在当前 workspace membership。
+- [IM file/file-list 支持不一致] → 保留 Web form fallback，IM card 只内嵌 provider 能稳定支持的字段。
+- [卡片状态更新失败] → workflow 不阻塞，异步补偿并保留 operator 可排障状态。
+
+## Migration Plan
+
+1. 新增 Contact、IM app config resolver、必要的 ISV install/tenant config storage、IM binding credential scope、IM message correlation 和必要 snapshot 字段。
+2. 为 demo 增加从现有 Workspace members 创建 Contact 的 seed script。
+3. 增加 provider-neutral adapter、config resolver、binding/delivery/callback service。
+4. 为 demo 接入飞书 self-built adapter，并实现 HumanInput v1 config 到 HumanInput v2 runtime model 的 compatibility mapping。
+5. 增加新 HITL node runtime 和 Contact recipient schema；后续前端接入正式配置面。
+6. 后续单独设计 Contact 自动同步、lazy materialization、正式迁移/投影策略，以及 opt-in migration。
+7. 回滚策略：关闭 IM app config 或 feature flag；旧 HITL、Web/Email submission 和现有 workflow resume 不受影响。
+
+## Open Questions
+
+- EE 跨 Workspace Contact 的最终授权和失效策略仍需确认，详见 `ee-cross-workspace-contact-question.md`。
+- 飞书互动卡片对 file/file-list 的最终体验是否只走 Web fallback，还是需要后续原生支持。
+- `process_data` 是否是 fallback/skip 状态的长期存储位置，还是只作为第一期暂存。
+- Contact 自动同步、lazy materialization、正式迁移/投影策略后续单独设计，不属于 demo 范围。
