@@ -12,7 +12,7 @@
 - [x] 2.3 新增 demo/test seed script，从指定 Workspace 的现有 members 创建缺失的 member Contacts。
 - [x] 2.4 明确 Contact 自动同步、lazy materialization、正式迁移/投影策略不属于 demo 范围，并保留后续设计入口。
 - [x] 2.5 为 external Contact 实现最小管理能力：一个 name、一个 email、无 IM identity。
-- [ ] 2.6 在 HITL form recipient / delivery / submission 中保存 Contact snapshot。
+- [x] 2.6 在 HITL form recipient / delivery / submission 中保存 Contact snapshot。
 - [x] 2.7 添加 Contact tests，覆盖 seed script 幂等创建、external contact 和 snapshot 保留。
 
 ## 3. IM App Configuration

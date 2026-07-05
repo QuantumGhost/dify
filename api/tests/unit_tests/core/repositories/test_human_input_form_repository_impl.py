@@ -39,6 +39,7 @@ from models.contact import ContactSource, ContactStatus, ContactType
 from models.human_input import (
     EmailExternalRecipientPayload,
     EmailMemberRecipientPayload,
+    HumanInputContactSnapshot,
     HumanInputFormRecipient,
     RecipientType,
     StandaloneWebAppRecipientPayload,
@@ -454,6 +455,7 @@ class _DummyRecipient:
     recipient_type: RecipientType
     access_token: str
     form: _DummyForm | None = None
+    contact_snapshot: HumanInputContactSnapshot | None = None
     recipient_payload: str = dataclasses.field(
         default_factory=lambda: StandaloneWebAppRecipientPayload().model_dump_json()
     )
@@ -744,6 +746,65 @@ class TestHumanInputFormSubmissionRepository:
         assert record.submitted is True
         assert record.selected_action_id == "approve"
         assert record.submitted_data == {"field": "value"}
+
+    def test_mark_submitted_keeps_winning_recipient_contact_snapshot(self, monkeypatch: pytest.MonkeyPatch):
+        fixed_now = datetime(2024, 1, 1, 0, 0, 0)
+        monkeypatch.setattr("core.repositories.human_input_repository.naive_utc_now", lambda: fixed_now)
+
+        snapshot = HumanInputContactSnapshot(
+            contact_id="contact-member-1",
+            tenant_id="tenant-1",
+            type=ContactType.MEMBER,
+            source=ContactSource.WORKSPACE_MEMBER,
+            status=ContactStatus.ACTIVE,
+            name="Member Contact",
+            account_id="account-1",
+            email="member@example.com",
+        )
+        form = _DummyForm(
+            id="form-1",
+            workflow_run_id="run-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            app_id="app-1",
+            form_definition=_make_form_definition(),
+            rendered_content="<p>hello</p>",
+            expiration_time=fixed_now,
+        )
+        recipient = _DummyRecipient(
+            id="recipient-1",
+            form_id=form.id,
+            recipient_type=RecipientType.EMAIL_MEMBER,
+            access_token="token-123",
+            recipient_payload=EmailMemberRecipientPayload(
+                user_id="account-1",
+                email="member@example.com",
+            ).model_dump_json(),
+            contact_snapshot=snapshot,
+        )
+        session = _FakeSession(
+            forms={form.id: form},
+            recipients={recipient.id: recipient},
+        )
+        _patch_repo_session_factory(monkeypatch, session)
+        repo = HumanInputFormSubmissionRepository()
+
+        record = repo.mark_submitted(
+            form_id=form.id,
+            recipient_id=recipient.id,
+            selected_action_id="approve",
+            form_data={"field": "value"},
+            submission_user_id="user-1",
+            submission_end_user_id="end-user-1",
+        )
+
+        assert form.completed_by_recipient_id == recipient.id
+        assert record.completed_by_recipient_id == recipient.id
+        assert record.recipient_id == recipient.id
+        assert record.recipient_type == RecipientType.EMAIL_MEMBER
+        assert record.access_token == recipient.access_token
+        assert recipient.contact_snapshot is not None
+        assert recipient.contact_snapshot.model_dump(mode="json") == snapshot.model_dump(mode="json")
 
     def test_mark_submitted_preserves_first_submission(self, monkeypatch: pytest.MonkeyPatch):
         original_time = datetime(2024, 1, 1, 0, 0, 0)
