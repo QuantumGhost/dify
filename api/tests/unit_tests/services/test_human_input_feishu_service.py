@@ -37,6 +37,31 @@ class _FakeSession:
     def scalar(self, _stmt):
         return self._delivery
 
+    def scalars(self, _stmt):
+        return _FakeRecipientQuery([self._delivery])
+
+    def get(self, _model, _id):
+        return self._recipient
+
+
+class _FakeActionSession:
+    def __init__(self, delivery, recipient, all_deliveries):
+        self._delivery = delivery
+        self._recipient = recipient
+        self._all_deliveries = all_deliveries
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+    def scalar(self, _stmt):
+        return self._delivery
+
+    def scalars(self, _stmt):
+        return _FakeRecipientQuery(self._all_deliveries)
+
     def get(self, _model, _id):
         return self._recipient
 
@@ -340,6 +365,81 @@ def test_handle_card_action_submits_form_and_returns_result_card():
         {"reason": "ok", "priority": "P0"},
         submission_user_id="account-1",
     )
+    assert response.card is not None
+    assert response.card.type == "raw"
+
+
+def test_handle_card_action_updates_other_delivery_cards_and_marks_all_deliveries_completed():
+    clicked_delivery = SimpleNamespace(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        account_id="account-1",
+        message_id="om_clicked",
+        status=HumanInputFeishuDeliveryStatus.SENT,
+        completed_at=None,
+    )
+    other_delivery = SimpleNamespace(
+        form_id="form-1",
+        recipient_id="recipient-2",
+        account_id="account-2",
+        message_id="om_other",
+        status=HumanInputFeishuDeliveryStatus.SENT,
+        completed_at=None,
+    )
+    recipient = SimpleNamespace(access_token="token-1")
+    initial_record = SimpleNamespace(
+        definition=_build_definition(),
+        submitted=False,
+    )
+    submitted_record = SimpleNamespace(
+        definition=_build_definition(),
+        submitted=True,
+        selected_action_id="approve",
+        submitted_data={"reason": "ok", "priority": "P0"},
+    )
+    repository = MagicMock()
+    repository.get_by_token.side_effect = [initial_record, submitted_record]
+    human_input_service = MagicMock()
+    human_input_service._form_repository = repository
+    client = MagicMock()
+    client.im.v1.message.patch.return_value = SimpleNamespace(code=0, msg="ok", data=SimpleNamespace())
+
+    def session_factory() -> _FakeActionSession:
+        return _FakeActionSession(clicked_delivery, recipient, [clicked_delivery, other_delivery])
+
+    service = HumanInputFeishuService(
+        client=client,
+        session_factory=session_factory,
+        human_input_service=human_input_service,
+    )
+    payload = P2CardActionTrigger(
+        {
+            "event": {
+                "operator": {"open_id": "ou_123"},
+                "action": {
+                    "value": {"form_id": "form-1", "action_id": "approve"},
+                    "form_value": {"reason": "ok", "priority": "P0"},
+                },
+            }
+        }
+    )
+
+    response = service.handle_card_action(payload)
+
+    human_input_service.submit_form_by_token.assert_called_once_with(
+        "email_member",
+        "token-1",
+        "approve",
+        {"reason": "ok", "priority": "P0"},
+        submission_user_id="account-1",
+    )
+    client.im.v1.message.patch.assert_called_once()
+    patch_request = client.im.v1.message.patch.call_args.args[0]
+    assert patch_request.message_id == "om_other"
+    assert clicked_delivery.status == HumanInputFeishuDeliveryStatus.COMPLETED
+    assert other_delivery.status == HumanInputFeishuDeliveryStatus.COMPLETED
+    assert clicked_delivery.completed_at is not None
+    assert other_delivery.completed_at is not None
     assert response.card is not None
     assert response.card.type == "raw"
 

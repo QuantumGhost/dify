@@ -13,6 +13,8 @@ from lark_oapi.api.im.v1.model.create_message_request import CreateMessageReques
 from lark_oapi.api.im.v1.model.create_message_request_body import (  # type: ignore[import-untyped]
     CreateMessageRequestBody,
 )
+from lark_oapi.api.im.v1.model.patch_message_request import PatchMessageRequest  # type: ignore[import-untyped]
+from lark_oapi.api.im.v1.model.patch_message_request_body import PatchMessageRequestBody  # type: ignore[import-untyped]
 from lark_oapi.core.model import RequestOption  # type: ignore[import-untyped]
 from lark_oapi.event.callback.model.p2_card_action_trigger import (  # type: ignore[import-untyped]
     P2CardActionTrigger,
@@ -154,6 +156,12 @@ class HumanInputFeishuService:
                 return self._toast_response("error", "This task is unavailable.")
 
             if delivery.status == HumanInputFeishuDeliveryStatus.COMPLETED or record.submitted:
+                self._sync_completed_delivery_cards(
+                    session=session,
+                    form_id=form_id,
+                    current_message_id=getattr(delivery, "message_id", None),
+                    record=record,
+                )
                 return self._result_response(record)
 
             try:
@@ -168,6 +176,12 @@ class HumanInputFeishuService:
                 updated_record = self._human_input_form_service()._form_repository.get_by_token(recipient.access_token)
                 if updated_record is None:
                     return self._toast_response("info", "This task has already been completed.")
+                self._sync_completed_delivery_cards(
+                    session=session,
+                    form_id=form_id,
+                    current_message_id=getattr(delivery, "message_id", None),
+                    record=updated_record,
+                )
                 return self._result_response(updated_record)
             except FormExpiredError:
                 return self._toast_response("error", "This task has expired.")
@@ -177,6 +191,12 @@ class HumanInputFeishuService:
             updated_record = self._human_input_form_service()._form_repository.get_by_token(recipient.access_token)
             if updated_record is None:
                 return self._toast_response("success", "Submitted.")
+            self._sync_completed_delivery_cards(
+                session=session,
+                form_id=form_id,
+                current_message_id=getattr(delivery, "message_id", None),
+                record=updated_record,
+            )
             return self._result_response(updated_record)
 
     def get_user_info(self, user_access_token: str):
@@ -723,6 +743,21 @@ class HumanInputFeishuService:
         }
 
     def _result_response(self, record) -> P2CardActionTriggerResponse:
+        card_data = self._build_result_card_data(record)
+        return P2CardActionTriggerResponse(
+            {
+                "toast": {
+                    "type": "success",
+                    "content": "Submitted.",
+                },
+                "card": {
+                    "type": "raw",
+                    "data": card_data,
+                },
+            }
+        )
+
+    def _build_result_card_data(self, record) -> dict[str, Any]:
         definition = record.definition
         elements: list[dict[str, Any]] = [
             {
@@ -751,30 +786,79 @@ class HumanInputFeishuService:
                 }
             )
 
-        return P2CardActionTriggerResponse(
-            {
-                "toast": {
-                    "type": "success",
-                    "content": "Submitted.",
+        return {
+            "schema": "2.0",
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": definition.node_title or "Human Input",
                 },
-                "card": {
-                    "type": "raw",
-                    "data": {
-                        "schema": "2.0",
-                        "header": {
-                            "title": {
-                                "tag": "plain_text",
-                                "content": definition.node_title or "Human Input",
-                            },
-                            "template": "green",
-                        },
-                        "body": {
-                            "elements": elements,
-                        },
-                    },
-                },
-            }
-        )
+                "template": "green",
+            },
+            "body": {
+                "elements": elements,
+            },
+        }
+
+    def _sync_completed_delivery_cards(
+        self,
+        *,
+        session: Session,
+        form_id: str,
+        current_message_id: str | None,
+        record,
+    ) -> None:
+        deliveries = session.scalars(
+            select(HumanInputFeishuDelivery).where(HumanInputFeishuDelivery.form_id == form_id)
+        ).all()
+        if not deliveries:
+            return
+
+        completed_at = getattr(record, "submitted_at", None) or naive_utc_now()
+        card_content = json.dumps(self._build_result_card_data(record), ensure_ascii=False)
+        for delivery in deliveries:
+            delivery.status = HumanInputFeishuDeliveryStatus.COMPLETED
+            delivery.completed_at = completed_at
+            message_id = getattr(delivery, "message_id", None)
+
+            if not message_id or message_id == current_message_id:
+                continue
+
+            self._patch_delivery_message(
+                delivery=delivery,
+                form_id=form_id,
+                content=card_content,
+            )
+
+    def _patch_delivery_message(self, *, delivery: HumanInputFeishuDelivery, form_id: str, content: str) -> None:
+        try:
+            client = self._require_client()
+            im_api = client.im
+            assert im_api is not None
+
+            response = im_api.v1.message.patch(
+                PatchMessageRequest.builder()
+                .message_id(delivery.message_id)
+                .request_body(PatchMessageRequestBody.builder().content(content).build())
+                .build()
+            )
+        except Exception:
+            logger.exception(
+                "Feishu message patch raised exception, form_id=%s recipient_id=%s message_id=%s",
+                form_id,
+                delivery.recipient_id,
+                delivery.message_id,
+            )
+            return
+
+        if response.code != 0:
+            logger.error(
+                "Feishu message patch failed, form_id=%s recipient_id=%s message_id=%s error=%s",
+                form_id,
+                delivery.recipient_id,
+                delivery.message_id,
+                json.dumps(self._summarize_send_failure(response), ensure_ascii=False, default=str),
+            )
 
     @staticmethod
     def _toast_response(level: str, content: str) -> P2CardActionTriggerResponse:
