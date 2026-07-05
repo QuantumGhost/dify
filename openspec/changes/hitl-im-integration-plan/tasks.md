@@ -73,7 +73,7 @@
 - [x] 8.5 加固 `HumanInputFormSubmissionRepository.mark_submitted` 的单次提交语义，避免并发 callback 重复 resume。
 - [x] 8.6 更新 IM message status，记录 submitted、validation error、expired、already handled 等状态。
 - [x] 8.7 实现 card update 异步补偿任务，callback 成功后不阻塞 workflow resume。
-- [ ] 8.8 添加 callback/resume tests，覆盖 active form、expired form、already submitted form、binding mismatch、unknown component/action id、initiator approval 和 resume enqueue once。
+- [x] 8.8 添加 callback/resume tests，覆盖 active form、expired form、already submitted form、binding mismatch、unknown component/action id、initiator approval 和 resume enqueue once。
 
 ## 9. Frontend And Configuration
 

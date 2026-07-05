@@ -262,7 +262,18 @@ def test_callback_service_maps_submission_payload_to_end_user_actor() -> None:
     )
 
 
-def test_callback_service_handles_submission_success_and_enqueues_compensation() -> None:
+@pytest.mark.parametrize(
+    ("submission_user_id", "submission_end_user_id"),
+    [
+        ("account-1", None),
+        (None, "end-user-1"),
+    ],
+    ids=["account actor", "end-user actor"],
+)
+def test_callback_service_handles_submission_success_and_enqueues_compensation(
+    submission_user_id: str | None,
+    submission_end_user_id: str | None,
+) -> None:
     engine = sa.create_engine("sqlite:///:memory:")
     TypeBase.metadata.create_all(
         engine,
@@ -286,7 +297,11 @@ def test_callback_service_handles_submission_success_and_enqueues_compensation()
                 provider_user_id="user-1",
                 interaction_id="interaction-1",
             ),
-            context=_build_submission_context(correlation_id=correlation_id),
+            context=_build_submission_context(
+                correlation_id=correlation_id,
+                submission_user_id=submission_user_id,
+                submission_end_user_id=submission_end_user_id,
+            ),
             parsed_payload=IMParsedSubmissionPayload(
                 provider_action_id="provider_action_approve",
                 provider_inputs={"provider_component_reason": "looks good"},
@@ -304,8 +319,8 @@ def test_callback_service_handles_submission_success_and_enqueues_compensation()
         form_token="form-token",
         selected_action_id="approve",
         form_data={"reason": "looks good"},
-        submission_user_id="account-1",
-        submission_end_user_id=None,
+        submission_user_id=submission_user_id,
+        submission_end_user_id=submission_end_user_id,
     )
     queue.enqueue.assert_called_once_with(
         IMCardUpdateCompensationRequest(
@@ -441,6 +456,82 @@ def test_callback_service_maps_submission_outcomes_to_message_status(
     assert correlation is not None
     assert correlation.delivery_status == expected_delivery_status
     assert correlation.target_card_status == expected_card_status
+    assert correlation.last_provider_event_id == f"event-{case_name}"
+    assert correlation.error_reason == expected_error
+
+
+@pytest.mark.parametrize(
+    (
+        "case_name",
+        "parsed_payload",
+        "expected_error",
+    ),
+    [
+        (
+            "unknown action id",
+            IMParsedSubmissionPayload(
+                provider_action_id="provider_action_unknown",
+                provider_inputs={"provider_component_reason": "looks good"},
+            ),
+            "unknown IM callback action id: provider_action_unknown",
+        ),
+        (
+            "unknown input component id",
+            IMParsedSubmissionPayload(
+                provider_action_id="provider_action_approve",
+                provider_inputs={"provider_component_unknown": "looks good"},
+            ),
+            "unknown IM callback input component id: provider_component_unknown",
+        ),
+    ],
+)
+def test_callback_service_marks_validation_error_for_unknown_provider_mapping_ids(
+    case_name: str,
+    parsed_payload: IMParsedSubmissionPayload,
+    expected_error: str,
+) -> None:
+    engine = sa.create_engine("sqlite:///:memory:")
+    TypeBase.metadata.create_all(
+        engine,
+        tables=[IMProcessedCallbackEvent.__table__, IMMessageCorrelation.__table__],
+    )
+    correlation_id = _insert_correlation(engine)
+    queue = MagicMock()
+    submitter = MagicMock(spec=IMFormSubmissionSubmitter)
+    service = HumanInputIMCallbackService(
+        orchestration_service=MagicMock(),
+        submission_result_service=HumanInputIMSubmissionResultService(compensation_queue=queue),
+    )
+
+    with Session(engine, expire_on_commit=False) as session:
+        result = service.handle_submission(
+            session=session,
+            event=IMSubmissionEvent(
+                provider=IMProvider.FEISHU,
+                event_id=f"event-{case_name}",
+                provider_workspace_id="ws-1",
+                provider_user_id="user-1",
+                interaction_id="interaction-1",
+            ),
+            context=_build_submission_context(correlation_id=correlation_id),
+            parsed_payload=parsed_payload,
+            submitter=submitter,
+        )
+        session.commit()
+
+    assert result == IMSubmissionCallbackResult(
+        acknowledgement={"result": "accepted", "event_id": f"event-{case_name}"},
+        duplicate_event=False,
+    )
+    submitter.submit_form_by_token.assert_not_called()
+    queue.enqueue.assert_not_called()
+
+    with Session(engine) as session:
+        correlation = session.get(IMMessageCorrelation, correlation_id)
+
+    assert correlation is not None
+    assert correlation.delivery_status == IMMessageDeliveryStatus.VALIDATION_ERROR
+    assert correlation.target_card_status == IMMessageCardStatus.ERROR
     assert correlation.last_provider_event_id == f"event-{case_name}"
     assert correlation.error_reason == expected_error
 
