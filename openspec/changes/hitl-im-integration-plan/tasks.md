@@ -77,7 +77,7 @@
 
 ## 9. Frontend And Configuration
 
-- [ ] 9.1 Demo 前复用现有前端 HumanInput v1 编排界面，最多做极少非结构性调整；正式 Contact-based HITL node 配置 UI、Contact 管理 UI 和 IM binding/config UI 不属于 demo 范围。
+- [x] 9.1 Demo 前复用现有前端 HumanInput v1 编排界面，最多做极少非结构性调整；正式 Contact-based HITL node 配置 UI、Contact 管理 UI 和 IM binding/config UI 不属于 demo 范围。
 - [ ] 9.2 后续在 Web 侧新增 Contact 管理和 Contact recipient 配置入口，使用现有 i18n 规范添加文案。
 - [ ] 9.3 展示当前 account 的 IM binding status，并支持 revoke。
 - [ ] 9.4 增加 IM app config/install UI，包括 Cloud Slack ISV install 和 self-built credential 配置。

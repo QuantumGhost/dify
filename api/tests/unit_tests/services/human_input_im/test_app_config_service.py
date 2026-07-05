@@ -174,6 +174,54 @@ def test_resolve_im_app_context_ee_falls_back_when_tenant_config_store_is_unavai
     assert context.event_mode == IMEventMode.LONG_CONNECTION
 
 
+def test_resolve_im_app_context_ee_falls_back_when_flask_app_context_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "SELF_HOSTED")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", True)
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_APP_ID", "cli_a")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_APP_SECRET", "secret")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_EVENT_MODE", "long_connection")
+    monkeypatch.setattr("services.human_input_im.app_config_service.has_app_context", lambda: False)
+
+    context = resolve_im_app_context(provider=IMProvider.FEISHU, tenant_id="tenant-1")
+
+    assert context.status == IMAppConfigStatus.CONFIGURED
+    assert context.install_mode == IMInstallMode.SELF_BUILT
+    assert context.scope_type == IMScopeType.DEPLOYMENT
+    assert context.scope_id == "deployment"
+    assert context.token_status == IMTokenStatus.NOT_APPLICABLE
+    assert context.install_status == IMInstallStatus.NOT_APPLICABLE
+    assert context.event_mode == IMEventMode.LONG_CONNECTION
+
+
+def test_resolve_im_app_context_ee_falls_back_when_sqlalchemy_extension_is_unbound(monkeypatch) -> None:
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "SELF_HOSTED")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", True)
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_APP_ID", "cli_a")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_APP_SECRET", "secret")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_EVENT_MODE", "long_connection")
+
+    app_token = object()
+    monkeypatch.setattr("services.human_input_im.app_config_service.has_app_context", lambda: True)
+    monkeypatch.setattr(
+        "services.human_input_im.app_config_service.current_app",
+        SimpleNamespace(_get_current_object=lambda: app_token),
+    )
+    monkeypatch.setattr(
+        "services.human_input_im.app_config_service.db",
+        SimpleNamespace(_app_engines={}, engine=object()),
+    )
+
+    context = resolve_im_app_context(provider=IMProvider.FEISHU, tenant_id="tenant-1")
+
+    assert context.status == IMAppConfigStatus.CONFIGURED
+    assert context.install_mode == IMInstallMode.SELF_BUILT
+    assert context.scope_type == IMScopeType.DEPLOYMENT
+    assert context.scope_id == "deployment"
+    assert context.token_status == IMTokenStatus.NOT_APPLICABLE
+    assert context.install_status == IMInstallStatus.NOT_APPLICABLE
+    assert context.event_mode == IMEventMode.LONG_CONNECTION
+
+
 def test_resolve_im_app_context_ee_propagates_unexpected_store_errors(monkeypatch) -> None:
     monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "SELF_HOSTED")
     monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", True)

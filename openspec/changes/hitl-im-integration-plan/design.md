@@ -186,6 +186,7 @@ callback 授权不能只看 Account membership，必须确认 callback provider 
 
 - tenant self-built override 和 lifecycle-managed install 不共用同一张 provider-neutral 配置表；前者持有 self-built credential / callback material，后者持有 install status 与 token lifecycle。这样 future Slack ISV、钉钉企业自建和飞书企业自建不会把 nullable provider-specific 字段继续堆到同一张“万能表”里。
 - resolver 必须显式区分 `found`、`not_found` 和 `store_unavailable`。只有明确的临时兼容场景（例如当前进程没有绑定 Flask app context，或新表尚未迁移完成）才允许 fallback 到 deployment-global config；真实的持久化错误不能静默吞掉再伪装成“没有 tenant override”。
+- management API 也沿用这条分层：tenant self-built config 使用独立写/删/读接口，installation lifecycle 使用独立只读接口返回 redacted status；不要用一个“统一 IM app config API” 假装所有 provider 都有相同的 install/write path。
 
 运行时解析：
 
