@@ -98,4 +98,4 @@
 - [ ] 11.3 手工跑通飞书 demo：绑定账号、触发 HITL pause、飞书收到表单、飞书内提交、Dify workflow 继续执行。
 - [ ] 11.4 手工验证 IM 未绑定时 fallback email，email 缺失时 skip 并写入 `process_data`。
 - [ ] 11.5 手工验证 first valid submission wins 和卡片状态异步补偿。
-- [ ] 11.6 记录 demo 后补齐项，包括正式新 NodeType 前端、v1-to-v2 compatibility mapping 收敛计划、旧 HITL opt-in migration、更多 provider 和 EE 跨 Workspace Contact 决策。
+- [x] 11.6 记录 demo 后补齐项，包括正式新 NodeType 前端、v1-to-v2 compatibility mapping 收敛计划、旧 HITL opt-in migration、更多 provider 和 EE 跨 Workspace Contact 决策。

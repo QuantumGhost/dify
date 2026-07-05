@@ -296,6 +296,19 @@ Provider callback 层按 provider event id 去重。Form submission 层保证 fo
 6. 后续单独设计 Contact 自动同步、lazy materialization、正式迁移/投影策略，以及 opt-in migration。
 7. 回滚策略：关闭 IM app config 或 feature flag；旧 HITL、Web/Email submission 和现有 workflow resume 不受影响。
 
+## Post-Demo Follow-Ups
+
+本期 demo slice 之后，后续实现需要按下面 4 组主题继续收敛，避免把当前过渡路径长期产品化：
+
+1. 正式新 NodeType 前端
+   需要新增 Contact recipient 配置 UI、Contact 管理 UI、IM binding/config UI，以及对应 i18n 文案与交互稿。当前 demo 明确不包含这部分。
+2. v1-to-v2 compatibility mapping 收敛计划
+   当前 runtime 仍接受前端提交的 HumanInput v1 配置，并在执行前映射到 Contact-based v2 runtime model。正式 v2 schema 与前端可用后，应删除这条 mapping，而不是继续把 `delivery_methods` / v1 shape 当长期输入契约。
+3. 旧 HITL opt-in migration
+   需要单独设计旧 HITL 到新 Contact-based HITL 的 opt-in 升级路径，包括草稿/已发布 workflow 的迁移界面、回滚策略，以及 runtime snapshot 兼容边界。
+4. 更多 provider 与 EE 跨 Workspace Contact 决策
+   需要补齐 Slack ISV install/uninstall/token refresh 的真实 provider path、钉钉 tenant self-built 的实际 resolver/runtime 接入，以及 EE 跨 Workspace Contact 的授权、失效和审计语义。
+
 ## Open Questions
 
 - 截至 2026-07-05，当前 workspace/context 内没有可直接复核的外部飞书 wiki PRD 或 Figma HITL node artifact；本次 planning/doc slice 只能依据仓库内 OpenSpec 文档和当前分支已有实现上下文推进。
