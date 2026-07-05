@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 
 import pytest
+from graphon.runtime import VariablePool
 
 from tasks import mail_human_input_delivery_task as task_module
 
@@ -102,7 +103,7 @@ def test_dispatch_human_input_email_task_replaces_body_variables(monkeypatch: py
         recipients=[task_module._EmailRecipient(email="user@example.com", token="token-1")],
     )
 
-    variable_pool = task_module.VariablePool()
+    variable_pool = VariablePool()
     variable_pool.add(["node1", "value"], "OK")
 
     monkeypatch.setattr(task_module, "mail", mail)
@@ -112,7 +113,7 @@ def test_dispatch_human_input_email_task_replaces_body_variables(monkeypatch: py
         lambda _tenant_id, **_kwargs: SimpleNamespace(human_input_email_delivery_enabled=True),
     )
     monkeypatch.setattr(task_module, "_load_email_jobs", lambda _session, _form: [job])
-    monkeypatch.setattr(task_module, "_load_variable_pool", lambda _workflow_run_id: variable_pool)
+    monkeypatch.setattr(task_module, "load_human_input_variable_pool", lambda _workflow_run_id: variable_pool)
 
     task_module.dispatch_human_input_email_task(
         form_id="form-1",
@@ -145,7 +146,7 @@ def test_dispatch_human_input_email_task_sanitizes_subject(
         lambda _tenant_id, **_kwargs: SimpleNamespace(human_input_email_delivery_enabled=True),
     )
     monkeypatch.setattr(task_module, "_load_email_jobs", lambda _session, _form: [job])
-    monkeypatch.setattr(task_module, "_load_variable_pool", lambda _workflow_run_id: None)
+    monkeypatch.setattr(task_module, "load_human_input_variable_pool", lambda _workflow_run_id: None)
 
     task_module.dispatch_human_input_email_task(
         form_id="form-1",

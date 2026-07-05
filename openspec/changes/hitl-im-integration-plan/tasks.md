@@ -93,8 +93,8 @@
 
 ## 11. Verification
 
-- [ ] 11.1 运行 backend targeted unit tests，覆盖新增 Contact、app config、binding、provider adapter、delivery、callback 和 controller。
-- [ ] 11.2 运行现有 Human Input 相关 unit tests，确认旧 HITL 没有回归。
+- [x] 11.1 运行 backend targeted unit tests，覆盖新增 Contact、app config、binding、provider adapter、delivery、callback 和 controller。
+- [x] 11.2 运行现有 Human Input 相关 unit tests，确认旧 HITL 没有回归。
 - [ ] 11.3 手工跑通飞书 demo：绑定账号、触发 HITL pause、飞书收到表单、飞书内提交、Dify workflow 继续执行。
 - [ ] 11.4 手工验证 IM 未绑定时 fallback email，email 缺失时 skip 并写入 `process_data`。
 - [ ] 11.5 手工验证 first valid submission wins 和卡片状态异步补偿。
