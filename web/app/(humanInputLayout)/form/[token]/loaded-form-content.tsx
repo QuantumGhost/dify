@@ -34,10 +34,9 @@ const LoadedFormContent = ({
   const placeholderRenderedFormInputs = getRenderedFormInputs(formData.inputs, formData.form_content) as ShareFormInput[]
   const renderedInputNames = new Set(placeholderRenderedFormInputs.map(input => input.output_variable_name))
   const unreferencedRequiredInputs = (formData.inputs as ShareFormInput[]).filter(input => (
-    input.required === true && !renderedInputNames.has(input.output_variable_name)
+    input.required !== false && !renderedInputNames.has(input.output_variable_name)
   ))
   const renderedFormInputs = [...placeholderRenderedFormInputs, ...unreferencedRequiredInputs]
-  const requiredRenderedFormInputs = renderedFormInputs.filter(input => input.required !== false)
   const [inputs, setInputs] = useState<Record<string, HumanInputFieldValue>>(() =>
     initializeInputs(renderedFormInputs, formData.resolved_default_values),
   )
@@ -70,7 +69,7 @@ const LoadedFormContent = ({
     onSubmit(inputs, actionID, formData.inputs)
   }
 
-  const isActionDisabled = isSubmitting || hasInvalidRequiredHumanInput(requiredRenderedFormInputs, inputs)
+  const isActionDisabled = isSubmitting || hasInvalidRequiredHumanInput(renderedFormInputs, inputs)
   const site = formData.site.site
 
   return (

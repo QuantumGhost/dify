@@ -412,6 +412,39 @@ describe('Human input share form', () => {
     expect(approveButton).toBeEnabled()
   })
 
+  it('should append omitted inputs with implicit required semantics and block submit until they are filled', async () => {
+    const user = userEvent.setup()
+    mockUseGetHumanInputForm.mockReturnValue({
+      data: {
+        ...formData,
+        form_content: '{{#$output.summary#}}',
+        inputs: [
+          formData.inputs[0]!,
+          {
+            ...formData.inputs[0]!,
+            output_variable_name: 'implicit_required_follow_up',
+            default: {
+              type: 'constant',
+              value: '',
+              selector: [],
+            },
+          },
+        ],
+      } as FormData,
+      isLoading: false,
+      error: null,
+    })
+
+    render(<FormContent />)
+
+    const approveButton = screen.getByRole('button', { name: 'Approve' })
+    expect(screen.getByText('field:implicit_required_follow_up')).toBeInTheDocument()
+    expect(approveButton).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'share-update-implicit_required_follow_up' }))
+    expect(approveButton).toBeEnabled()
+  })
+
   it('should preserve inline placeholder order and append unreferenced required inputs after all inline content', () => {
     mockUseGetHumanInputForm.mockReturnValue({
       data: {
@@ -477,7 +510,7 @@ describe('Human input share form', () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
   })
 
-  it('should not block submit for optional inputs rendered in form content when they are empty', () => {
+  it('should block submit for optional inputs rendered in form content when they are empty', () => {
     mockUseGetHumanInputForm.mockReturnValue({
       data: {
         ...formData,
@@ -503,7 +536,7 @@ describe('Human input share form', () => {
     render(<FormContent />)
 
     expect(screen.getByText('field:optional_follow_up')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
   })
 
   it('should hide branding when remove_webapp_brand is enabled', () => {

@@ -717,7 +717,7 @@ class HumanInputFeishuService:
                     "tag": "plain_text",
                     "content": definition.node_title or "Human Input",
                 },
-                "template": "orange",
+                "template": "blue",
             },
             "body": {
                 "elements": [
