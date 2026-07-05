@@ -266,7 +266,8 @@ def test_submit_form_by_token_calls_repository_and_enqueue(
     repo = MagicMock(spec=HumanInputFormSubmissionRepository)
     repo.get_by_token.return_value = sample_form_record
     repo.mark_submitted.return_value = sample_form_record
-    service = HumanInputService(session_factory, form_repository=repo)
+    feishu_service = MagicMock()
+    service = HumanInputService(session_factory, form_repository=repo, human_input_feishu_service=feishu_service)
     enqueue_spy = mocker.patch.object(service, "enqueue_resume")
 
     service.submit_form_by_token(
@@ -285,6 +286,10 @@ def test_submit_form_by_token_calls_repository_and_enqueue(
     assert call_kwargs["selected_action_id"] == "submit"
     assert call_kwargs["form_data"] == {"field": "value"}
     assert call_kwargs["submission_end_user_id"] == "end-user-id"
+    feishu_service.sync_completed_delivery_cards_for_form.assert_called_once_with(
+        form_id=sample_form_record.form_id,
+        record=sample_form_record,
+    )
     enqueue_spy.assert_called_once_with(sample_form_record.workflow_run_id)
 
 

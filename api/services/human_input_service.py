@@ -159,11 +159,13 @@ class HumanInputService:
         self,
         session_factory: sessionmaker[Session] | Engine,
         form_repository: HumanInputFormSubmissionRepository | None = None,
+        human_input_feishu_service=None,
     ):
         if isinstance(session_factory, Engine):
             session_factory = sessionmaker(bind=session_factory)
         self._session_factory = session_factory
         self._form_repository = form_repository or HumanInputFormSubmissionRepository()
+        self._human_input_feishu_service = human_input_feishu_service
 
     def get_form_by_token(self, form_token: str) -> Form | None:
         record = self._form_repository.get_by_token(form_token)
@@ -223,12 +225,21 @@ class HumanInputService:
 
         if result.form_kind != HumanInputFormKind.RUNTIME:
             return
+        self._sync_completed_feishu_cards(result)
         # A RUNTIME form is owned by a workflow run (workflow Agent node) or a
         # conversation (ENG-635: Agent v2 chat). Route the resume accordingly.
         if result.workflow_run_id is not None:
             self.enqueue_resume(result.workflow_run_id)
         elif result.conversation_id is not None:
             self.enqueue_agent_app_resume(conversation_id=result.conversation_id, form_id=result.form_id)
+
+    def _sync_completed_feishu_cards(self, form: HumanInputFormRecord) -> None:
+        from services.human_input_feishu_service import HumanInputFeishuService
+
+        feishu_service = self._human_input_feishu_service
+        if feishu_service is None:
+            feishu_service = HumanInputFeishuService(session_factory=self._session_factory)
+        feishu_service.sync_completed_delivery_cards_for_form(form_id=form.form_id, record=form)
 
     def ensure_form_active(self, form: Form) -> None:
         if form.submitted:

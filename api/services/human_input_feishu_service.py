@@ -250,6 +250,20 @@ class HumanInputFeishuService:
         delivery.status = HumanInputFeishuDeliveryStatus.COMPLETED
         delivery.completed_at = naive_utc_now()
 
+    def sync_completed_delivery_cards_for_form(self, *, form_id: str, record) -> None:
+        session_factory = self._session_factory
+        if session_factory is None or not self.is_configured():
+            return
+
+        with session_factory() as session:
+            self._sync_completed_delivery_cards(
+                session=session,
+                form_id=form_id,
+                current_message_id=None,
+                record=record,
+            )
+            session.commit()
+
     def _send_to_member_recipient(
         self,
         *,
