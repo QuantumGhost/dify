@@ -8,6 +8,7 @@ from services.human_input_im.app_config_service import (
     IMEventMode,
     IMTokenStatus,
 )
+from services.human_input_im.callback_service import IMBindingCompletionResult
 from services.human_input_im.feishu_long_connection_service import FeishuLongConnectionBindingConsumer
 
 
@@ -64,16 +65,21 @@ def test_long_connection_consumer_builds_binding_completion_event() -> None:
 
 
 def test_long_connection_consumer_delegates_to_callback_service() -> None:
-    callback_service = type("CallbackService", (), {})()
+    im_service = type("IMService", (), {})()
     captured: dict[str, object] = {}
+    completion_result = IMBindingCompletionResult(
+        binding=None,
+        duplicate_event=True,
+        acknowledgement={"result": "accepted", "event_id": "event-1"},
+    )
 
-    def _complete_binding(*, session, event):
+    def _handle_binding_completion_callback(*, session, event):
         captured["session"] = session
         captured["event"] = event
-        return "binding"
+        return completion_result
 
-    callback_service.complete_binding = _complete_binding
-    consumer = FeishuLongConnectionBindingConsumer(callback_service=callback_service)
+    im_service.handle_binding_completion_callback = _handle_binding_completion_callback
+    consumer = FeishuLongConnectionBindingConsumer(im_service=im_service)
     session = object()
     result = consumer.consume_binding_completion_event(
         session=session,
@@ -86,6 +92,6 @@ def test_long_connection_consumer_delegates_to_callback_service() -> None:
         },
     )
 
-    assert result == "binding"
+    assert result == completion_result
     assert captured["session"] is session
     assert captured["event"].event_id == "event-1"

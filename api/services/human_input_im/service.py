@@ -9,7 +9,6 @@ callback slices; it does not own transport, persistence, or SDK lifecycles.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from models.im_integration import IMProvider
@@ -18,6 +17,7 @@ from services.human_input_im.app_config_service import IMAppContext
 from services.human_input_im.callback_service import (
     HumanInputIMCallbackService,
     IMBindingCompletionEvent,
+    IMBindingCompletionResult,
     IMFormSubmissionSubmitter,
     IMParsedSubmissionPayload,
     IMSubmissionCallbackContext,
@@ -33,12 +33,7 @@ from services.human_input_im.provider_types import (
 )
 
 
-class BindingCompletionCallbackResult(BaseModel):
-    binding: IMBindingRecord | None = None
-    duplicate_event: bool = False
-    acknowledgement: dict[str, str]
-
-    model_config = ConfigDict(frozen=True)
+BindingCompletionCallbackResult = IMBindingCompletionResult
 
 
 class HumanInputIMService:
@@ -135,18 +130,7 @@ class HumanInputIMService:
         session: Session,
         event: IMBindingCompletionEvent,
     ) -> BindingCompletionCallbackResult:
-        binding = self._callback_service.complete_binding(session=session, event=event)
-        if binding is None:
-            return BindingCompletionCallbackResult(
-                binding=None,
-                duplicate_event=True,
-                acknowledgement=self._callback_service.acknowledge_event(event_id=event.event_id),
-            )
-        return BindingCompletionCallbackResult(
-            binding=binding,
-            duplicate_event=False,
-            acknowledgement=self._callback_service.acknowledge_event(event_id=event.event_id),
-        )
+        return self._callback_service.complete_binding(session=session, event=event)
 
     def handle_submission_callback(
         self,

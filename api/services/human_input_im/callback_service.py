@@ -45,6 +45,22 @@ class IMBindingCompletionEvent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class IMBindingCompletionResult(BaseModel):
+    """Normalized binding-completion outcome for provider-authenticated events.
+
+    Transport adapters should authenticate provider callbacks before building an
+    `IMBindingCompletionEvent`. This result keeps the post-authentication
+    application-layer outcome explicit so HTTP routes and long-connection
+    consumers can share one success/duplicate-event contract.
+    """
+
+    binding: IMBindingRecord | None = None
+    duplicate_event: bool = False
+    acknowledgement: dict[str, str]
+
+    model_config = ConfigDict(frozen=True)
+
+
 class IMInteractionInputMapping(BaseModel):
     output_variable_name: str
     type: str | None = None
@@ -157,10 +173,15 @@ class HumanInputIMCallbackService:
         *,
         session: Session,
         event: IMBindingCompletionEvent,
-    ) -> IMBindingRecord | None:
+    ) -> IMBindingCompletionResult:
         if not self.record_event_once(session=session, provider=event.provider, event_id=event.event_id):
-            return None
-        return self._orchestration_service.complete_binding_session(
+            return IMBindingCompletionResult(
+                binding=None,
+                duplicate_event=True,
+                acknowledgement=self.acknowledge_event(event_id=event.event_id),
+            )
+
+        binding = self._orchestration_service.complete_binding_session(
             session=session,
             token=event.binding_session_token,
             provider_workspace_id=event.provider_workspace_id,
@@ -168,6 +189,11 @@ class HumanInputIMCallbackService:
             provider_union_id=event.provider_union_id,
             provider_user_display_name=event.provider_user_display_name,
             provider_user_avatar_url=event.provider_user_avatar_url,
+        )
+        return IMBindingCompletionResult(
+            binding=binding,
+            duplicate_event=False,
+            acknowledgement=self.acknowledge_event(event_id=event.event_id),
         )
 
     def record_event_once(

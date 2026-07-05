@@ -38,7 +38,7 @@
 - [x] 5.2 实现 binding repository，普通唯一键保护同一 credential scope + provider workspace user 不重复绑定。
 - [x] 5.3 在 service 层事务校验第一期每个 member Contact/Account 只有一种 active IM。
 - [x] 5.4 实现创建 time-limited binding session 的 service。
-- [ ] 5.5 实现 provider-authenticated binding callback，完成 Account 与 IM identity 的 active binding。
+- [x] 5.5 实现 provider-authenticated binding callback，完成 Account 与 IM identity 的 active binding。
 - [x] 5.6 实现 binding inspect/revoke API，用于当前 account 查看和撤销绑定。
 - [ ] 5.7 添加 binding tests，覆盖重复绑定、多 provider 预留、过期 session、revoke 后不可投递和 MySQL-compatible 约束。
 
@@ -66,7 +66,7 @@
 
 ## 8. IM Callback And Workflow Resume
 
-- [ ] 8.1 新增外部 webhook controller，例如 `api/controllers/trigger/human_input_im.py`。
+- [x] 8.1 新增外部 webhook controller，例如 `api/controllers/trigger/human_input_im.py`。
 - [x] 8.2 在 callback service 中验证 provider event id 幂等，重复事件返回成功 ACK。
 - [x] 8.3 校验 callback provider user 与 active binding、Contact snapshot、original recipient、provider workspace 一致。
 - [x] 8.4 使用 interaction mapping snapshot 将 provider submission 映射为 `HumanInputService.submit_form_by_token` 参数，并按 actor 类型写入 `submission_user_id` 或 `submission_end_user_id`。

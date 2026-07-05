@@ -2,8 +2,9 @@
 
 This module intentionally does not start or manage the real Feishu SDK client
 yet. Future transport integration should use the official SDK for long
-connection event delivery, then normalize raw provider events into the
-application-layer callback commands defined here.
+connection event delivery, authenticate provider payloads there, then
+normalize raw provider events into the shared application-layer callback
+commands defined here.
 """
 
 from __future__ import annotations
@@ -13,12 +14,15 @@ from sqlalchemy.orm import Session
 from models.im_integration import IMProvider
 from services.errors.im_binding import IMBindingValidationError
 from services.human_input_im.app_config_service import IMAppContext, IMAppConfigStatus, IMEventMode
-from services.human_input_im.callback_service import HumanInputIMCallbackService, IMBindingCompletionEvent
+from services.human_input_im.callback_service import IMBindingCompletionEvent, IMBindingCompletionResult
+from services.human_input_im.service import HumanInputIMService
 
 
 class FeishuLongConnectionBindingConsumer:
-    def __init__(self, callback_service: HumanInputIMCallbackService | None = None) -> None:
-        self._callback_service = callback_service or HumanInputIMCallbackService()
+    """Normalize authenticated Feishu long-connection events into phase-1 binding commands."""
+
+    def __init__(self, im_service: HumanInputIMService | None = None) -> None:
+        self._im_service = im_service or HumanInputIMService()
 
     def can_consume(self, *, app_context: IMAppContext) -> bool:
         return (
@@ -56,6 +60,6 @@ class FeishuLongConnectionBindingConsumer:
         session: Session,
         app_context: IMAppContext,
         raw_event: dict[str, str],
-    ):
+    ) -> IMBindingCompletionResult:
         event = self.build_binding_completion_event(app_context=app_context, raw_event=raw_event)
-        return self._callback_service.complete_binding(session=session, event=event)
+        return self._im_service.handle_binding_completion_callback(session=session, event=event)

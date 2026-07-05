@@ -8,7 +8,8 @@ from core.repositories.human_input_repository import FormNotFoundError as Reposi
 from models.base import TypeBase
 from models.human_input import RecipientType
 from models.im_delivery import IMMessageCardStatus, IMMessageCorrelation, IMMessageDeliveryStatus, IMProcessedCallbackEvent
-from models.im_integration import IMProvider
+from models.im_integration import IMBindingStatus, IMInstallMode, IMProvider, IMScopeType
+from services.entities.im_binding_entities import IMBindingRecord
 from services.errors.im_binding import IMBindingValidationError
 from services.human_input_service import FormExpiredError, FormSubmittedError, InvalidFormDataError
 from services.human_input_im.callback_service import (
@@ -16,6 +17,7 @@ from services.human_input_im.callback_service import (
     IMFormSubmissionSubmitter,
     HumanInputIMSubmissionCommand,
     IMBindingCompletionEvent,
+    IMBindingCompletionResult,
     IMInteractionActionMapping,
     IMInteractionInputMapping,
     IMInteractionMappingSnapshot,
@@ -28,7 +30,7 @@ from services.human_input_im.provider_types import IMSubmissionEvent
 from services.human_input_im.submission_result_service import HumanInputIMSubmissionResultService
 
 
-def test_callback_service_delegates_binding_completion() -> None:
+def test_callback_service_completes_binding_with_acknowledgement() -> None:
     event = IMBindingCompletionEvent(
         provider=IMProvider.FEISHU,
         event_id="event-1",
@@ -40,7 +42,20 @@ def test_callback_service_delegates_binding_completion() -> None:
         provider_user_avatar_url=None,
     )
     session = MagicMock()
-    binding = object()
+    binding = IMBindingRecord(
+        id="binding-1",
+        account_id="account-1",
+        provider=IMProvider.FEISHU,
+        install_mode=IMInstallMode.SELF_BUILT,
+        scope_type=IMScopeType.DEPLOYMENT,
+        scope_id="deployment",
+        provider_workspace_id="ws-1",
+        provider_user_id="user-1",
+        provider_union_id="union-1",
+        provider_user_display_name="User 1",
+        provider_user_avatar_url=None,
+        status=IMBindingStatus.ACTIVE,
+    )
     orchestration_service = MagicMock()
     orchestration_service.complete_binding_session.return_value = binding
 
@@ -48,7 +63,11 @@ def test_callback_service_delegates_binding_completion() -> None:
     service.record_event_once = lambda **_: True
     result = service.complete_binding(session=session, event=event)
 
-    assert result is binding
+    assert result == IMBindingCompletionResult(
+        binding=binding,
+        duplicate_event=False,
+        acknowledgement={"result": "accepted", "event_id": "event-1"},
+    )
     orchestration_service.complete_binding_session.assert_called_once_with(
         session=session,
         token="imbs_token",
@@ -83,7 +102,7 @@ def test_callback_service_records_duplicate_event_ids_as_already_processed() -> 
     assert second_result is False
 
 
-def test_callback_service_returns_none_for_duplicate_binding_event() -> None:
+def test_callback_service_acknowledges_duplicate_binding_event() -> None:
     event = IMBindingCompletionEvent(
         provider=IMProvider.FEISHU,
         event_id="event-1",
@@ -97,7 +116,11 @@ def test_callback_service_returns_none_for_duplicate_binding_event() -> None:
     service.record_event_once = lambda **_: False
     result = service.complete_binding(session=session, event=event)
 
-    assert result is None
+    assert result == IMBindingCompletionResult(
+        binding=None,
+        duplicate_event=True,
+        acknowledgement={"result": "accepted", "event_id": "event-1"},
+    )
 
 
 def test_callback_service_rejects_submission_when_binding_user_mismatches() -> None:

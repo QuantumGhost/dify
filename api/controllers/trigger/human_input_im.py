@@ -1,16 +1,13 @@
-import logging
-
 from flask import jsonify, request
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from werkzeug.exceptions import BadRequest
 
 from controllers.trigger import bp
 from extensions.ext_database import db
 from models.im_integration import IMProvider
 from services.errors.im_binding import IMBindingValidationError
-from services.human_input_im.callback_service import HumanInputIMCallbackService, IMBindingCompletionEvent
-
-logger = logging.getLogger(__name__)
+from services.human_input_im.callback_service import IMBindingCompletionEvent
+from services.human_input_im.service import HumanInputIMService
 
 
 class IMBindingCompletionPayload(BaseModel):
@@ -29,7 +26,9 @@ def handle_im_binding_completion(provider: str):
 
     Phase-1 demo uses Feishu long-connection mode and does not depend on this
     HTTP route. This route exists only as a transport-neutral skeleton for
-    future webhook-capable integrations.
+    future webhook-capable integrations. Real provider adapters should verify
+    provider signatures/state via the official SDK or equivalent auth layer
+    before constructing this normalized application-layer event.
     """
 
     try:
@@ -49,13 +48,15 @@ def handle_im_binding_completion(provider: str):
         provider_user_avatar_url=payload.provider_user_avatar_url,
     )
 
-    service = HumanInputIMCallbackService()
+    service = HumanInputIMService()
     try:
-        binding = service.complete_binding(session=db.session, event=event)
+        result = service.handle_binding_completion_callback(session=db.session, event=event)
     except IMBindingValidationError as exc:
         raise BadRequest(str(exc))
 
     db.session.commit()
-    if binding is None:
-        return jsonify(service.acknowledge_event(event_id=event.event_id)), 200
-    return jsonify({"result": "accepted", "binding_id": binding.id}), 202
+    if result.duplicate_event:
+        return jsonify(result.acknowledgement), 200
+    if result.binding is None:
+        raise BadRequest("binding completion callback did not produce a binding")
+    return jsonify({**result.acknowledgement, "binding_id": result.binding.id}), 202
