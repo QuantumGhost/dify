@@ -389,7 +389,10 @@ class HumanInputFeishuService:
     def _extract_log_id(cls, response: Any, error: Any) -> str | None:
         response_log_id = getattr(response, "get_log_id", None)
         if callable(response_log_id):
-            log_id = response_log_id()
+            try:
+                log_id = response_log_id()
+            except Exception:
+                log_id = None
             if log_id:
                 return str(log_id)
 
@@ -404,7 +407,10 @@ class HumanInputFeishuService:
     def _extract_troubleshooter(cls, response: Any, error: Any) -> str | None:
         response_troubleshooter = getattr(response, "get_troubleshooter", None)
         if callable(response_troubleshooter):
-            troubleshooter = response_troubleshooter()
+            try:
+                troubleshooter = response_troubleshooter()
+            except Exception:
+                troubleshooter = None
             if troubleshooter:
                 return str(troubleshooter)
 

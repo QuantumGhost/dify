@@ -349,6 +349,74 @@ def test_dispatch_form_notifications_records_feishu_validation_error_details(
     assert "20260705abc" in caplog.text
 
 
+def test_dispatch_form_notifications_handles_sdk_error_dict_with_broken_troubleshooter_accessor(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    recipient = SimpleNamespace(
+        id="recipient-1",
+        recipient_payload=EmailMemberRecipientPayload(
+            user_id="acc-1",
+            contact_id="contact-1",
+            name="Demo User",
+            email="demo@example.com",
+        ).model_dump_json(),
+        access_token="token-1",
+    )
+    session = MagicMock()
+    session.scalars.return_value = _FakeRecipientQuery([recipient])
+    session.scalar.return_value = None
+    form = SimpleNamespace(
+        id="form-1",
+        tenant_id="tenant-1",
+        form_definition=json.dumps(_build_definition().model_dump(mode="json")),
+    )
+    response = SimpleNamespace(
+        code=230099,
+        msg="field validation failed",
+        data=None,
+        error={
+            "log_id": "20260705xyz",
+            "troubleshooter": "https://feishu.example/troubleshoot",
+            "field_violations": [
+                {
+                    "field": "content.body.elements[1]",
+                    "value": '{"tag":"form"}',
+                    "description": "invalid tag form",
+                }
+            ],
+        },
+        get_log_id=lambda: None,
+        get_troubleshooter=lambda: (_ for _ in ()).throw(
+            AttributeError("'dict' object has no attribute 'troubleshooter'")
+        ),
+    )
+    client = MagicMock()
+    client.im.v1.message.create.return_value = response
+    monkeypatch.setattr(
+        MemberContactService,
+        "resolve_workspace_member_binding",
+        lambda self, _session, tenant_id, account_id: SimpleNamespace(
+            tenant_id=tenant_id,
+            account_id=account_id,
+            contact_id="contact-1",
+            feishu_open_id="ou_123",
+        ),
+    )
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_ID", "cli_test")
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_SECRET", "secret")
+    service = HumanInputFeishuService(client=client)
+
+    with caplog.at_level(logging.ERROR):
+        service.dispatch_form_notifications(session=session, form=form, variable_pool=None)
+
+    delivery = session.add.call_args.args[0]
+    assert delivery.status == HumanInputFeishuDeliveryStatus.FAILED
+    assert "20260705xyz" in delivery.failure_reason
+    assert "https://feishu.example/troubleshoot" in delivery.failure_reason
+    assert "20260705xyz" in caplog.text
+
+
 def test_dispatch_form_notifications_logs_context_when_feishu_send_raises(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
