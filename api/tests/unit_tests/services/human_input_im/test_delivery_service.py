@@ -215,7 +215,7 @@ def test_delivery_service_bound_member_uses_im_send_and_records_failed_correlati
     assert "File inputs require the web form fallback:" in command["content"]
     assert "attachment, attachments" in command["content"]
     assert "Actions:" in command["content"]
-    assert "- Approve (`action_approve`)" in command["content"]
+    assert "- Approve (`provider_action_approve`)" in command["content"]
     assert "Web form: " in command["content"]
 
     correlation = next(obj for obj in session.added if isinstance(obj, IMMessageCorrelation))
@@ -225,12 +225,12 @@ def test_delivery_service_bound_member_uses_im_send_and_records_failed_correlati
     assert snapshot["schema_version"] == 1
     assert snapshot["interaction_id"] == command["metadata"]["interaction_id"]
     assert snapshot["inputs"] == {
-        "input_reason": {"output_variable_name": "reason", "type": "paragraph"},
-        "input_decision": {"output_variable_name": "decision", "type": "select"},
+        "provider_component_reason": {"output_variable_name": "reason", "type": "paragraph"},
+        "provider_component_decision": {"output_variable_name": "decision", "type": "select"},
     }
     assert snapshot["actions"] == {
-        "action_approve": {"action_id": "approve"},
-        "action_reject": {"action_id": "reject"},
+        "provider_action_approve": {"action_id": "approve"},
+        "provider_action_reject": {"action_id": "reject"},
     }
     assert recorded_statuses == [
         {

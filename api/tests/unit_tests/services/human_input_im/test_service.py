@@ -191,5 +191,6 @@ def _build_app_context() -> IMAppContext:
         status=IMAppConfigStatus.CONFIGURED,
         token_status=IMTokenStatus.NOT_APPLICABLE,
         app_id="cli_a",
+        app_secret="secret",
         app_secret_configured=True,
     )

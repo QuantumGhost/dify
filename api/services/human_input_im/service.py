@@ -3,8 +3,9 @@
 This facade composes the existing orchestration and callback services into one
 stable application-layer entry point. Provider-specific transport should still
 prefer official SDKs when available. The facade only coordinates provider
-lookup, app-context resolution, and delegation into the existing binding and
-callback slices; it does not own transport, persistence, or SDK lifecycles.
+lookup, app-context resolution for normalized commands, and delegation into the
+existing binding and callback slices; it does not own transport verification,
+raw callback parsing, persistence, or SDK lifecycles.
 """
 
 from __future__ import annotations
@@ -19,13 +20,14 @@ from services.human_input_im.callback_service import (
     IMBindingCompletionEvent,
     IMBindingCompletionResult,
     IMFormSubmissionSubmitter,
-    IMParsedSubmissionPayload,
     IMSubmissionCallbackContext,
     IMSubmissionCallbackResult,
 )
 from services.human_input_im.orchestration_service import HumanInputIMOrchestrationService
 from services.human_input_im.provider_types import (
     IMCardUpdateCommand,
+    IMInteractionRenderPayload,
+    IMParsedSubmissionPayload,
     IMSendCommand,
     IMSendResult,
     IMSubmissionEvent,
@@ -84,6 +86,7 @@ class HumanInputIMService:
         title: str,
         content: str,
         metadata: dict[str, str] | None = None,
+        interaction_payload: IMInteractionRenderPayload | None = None,
     ) -> IMSendResult:
         resolved_provider, app_context = self._resolve_provider_command_context(
             provider=provider,
@@ -98,6 +101,7 @@ class HumanInputIMService:
                 title=title,
                 content=content,
                 metadata=dict(metadata or {}),
+                interaction_payload=interaction_payload,
             )
         )
 

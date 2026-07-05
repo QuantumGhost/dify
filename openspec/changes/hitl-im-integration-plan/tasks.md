@@ -58,11 +58,11 @@
 
 ## 7. Feishu Self-Built Demo Adapter
 
-- [ ] 7.1 实现飞书自建应用 signature/challenge verification。
-- [ ] 7.2 实现飞书 message/card 发送 API 调用与错误映射。
-- [ ] 7.3 实现飞书 interactive form callback parser，输出 provider-local component/action id，不直接输出 Dify field/action id。
-- [ ] 7.4 实现飞书 submitted/error card update。
-- [ ] 7.5 添加飞书 adapter contract tests，使用 fixture payload 覆盖 valid callback、invalid signature、malformed payload、unknown component、challenge 和 duplicate event。
+- [x] 7.1 实现飞书自建应用 signature/challenge verification。
+- [x] 7.2 实现飞书 message/card 发送 API 调用与错误映射。
+- [x] 7.3 实现飞书 interactive form callback parser，输出 provider-local component/action id，不直接输出 Dify field/action id。
+- [x] 7.4 实现飞书 submitted/error card update。
+- [x] 7.5 添加飞书 adapter contract tests，使用 fixture payload 覆盖 valid callback、invalid signature、malformed payload、unknown component、challenge 和 duplicate event。
 
 ## 8. IM Callback And Workflow Resume
 

@@ -41,7 +41,10 @@ class IMAppContext(BaseModel):
     token_status: IMTokenStatus
     event_mode: IMEventMode | None = None
     app_id: str | None = None
+    app_secret: str | None = None
     app_secret_configured: bool = False
+    verification_token: str | None = None
+    encrypt_key: str | None = None
     provider_workspace_id: str | None = None
     errors: list[str] = Field(default_factory=list)
 
@@ -89,6 +92,9 @@ def resolve_im_app_context(*, provider: IMProvider, tenant_id: str) -> IMAppCont
         token_status=IMTokenStatus.NOT_APPLICABLE,
         event_mode=event_mode,
         app_id=dify_config.LARK_APP_ID,
+        app_secret=dify_config.LARK_APP_SECRET,
         app_secret_configured=bool(dify_config.LARK_APP_SECRET),
+        verification_token=dify_config.LARK_VERIFICATION_TOKEN,
+        encrypt_key=dify_config.LARK_ENCRYPT_KEY,
         errors=errors,
     )

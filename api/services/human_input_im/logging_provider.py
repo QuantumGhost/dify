@@ -1,9 +1,8 @@
-"""Phase-1 placeholder IM provider implementation.
+"""Legacy placeholder IM provider implementation.
 
-This provider keeps the delivery slice provider-neutral before any real Feishu
-SDK transport is added. It accepts send/update commands at the facade boundary,
-logs them, and returns an explicit non-delivered result so runtime code can
-persist stable failure state instead of crashing on an unregistered provider.
+The runtime registry now uses the real Feishu adapter from
+``feishu_provider.py``. This placeholder remains only for isolated tests and
+manual debugging paths that still want a no-op provider object.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from models.im_integration import IMProvider
 from services.human_input_im.app_config_service import IMAppContext
 from services.human_input_im.provider_types import (
     IMCardUpdateCommand,
+    IMParsedSubmissionPayload,
     IMSendCommand,
     IMSendResult,
     IMSubmissionEvent,
@@ -43,7 +43,7 @@ class LoggingHumanInputIMProvider:
             error="phase-1 provider transport adapter not implemented",
         )
 
-    def parse_submission(self, event: IMSubmissionEvent) -> dict[str, str]:
+    def parse_submission(self, event: IMSubmissionEvent) -> IMParsedSubmissionPayload:
         _ = event
         raise NotImplementedError("phase-1 provider submission parsing is not implemented")
 

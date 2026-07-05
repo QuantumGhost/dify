@@ -183,6 +183,26 @@ def test_callback_service_rejects_submission_for_unknown_action_id() -> None:
         )
 
 
+def test_callback_service_rejects_server_side_action_id_in_provider_payload() -> None:
+    service = HumanInputIMCallbackService(orchestration_service=MagicMock())
+
+    with pytest.raises(IMBindingValidationError, match="unknown IM callback action id: approve"):
+        service.build_submission_command(
+            event=IMSubmissionEvent(
+                provider=IMProvider.FEISHU,
+                event_id="event-1",
+                provider_workspace_id="ws-1",
+                provider_user_id="user-1",
+                interaction_id="interaction-1",
+            ),
+            context=_build_submission_context(),
+            parsed_payload=IMParsedSubmissionPayload(
+                provider_action_id="approve",
+                provider_inputs={"provider_component_reason": "looks good"},
+            ),
+        )
+
+
 def test_callback_service_rejects_submission_for_unknown_input_component_id() -> None:
     service = HumanInputIMCallbackService(orchestration_service=MagicMock())
 
@@ -199,6 +219,26 @@ def test_callback_service_rejects_submission_for_unknown_input_component_id() ->
             parsed_payload=IMParsedSubmissionPayload(
                 provider_action_id="provider_action_approve",
                 provider_inputs={"provider_component_unknown": "looks good"},
+            ),
+        )
+
+
+def test_callback_service_rejects_server_side_output_variable_name_in_provider_payload() -> None:
+    service = HumanInputIMCallbackService(orchestration_service=MagicMock())
+
+    with pytest.raises(IMBindingValidationError, match="unknown IM callback input component id: reason"):
+        service.build_submission_command(
+            event=IMSubmissionEvent(
+                provider=IMProvider.FEISHU,
+                event_id="event-1",
+                provider_workspace_id="ws-1",
+                provider_user_id="user-1",
+                interaction_id="interaction-1",
+            ),
+            context=_build_submission_context(),
+            parsed_payload=IMParsedSubmissionPayload(
+                provider_action_id="provider_action_approve",
+                provider_inputs={"reason": "looks good"},
             ),
         )
 
@@ -482,6 +522,22 @@ def test_callback_service_maps_submission_outcomes_to_message_status(
                 provider_inputs={"provider_component_unknown": "looks good"},
             ),
             "unknown IM callback input component id: provider_component_unknown",
+        ),
+        (
+            "dify action id leaked into provider payload",
+            IMParsedSubmissionPayload(
+                provider_action_id="approve",
+                provider_inputs={"provider_component_reason": "looks good"},
+            ),
+            "unknown IM callback action id: approve",
+        ),
+        (
+            "dify field id leaked into provider payload",
+            IMParsedSubmissionPayload(
+                provider_action_id="provider_action_approve",
+                provider_inputs={"reason": "looks good"},
+            ),
+            "unknown IM callback input component id: reason",
         ),
     ],
 )

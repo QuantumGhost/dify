@@ -3,9 +3,8 @@
 This service owns the new contact-oriented runtime notification path. It keeps
 legacy email-only HITL unchanged, while contact-v2 forms route each recipient
 through authoritative contact snapshot + binding + provider-neutral send logic.
-
-Phase-1 intentionally stops at the provider-neutral boundary: IM sends use the
-placeholder provider facade until a real provider SDK adapter lands.
+The stored interaction snapshot is the server-side source of truth for mapping
+provider-local callback ids back to Dify form variables and actions.
 """
 
 from __future__ import annotations
@@ -50,6 +49,12 @@ from services.human_input_im.callback_service import (
     IMInteractionActionMapping,
     IMInteractionInputMapping,
     IMInteractionMappingSnapshot,
+)
+from services.human_input_im.provider_types import (
+    IMActionDefinition,
+    IMInlineInputDefinition,
+    IMInlineInputOption,
+    IMInteractionRenderPayload,
 )
 from services.human_input_im.service import HumanInputIMService
 
@@ -240,6 +245,12 @@ class ContactV2HumanInputDeliveryService:
             form_token=recipient.access_token or "",
             variable_pool=variable_pool,
         )
+        interaction_payload = self._build_interaction_render_payload(
+            definition=definition,
+            interaction_mapping=interaction_mapping,
+            form_token=recipient.access_token or "",
+            variable_pool=variable_pool,
+        )
         send_result = self._im_service.send_form(
             provider=binding.provider,
             tenant_id=form.tenant_id,
@@ -254,6 +265,7 @@ class ContactV2HumanInputDeliveryService:
                 "recipient_id": recipient.id,
                 "contact_id": snapshot.contact_id,
             },
+            interaction_payload=interaction_payload,
         )
         if send_result.accepted:
             correlation.provider_message_id = send_result.provider_message_id
@@ -333,15 +345,70 @@ class ContactV2HumanInputDeliveryService:
         interaction_mapping = IMInteractionMappingSnapshot(interaction_id=f"imhi_{uuid4().hex}")
         for form_input in resolved_inputs:
             if isinstance(form_input, ParagraphInputConfig | SelectInputConfig):
-                component_id = f"input_{form_input.output_variable_name}"
+                component_id = f"provider_component_{form_input.output_variable_name}"
                 interaction_mapping.inputs[component_id] = IMInteractionInputMapping(
                     output_variable_name=form_input.output_variable_name,
                     type=form_input.type.value,
                 )
         for action in definition.user_actions:
-            provider_action_id = f"action_{action.id}"
+            provider_action_id = f"provider_action_{action.id}"
             interaction_mapping.actions[provider_action_id] = IMInteractionActionMapping(action_id=action.id)
         return interaction_mapping
+
+    @staticmethod
+    def _build_interaction_render_payload(
+        *,
+        definition: FormDefinition,
+        interaction_mapping: IMInteractionMappingSnapshot,
+        form_token: str,
+        variable_pool,
+    ) -> IMInteractionRenderPayload:
+        form_link = build_human_input_form_link(form_token)
+        resolved_inputs = resolve_variable_select_input_options(definition.inputs, variable_pool=variable_pool)
+        supported_inputs: list[IMInlineInputDefinition] = []
+        unsupported_input_names: list[str] = []
+
+        for form_input in resolved_inputs:
+            if isinstance(form_input, ParagraphInputConfig):
+                supported_inputs.append(
+                    IMInlineInputDefinition(
+                        component_id=f"provider_component_{form_input.output_variable_name}",
+                        label=form_input.output_variable_name,
+                        type=form_input.type.value,
+                    )
+                )
+                continue
+
+            if isinstance(form_input, SelectInputConfig):
+                supported_inputs.append(
+                    IMInlineInputDefinition(
+                        component_id=f"provider_component_{form_input.output_variable_name}",
+                        label=form_input.output_variable_name,
+                        type=form_input.type.value,
+                        options=[
+                            IMInlineInputOption(label=option_value, value=option_value)
+                            for option_value in form_input.option_source.value
+                        ],
+                    )
+                )
+                continue
+
+            if isinstance(form_input, FileInputConfig | FileListInputConfig):
+                unsupported_input_names.append(form_input.output_variable_name)
+
+        actions = [
+            IMActionDefinition(provider_action_id=f"provider_action_{action.id}", label=action.title)
+            for action in definition.user_actions
+        ]
+
+        return IMInteractionRenderPayload(
+            interaction_id=interaction_mapping.interaction_id,
+            rendered_content=definition.rendered_content,
+            form_link=form_link,
+            inputs=supported_inputs,
+            unsupported_input_names=unsupported_input_names,
+            actions=actions,
+        )
 
     def _render_im_content(
         self,
@@ -374,7 +441,7 @@ class ContactV2HumanInputDeliveryService:
                 f"- {form_link}"
             )
 
-        action_lines = [f"- {action.title} (`action_{action.id}`)" for action in definition.user_actions]
+        action_lines = [f"- {action.title} (`provider_action_{action.id}`)" for action in definition.user_actions]
         if action_lines:
             sections.append("Actions:\n" + "\n".join(action_lines))
 

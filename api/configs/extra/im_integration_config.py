@@ -19,3 +19,11 @@ class IMIntegrationConfig(BaseSettings):
         default=None,
         description="Feishu/Lark event transport mode. Phase-1 demo requires long_connection.",
     )
+    LARK_VERIFICATION_TOKEN: str | None = Field(
+        default=None,
+        description="Feishu/Lark callback verification token for signed webhook/challenge validation.",
+    )
+    LARK_ENCRYPT_KEY: str | None = Field(
+        default=None,
+        description="Feishu/Lark callback encrypt key for signed webhook/challenge validation.",
+    )

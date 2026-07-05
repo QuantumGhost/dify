@@ -28,7 +28,7 @@ from services.human_input_service import (
     WebAppDeliveryNotEnabledError,
 )
 from services.human_input_im.orchestration_service import HumanInputIMOrchestrationService
-from services.human_input_im.provider_types import IMSubmissionEvent
+from services.human_input_im.provider_types import IMParsedSubmissionPayload, IMSubmissionEvent
 from services.human_input_im.submission_result_service import HumanInputIMSubmissionResultService
 
 
@@ -81,19 +81,6 @@ class IMInteractionMappingSnapshot(BaseModel):
     interaction_id: str
     inputs: dict[str, IMInteractionInputMapping] = Field(default_factory=dict)
     actions: dict[str, IMInteractionActionMapping] = Field(default_factory=dict)
-
-    model_config = ConfigDict(frozen=True)
-
-
-class IMParsedSubmissionPayload(BaseModel):
-    """Provider-local callback payload after SDK-backed transport parsing.
-
-    Provider adapters should parse raw callback JSON into this structure. The
-    provider-neutral callback service does not inspect raw webhook payloads.
-    """
-
-    provider_action_id: str
-    provider_inputs: dict[str, JsonValue] = Field(default_factory=dict)
 
     model_config = ConfigDict(frozen=True)
 
