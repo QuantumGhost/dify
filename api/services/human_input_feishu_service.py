@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +40,8 @@ from services.member_contact_service import MemberContactService
 
 if TYPE_CHECKING:
     from services.human_input_service import HumanInputService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -80,7 +83,19 @@ class HumanInputFeishuService:
 
         definition = self._load_form_definition(form)
         resolved_inputs = resolve_variable_select_input_options(definition.inputs, variable_pool=variable_pool)
-        definition = definition.model_copy(update={"inputs": resolved_inputs})
+        definition = definition.model_copy(
+            update={
+                "inputs": resolved_inputs,
+                "form_content": self._render_form_body_template(
+                    definition.form_content,
+                    variable_pool=variable_pool,
+                ),
+                "rendered_content": self._render_form_body_template(
+                    definition.rendered_content,
+                    variable_pool=variable_pool,
+                ),
+            }
+        )
 
         recipients = session.scalars(
             select(HumanInputFormRecipient).where(
@@ -261,14 +276,30 @@ class HumanInputFeishuService:
                 .build()
             )
         except Exception as exc:
+            logger.exception(
+                "Feishu message send raised exception, form_id=%s recipient_id=%s account_id=%s open_id=%s",
+                form.id,
+                recipient.id,
+                binding.account_id,
+                binding.feishu_open_id,
+            )
             delivery.status = HumanInputFeishuDeliveryStatus.FAILED
             delivery.failure_reason = str(exc)
             return
 
         message_id = response.data.message_id if response.data is not None else None
         if response.code != 0 or not message_id:
+            error_summary = self._summarize_send_failure(response)
             delivery.status = HumanInputFeishuDeliveryStatus.FAILED
-            delivery.failure_reason = response.msg
+            delivery.failure_reason = json.dumps(error_summary, ensure_ascii=False, default=str)
+            logger.error(
+                "Feishu message send failed, form_id=%s recipient_id=%s account_id=%s open_id=%s error=%s",
+                form.id,
+                recipient.id,
+                binding.account_id,
+                binding.feishu_open_id,
+                delivery.failure_reason,
+            )
             return
 
         delivery.message_id = message_id
@@ -331,6 +362,82 @@ class HumanInputFeishuService:
     def _build_form_link(token: str) -> str:
         base_url = dify_config.APP_WEB_URL.rstrip("/")
         return f"{base_url}/form/{token}"
+
+    @staticmethod
+    def _render_form_body_template(body: str, *, variable_pool) -> str:
+        if variable_pool is None:
+            return body
+        return variable_pool.convert_template(body).text
+
+    @classmethod
+    def _summarize_send_failure(cls, response: Any) -> dict[str, Any]:
+        error = cls._to_loggable_payload(getattr(response, "error", None))
+        log_id = cls._extract_log_id(response, error)
+        troubleshooter = cls._extract_troubleshooter(response, error)
+        summary = {
+            "code": getattr(response, "code", None),
+            "msg": getattr(response, "msg", None),
+            "log_id": log_id,
+            "troubleshooter": troubleshooter,
+            "error": error,
+            "data": cls._to_loggable_payload(getattr(response, "data", None)),
+            "raw_content": cls._decode_raw_content(getattr(getattr(response, "raw", None), "content", None)),
+        }
+        return {key: value for key, value in summary.items() if value not in (None, "", [], {})}
+
+    @classmethod
+    def _extract_log_id(cls, response: Any, error: Any) -> str | None:
+        response_log_id = getattr(response, "get_log_id", None)
+        if callable(response_log_id):
+            log_id = response_log_id()
+            if log_id:
+                return str(log_id)
+
+        if isinstance(error, dict):
+            log_id = error.get("log_id")
+            return str(log_id) if log_id else None
+
+        log_id = getattr(error, "log_id", None)
+        return str(log_id) if log_id else None
+
+    @classmethod
+    def _extract_troubleshooter(cls, response: Any, error: Any) -> str | None:
+        response_troubleshooter = getattr(response, "get_troubleshooter", None)
+        if callable(response_troubleshooter):
+            troubleshooter = response_troubleshooter()
+            if troubleshooter:
+                return str(troubleshooter)
+
+        if isinstance(error, dict):
+            troubleshooter = error.get("troubleshooter")
+            return str(troubleshooter) if troubleshooter else None
+
+        troubleshooter = getattr(error, "troubleshooter", None)
+        return str(troubleshooter) if troubleshooter else None
+
+    @classmethod
+    def _to_loggable_payload(cls, value: Any) -> Any:
+        if value is None or isinstance(value, str | int | float | bool):
+            return value
+        if isinstance(value, bytes):
+            return cls._decode_raw_content(value)
+        if isinstance(value, list | tuple):
+            return [cls._to_loggable_payload(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): cls._to_loggable_payload(item) for key, item in value.items()}
+
+        payload = {
+            key: cls._to_loggable_payload(item)
+            for key, item in vars(value).items()
+            if not key.startswith("_") and item is not None
+        }
+        return payload or str(value)
+
+    @staticmethod
+    def _decode_raw_content(raw_content: bytes | None) -> str | None:
+        if raw_content is None:
+            return None
+        return raw_content.decode("utf-8", errors="replace")
 
     @staticmethod
     def _supports_interactive_card(definition: FormDefinition) -> bool:

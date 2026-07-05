@@ -1,8 +1,10 @@
 import json
+import logging
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTrigger  # type: ignore[import-untyped]
 
 from core.workflow.nodes.human_input.entities import (
@@ -14,6 +16,7 @@ from core.workflow.nodes.human_input.entities import (
     UserActionConfig,
 )
 from core.workflow.nodes.human_input.enums import FormInputType, ValueSourceType
+from graphon.runtime import VariablePool
 from models.human_input import EmailMemberRecipientPayload
 from models.human_input_feishu import HumanInputFeishuDeliveryStatus
 from services.human_input_feishu_service import HumanInputFeishuService
@@ -222,3 +225,174 @@ def test_dispatch_form_notifications_records_successful_delivery(monkeypatch):
     delivery = session.add.call_args.args[0]
     assert delivery.status == HumanInputFeishuDeliveryStatus.SENT
     assert delivery.message_id == "om_123"
+
+
+def test_dispatch_form_notifications_renders_form_body_variables_in_card_payload(monkeypatch):
+    recipient = SimpleNamespace(
+        id="recipient-1",
+        recipient_payload=EmailMemberRecipientPayload(
+            user_id="acc-1",
+            contact_id="contact-1",
+            name="Demo User",
+            email="demo@example.com",
+        ).model_dump_json(),
+        access_token="token-1",
+    )
+    session = MagicMock()
+    session.scalars.return_value = _FakeRecipientQuery([recipient])
+    session.scalar.return_value = None
+    definition = _build_definition().model_copy(
+        update={
+            "form_content": "Approve {{#node1.value#}}",
+            "rendered_content": "Approve {{#node1.value#}}",
+        }
+    )
+    form = SimpleNamespace(
+        id="form-1",
+        tenant_id="tenant-1",
+        form_definition=json.dumps(definition.model_dump(mode="json")),
+    )
+    client = MagicMock()
+    client.im.v1.message.create.return_value = SimpleNamespace(
+        code=0,
+        data=SimpleNamespace(message_id="om_123"),
+    )
+    variable_pool = VariablePool()
+    variable_pool.add(["node1", "value"], "Dify")
+    monkeypatch.setattr(
+        MemberContactService,
+        "resolve_workspace_member_binding",
+        lambda self, _session, tenant_id, account_id: SimpleNamespace(
+            tenant_id=tenant_id,
+            account_id=account_id,
+            contact_id="contact-1",
+            feishu_open_id="ou_123",
+        ),
+    )
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_ID", "cli_test")
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_SECRET", "secret")
+    service = HumanInputFeishuService(client=client)
+
+    service.dispatch_form_notifications(session=session, form=form, variable_pool=variable_pool)
+
+    delivery = session.add.call_args.args[0]
+    payload = json.loads(delivery.card_payload)
+    assert payload["body"]["elements"][0]["content"] == "Approve Dify"
+
+
+def test_dispatch_form_notifications_records_feishu_validation_error_details(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    recipient = SimpleNamespace(
+        id="recipient-1",
+        recipient_payload=EmailMemberRecipientPayload(
+            user_id="acc-1",
+            contact_id="contact-1",
+            name="Demo User",
+            email="demo@example.com",
+        ).model_dump_json(),
+        access_token="token-1",
+    )
+    session = MagicMock()
+    session.scalars.return_value = _FakeRecipientQuery([recipient])
+    session.scalar.return_value = None
+    form = SimpleNamespace(
+        id="form-1",
+        tenant_id="tenant-1",
+        form_definition=json.dumps(_build_definition().model_dump(mode="json")),
+    )
+    response = SimpleNamespace(
+        code=230099,
+        msg="field validation failed",
+        data=None,
+        error=SimpleNamespace(
+            log_id="20260705abc",
+            troubleshooter="https://feishu.example/troubleshoot",
+            field_violations=[
+                SimpleNamespace(
+                    field="content.body.elements[1]",
+                    value='{"tag":"form"}',
+                    description="invalid tag form",
+                )
+            ],
+        ),
+        get_log_id=lambda: None,
+        get_troubleshooter=lambda: "https://feishu.example/troubleshoot",
+    )
+    client = MagicMock()
+    client.im.v1.message.create.return_value = response
+    monkeypatch.setattr(
+        MemberContactService,
+        "resolve_workspace_member_binding",
+        lambda self, _session, tenant_id, account_id: SimpleNamespace(
+            tenant_id=tenant_id,
+            account_id=account_id,
+            contact_id="contact-1",
+            feishu_open_id="ou_123",
+        ),
+    )
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_ID", "cli_test")
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_SECRET", "secret")
+    service = HumanInputFeishuService(client=client)
+
+    with caplog.at_level(logging.ERROR):
+        service.dispatch_form_notifications(session=session, form=form, variable_pool=None)
+
+    delivery = session.add.call_args.args[0]
+    assert delivery.status == HumanInputFeishuDeliveryStatus.FAILED
+    assert delivery.failure_reason is not None
+    assert "field validation failed" in delivery.failure_reason
+    assert "content.body.elements[1]" in delivery.failure_reason
+    assert "20260705abc" in delivery.failure_reason
+    assert "content.body.elements[1]" in caplog.text
+    assert "20260705abc" in caplog.text
+
+
+def test_dispatch_form_notifications_logs_context_when_feishu_send_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    recipient = SimpleNamespace(
+        id="recipient-1",
+        recipient_payload=EmailMemberRecipientPayload(
+            user_id="acc-1",
+            contact_id="contact-1",
+            name="Demo User",
+            email="demo@example.com",
+        ).model_dump_json(),
+        access_token="token-1",
+    )
+    session = MagicMock()
+    session.scalars.return_value = _FakeRecipientQuery([recipient])
+    session.scalar.return_value = None
+    form = SimpleNamespace(
+        id="form-1",
+        tenant_id="tenant-1",
+        form_definition=json.dumps(_build_definition().model_dump(mode="json")),
+    )
+    client = MagicMock()
+    client.im.v1.message.create.side_effect = RuntimeError("socket closed")
+    monkeypatch.setattr(
+        MemberContactService,
+        "resolve_workspace_member_binding",
+        lambda self, _session, tenant_id, account_id: SimpleNamespace(
+            tenant_id=tenant_id,
+            account_id=account_id,
+            contact_id="contact-1",
+            feishu_open_id="ou_123",
+        ),
+    )
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_ID", "cli_test")
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_SECRET", "secret")
+    service = HumanInputFeishuService(client=client)
+
+    with caplog.at_level(logging.ERROR):
+        service.dispatch_form_notifications(session=session, form=form, variable_pool=None)
+
+    delivery = session.add.call_args.args[0]
+    assert delivery.status == HumanInputFeishuDeliveryStatus.FAILED
+    assert delivery.failure_reason == "socket closed"
+    assert "form_id=form-1" in caplog.text
+    assert "recipient_id=recipient-1" in caplog.text
+    assert "open_id=ou_123" in caplog.text
