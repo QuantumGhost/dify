@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from configs import dify_config
 from core.workflow.human_input_policy import resolve_variable_select_input_options
+from core.workflow.nodes.human_input.callback import DifyHITLCallback
 from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
     FileListInputConfig,
@@ -832,16 +833,13 @@ class HumanInputFeishuService:
         definition: FormDefinition,
         submitted_data: Mapping[str, Any],
     ) -> str:
-        rendered_content = definition.rendered_content or definition.form_content
-        for form_input in definition.inputs:
-            field_name = form_input.output_variable_name
-            placeholder = "{{#$output." + field_name + "#}}"
-            replacement = self._render_result_output_value(
-                value=submitted_data.get(field_name),
-                form_input=form_input,
-            )
-            rendered_content = rendered_content.replace(placeholder, replacement)
-        return rendered_content
+        rendered_content = self._render_form_content_with_placeholder_prompts(definition)
+        return DifyHITLCallback.render_form_content_with_outputs(
+            rendered_content,
+            submitted_data,
+            [form_input.output_variable_name for form_input in definition.inputs],
+            definition.inputs,
+        )
 
     @staticmethod
     def _get_output_placeholder_prompt(form_input: FormInputConfig | None) -> str | None:
