@@ -110,6 +110,49 @@ def test_service_delegates_form_send_with_resolved_app_context() -> None:
     )
 
 
+def test_service_returns_failed_provider_send_result_unchanged() -> None:
+    app_context = _build_app_context()
+    provider = MagicMock()
+    provider.send_form.return_value = IMSendResult(
+        provider=IMProvider.FEISHU,
+        accepted=False,
+        provider_message_id=None,
+        error="provider unavailable",
+    )
+    orchestration_service = MagicMock()
+    orchestration_service.get_provider_or_raise.return_value = provider
+    orchestration_service.resolve_app_context.return_value = app_context
+    service = HumanInputIMService(orchestration_service=orchestration_service)
+
+    result = service.send_form(
+        provider=IMProvider.FEISHU,
+        tenant_id="tenant-1",
+        recipient_id="user-1",
+        form_id="form-1",
+        title="Need approval",
+        content="Please approve",
+        metadata={"correlation_id": "correlation-1", "interaction_id": "interaction-1"},
+    )
+
+    assert result == IMSendResult(
+        provider=IMProvider.FEISHU,
+        accepted=False,
+        provider_message_id=None,
+        error="provider unavailable",
+    )
+    provider.send_form.assert_called_once_with(
+        IMSendCommand(
+            provider=IMProvider.FEISHU,
+            app_context=app_context,
+            recipient_id="user-1",
+            form_id="form-1",
+            title="Need approval",
+            content="Please approve",
+            metadata={"correlation_id": "correlation-1", "interaction_id": "interaction-1"},
+        )
+    )
+
+
 def test_service_delegates_card_update_with_resolved_app_context() -> None:
     app_context = _build_app_context()
     provider = MagicMock()

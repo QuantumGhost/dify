@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from services.human_input_im.app_config_service import IMAppContext, resolve_im_app_context
 from services.human_input_im.provider_types import HumanInputIMProvider
 from models.im_integration import IMProvider
+from services.human_input_im.app_config_service import IMAppContext, resolve_im_app_context
+from services.human_input_im.logging_provider import LoggingHumanInputIMProvider
 
 
 class HumanInputIMProviderRegistry:
     """Resolve provider app context and registered provider implementation."""
 
     def __init__(self, providers: dict[IMProvider, HumanInputIMProvider] | None = None) -> None:
-        self._providers = providers or {}
+        self._providers = providers or {IMProvider.FEISHU: LoggingHumanInputIMProvider()}
 
     def get_provider(self, provider: IMProvider) -> HumanInputIMProvider | None:
         return self._providers.get(provider)

@@ -48,12 +48,12 @@
 - [x] 6.2 新增 `Allow Current Initiator to Approve` 配置与 actor 解析：Console/CLI OpenAPI 为 Account，Web App/Service API 为 EndUser。
 - [x] 6.3 实现 demo compatibility mapping，将前端提交的 HumanInput v1 node config 映射为 HumanInput v2 runtime model，覆盖 form content、inputs、actions、timeout 和 member recipients。
 - [x] 6.4 在 runtime 创建 Human Input form recipient 时保存 Contact snapshot 和 initiator approval snapshot。
-- [ ] 6.5 新增 `dispatch_human_input_im_task`，按 form id 加载 form、recipient snapshot、binding、resolver 返回的 app context 和 variable pool。
-- [ ] 6.6 实现 member Contact 投递：有 IM binding 发 IM，无 IM binding fallback email，无 email skip 并写入 `process_data`。
-- [ ] 6.7 实现 external Contact 投递：只发 email。
-- [ ] 6.8 实现 provider adapter 的 form/card rendering，支持 paragraph、select、actions，并为 file/file-list 加 Web form fallback。
-- [ ] 6.9 持久化 IM message correlation，记录 send success/failure、provider message id 和 target card status。
-- [ ] 6.10 持久化 interaction mapping snapshot，记录 provider input component id 到 Dify `output_variable_name`、provider action id 到 Dify `user_actions[].id` 的映射。
+- [x] 6.5 新增 `dispatch_human_input_im_task`，按 form id 加载 form、recipient snapshot、binding、resolver 返回的 app context 和 variable pool。
+- [x] 6.6 实现 member Contact 投递：有 IM binding 发 IM，无 IM binding fallback email，无 email skip 并写入 `process_data`。
+- [x] 6.7 实现 external Contact 投递：只发 email。
+- [x] 6.8 实现 provider adapter 的 form/card rendering，支持 paragraph、select、actions，并为 file/file-list 加 Web form fallback。
+- [x] 6.9 持久化 IM message correlation，记录 send success/failure、provider message id 和 target card status。
+- [x] 6.10 持久化 interaction mapping snapshot，记录 provider input component id 到 Dify `output_variable_name`、provider action id 到 Dify `user_actions[].id` 的映射。
 - [ ] 6.11 添加 runtime/delivery tests，覆盖 v1 frontend-submitted config 走 v2 runtime、bound recipient、missing binding email fallback、skip、external contact、initiator approval、provider send failure、interaction mapping snapshot 和 retry idempotency。
 
 ## 7. Feishu Self-Built Demo Adapter
