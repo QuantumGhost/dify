@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from libs.oauth import GitHubOAuth, GoogleOAuth, OAuthUserInfo, decode_oauth_state
+from libs.oauth import FeishuOAuth, GitHubOAuth, GoogleOAuth, OAuthUserInfo, decode_oauth_state
 
 
 class BaseOAuthTest:
@@ -323,6 +323,71 @@ class TestGoogleOAuth(BaseOAuthTest):
 
         with pytest.raises(exception_type):
             oauth.get_raw_user_info("invalid_token")
+
+
+class TestFeishuOAuth(BaseOAuthTest):
+    @pytest.fixture
+    def oauth(self, oauth_config):
+        return FeishuOAuth(
+            oauth_config["client_id"],
+            oauth_config["client_secret"],
+            oauth_config["redirect_uri"],
+            scopes=["contact:user.base:readonly"],
+        )
+
+    def test_should_generate_authorization_url_correctly(self, oauth, oauth_config):
+        url = oauth.get_authorization_url(state="binding-state")
+        parsed, params = self.parse_auth_url(url)
+
+        assert parsed.scheme == "https"
+        assert parsed.netloc == "accounts.feishu.cn"
+        assert parsed.path == "/open-apis/authen/v1/authorize"
+        assert params["client_id"][0] == oauth_config["client_id"]
+        assert params["response_type"][0] == "code"
+        assert params["redirect_uri"][0] == oauth_config["redirect_uri"]
+        assert params["scope"][0] == "contact:user.base:readonly"
+        assert params["prompt"][0] == "consent"
+        assert params["state"][0] == "binding-state"
+
+    @pytest.mark.parametrize(
+        ("response_data", "expected_token", "should_raise"),
+        [
+            ({"code": 0, "access_token": "test_token"}, "test_token", False),
+            ({"code": 20003, "error_description": "invalid code"}, None, True),
+            ({}, None, True),
+        ],
+    )
+    @patch("libs.oauth._http_client.post", autospec=True)
+    def test_should_retrieve_access_token(
+        self, mock_post, oauth, mock_response, response_data, expected_token, should_raise
+    ):
+        mock_response.json.return_value = response_data
+        mock_post.return_value = mock_response
+
+        if should_raise:
+            with pytest.raises(ValueError) as exc_info:
+                oauth.get_access_token("test_code")
+            assert "Error in Feishu OAuth" in str(exc_info.value)
+        else:
+            token = oauth.get_access_token("test_code")
+            assert token == expected_token
+
+    @patch("libs.oauth._http_client.get", autospec=True)
+    def test_should_retrieve_user_info_correctly(self, mock_get, oauth):
+        user_response = MagicMock()
+        user_response.json.return_value = {
+            "code": 0,
+            "data": {
+                "open_id": "ou_123",
+                "name": "Demo User",
+                "email": "demo@example.com",
+            },
+        }
+        mock_get.return_value = user_response
+
+        user_info = oauth.get_user_info("test_token")
+
+        assert user_info == OAuthUserInfo(id="ou_123", name="Demo User", email="demo@example.com")
 
 
 class TestOAuthUserInfo:

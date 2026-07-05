@@ -16,7 +16,8 @@ from extensions.ext_database import db
 from libs.datetime_utils import naive_utc_now
 from libs.helper import extract_remote_ip
 from libs.helper import timezone as validate_timezone_string
-from libs.oauth import GitHubOAuth, GoogleOAuth, OAuthUserInfo, decode_oauth_state
+from libs.login import login_required
+from libs.oauth import FeishuOAuth, GitHubOAuth, GoogleOAuth, OAuthUserInfo, decode_oauth_state
 from libs.token import (
     set_access_token_to_cookie,
     set_csrf_token_to_cookie,
@@ -26,10 +27,12 @@ from models import Account, AccountStatus
 from services.account_service import AccountService, RegisterService, TenantService
 from services.billing_service import BillingService
 from services.errors.account import AccountNotFoundError, AccountRegisterError
+from services.feishu_binding_state_service import get_feishu_binding_state_service
 from services.errors.workspace import WorkSpaceNotAllowedCreateError, WorkSpaceNotFoundError
 from services.feature_service import FeatureService
 
 from .. import console_ns
+from ..wraps import account_initialization_required, setup_required, with_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,7 @@ class OAuthLoginQuery(BaseModel):
 class OAuthCallbackQuery(BaseModel):
     code: str = Field(description="Authorization code from OAuth provider")
     state: str | None = Field(default=None, description="OAuth state parameter")
+    error: str | None = Field(default=None, description="OAuth error code")
 
 
 register_schema_models(console_ns, OAuthLoginQuery, OAuthCallbackQuery)
@@ -70,6 +74,32 @@ def get_oauth_providers():
 
         OAUTH_PROVIDERS = {"github": github_oauth, "google": google_oauth}
         return OAUTH_PROVIDERS
+
+
+def get_feishu_oauth_provider() -> FeishuOAuth | None:
+    with current_app.app_context():
+        app_id = getattr(dify_config, "FEISHU_APP_ID", None)
+        app_secret = getattr(dify_config, "FEISHU_APP_SECRET", None)
+        if not app_id or not app_secret:
+            return None
+
+        raw_scopes = getattr(dify_config, "FEISHU_OAUTH_SCOPES", "")
+        scopes = [scope for scope in raw_scopes.split() if scope]
+        redirect_path = getattr(dify_config, "FEISHU_OAUTH_REDIRECT_PATH", "/console/api/oauth/feishu-im/callback")
+        redirect_uri = dify_config.CONSOLE_API_URL.rstrip("/") + redirect_path
+        return FeishuOAuth(
+            client_id=app_id,
+            client_secret=app_secret,
+            redirect_uri=redirect_uri,
+            scopes=scopes,
+        )
+
+
+def _build_console_redirect_url(**params: str) -> str:
+    base_url = dify_config.CONSOLE_WEB_URL
+    query_char = "&" if "?" in base_url else "?"
+    encoded = urllib.parse.urlencode(params)
+    return f"{base_url}{query_char}{encoded}"
 
 
 def _validated_timezone(value: str | None) -> str | None:
@@ -219,6 +249,59 @@ class OAuthCallback(Resource):
         set_refresh_token_to_cookie(request, response, token_pair.refresh_token)
         set_csrf_token_to_cookie(request, response, token_pair.csrf_token)
         return response
+
+
+@console_ns.route("/oauth/feishu-im/bind")
+class FeishuOAuthBindApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @with_current_user
+    def get(self, current_user: Account):
+        oauth_provider = get_feishu_oauth_provider()
+        if oauth_provider is None:
+            return {"error": "Feishu OAuth is not configured"}, 400
+
+        state_service = get_feishu_binding_state_service()
+        state = state_service.create_context(account_id=current_user.id)
+        return redirect(oauth_provider.get_authorization_url(state=state))
+
+
+@console_ns.route("/oauth/feishu-im/callback")
+class FeishuOAuthBindCallbackApi(Resource):
+    def get(self):
+        oauth_provider = get_feishu_oauth_provider()
+        if oauth_provider is None:
+            return {"error": "Feishu OAuth is not configured"}, 400
+
+        error = request.args.get("error")
+        if error:
+            return redirect(_build_console_redirect_url(feishu_im_bound="false", feishu_im_error=error))
+
+        code = request.args.get("code")
+        state = request.args.get("state")
+        if not code:
+            return redirect(_build_console_redirect_url(feishu_im_bound="false", feishu_im_error="missing_code"))
+
+        state_service = get_feishu_binding_state_service()
+        try:
+            binding_context = state_service.consume_context(state or "")
+        except ValueError:
+            return redirect(_build_console_redirect_url(feishu_im_bound="false", feishu_im_error="invalid_state"))
+
+        try:
+            token = oauth_provider.get_access_token(code)
+            user_info = oauth_provider.get_user_info(token)
+        except (httpx.RequestError, ValueError):
+            logger.exception("Feishu binding callback failed during OAuth exchange")
+            return redirect(_build_console_redirect_url(feishu_im_bound="false", feishu_im_error="oauth_failed"))
+
+        account = AccountService.get_account_by_id(db.session, binding_context["account_id"])
+        if account is None:
+            return redirect(_build_console_redirect_url(feishu_im_bound="false", feishu_im_error="account_not_found"))
+
+        AccountService.link_account_integrate("feishu_im", user_info.id, account, session=db.session)
+        return redirect(_build_console_redirect_url(feishu_im_bound="true"))
 
 
 def _get_account_by_openid_or_email(provider: str, user_info: OAuthUserInfo) -> Account | None:

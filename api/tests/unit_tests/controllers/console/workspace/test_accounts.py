@@ -285,7 +285,7 @@ class TestAccountIntegrateApi:
             result = method(api, account)
 
         assert "data" in result
-        assert len(result["data"]) == 2
+        assert len(result["data"]) == 3
 
 
 class TestAccountDeleteApi:

@@ -903,6 +903,28 @@ class AuthConfig(BaseSettings):
         default=None,
     )
 
+    FEISHU_APP_ID: str | None = Field(
+        description="Feishu app ID for HITL demo binding, card delivery, and callback listener",
+        default=None,
+        validation_alias=AliasChoices("FEISHU_APP_ID", "FEISHU_CLIENT_ID"),
+    )
+
+    FEISHU_APP_SECRET: str | None = Field(
+        description="Feishu app secret for HITL demo binding, card delivery, and callback listener",
+        default=None,
+        validation_alias=AliasChoices("FEISHU_APP_SECRET", "FEISHU_CLIENT_SECRET"),
+    )
+
+    FEISHU_OAUTH_SCOPES: str = Field(
+        description="Space-delimited Feishu OAuth scopes requested during Dify account binding",
+        default="contact:user.base:readonly",
+    )
+
+    FEISHU_OAUTH_REDIRECT_PATH: str = Field(
+        description="Console API callback path used by the Feishu account binding flow",
+        default="/console/api/oauth/feishu-im/callback",
+    )
+
     ACCESS_TOKEN_EXPIRE_MINUTES: PositiveInt = Field(
         description="Expiration time for access tokens in minutes",
         default=60,

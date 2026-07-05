@@ -66,6 +66,12 @@ from .enums import (
 )
 from .execution_extra_content import ExecutionExtraContent, HumanInputContent
 from .human_input import HumanInputForm, HumanInputFormUploadFile, HumanInputFormUploadToken
+from .human_input_feishu import (
+    HumanInputFeishuDelivery,
+    HumanInputFeishuDeliveryMode,
+    HumanInputFeishuDeliveryStatus,
+)
+from .member_contact import MemberContact, MemberContactBinding
 from .model import (
     AccountTrialAppRecord,
     ApiRequest,
@@ -217,9 +223,14 @@ __all__ = [
     "ExternalKnowledgeApis",
     "ExternalKnowledgeBindings",
     "HumanInputContent",
+    "HumanInputFeishuDelivery",
+    "HumanInputFeishuDeliveryMode",
+    "HumanInputFeishuDeliveryStatus",
     "HumanInputForm",
     "HumanInputFormUploadFile",
     "HumanInputFormUploadToken",
+    "MemberContact",
+    "MemberContactBinding",
     "IconType",
     "InstalledApp",
     "InvitationCode",

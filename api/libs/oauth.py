@@ -30,6 +30,12 @@ class AccessTokenResponse(TypedDict, total=False):
     access_token: str
 
 
+class FeishuAccessTokenResponse(TypedDict, total=False):
+    code: int
+    access_token: str
+    error_description: str
+
+
 class OAuthState(TypedDict, total=False):
     invite_token: str
     timezone: str
@@ -54,11 +60,25 @@ class GoogleRawUserInfo(TypedDict):
     email: str
 
 
+class FeishuUserInfoPayload(TypedDict, total=False):
+    open_id: str
+    name: str
+    email: str
+
+
+class FeishuRawUserInfo(TypedDict, total=False):
+    code: int
+    data: FeishuUserInfoPayload
+    msg: str
+
+
 ACCESS_TOKEN_RESPONSE_ADAPTER = TypeAdapter(AccessTokenResponse)
+FEISHU_ACCESS_TOKEN_RESPONSE_ADAPTER = TypeAdapter(FeishuAccessTokenResponse)
 OAUTH_STATE_ADAPTER = TypeAdapter(OAuthState)
 GITHUB_RAW_USER_INFO_ADAPTER = TypeAdapter(GitHubRawUserInfo)
 GITHUB_EMAIL_RECORDS_ADAPTER = TypeAdapter(list[GitHubEmailRecord])
 GOOGLE_RAW_USER_INFO_ADAPTER = TypeAdapter(GoogleRawUserInfo)
+FEISHU_RAW_USER_INFO_ADAPTER = TypeAdapter(FeishuRawUserInfo)
 
 
 @dataclass
@@ -122,6 +142,7 @@ class OAuth:
         invite_token: str | None = None,
         timezone: str | None = None,
         language: str | None = None,
+        state: str | None = None,
     ) -> str:
         raise NotImplementedError()
 
@@ -151,15 +172,16 @@ class GitHubOAuth(OAuth):
         invite_token: str | None = None,
         timezone: str | None = None,
         language: str | None = None,
+        state: str | None = None,
     ) -> str:
         params = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "scope": "user:email",  # Request only basic user information
         }
-        state = encode_oauth_state(invite_token=invite_token, timezone=timezone, language=language)
-        if state:
-            params["state"] = state
+        encoded_state = state or encode_oauth_state(invite_token=invite_token, timezone=timezone, language=language)
+        if encoded_state:
+            params["state"] = encoded_state
         return f"{self._AUTH_URL}?{urllib.parse.urlencode(params)}"
 
     @override
@@ -248,6 +270,7 @@ class GoogleOAuth(OAuth):
         invite_token: str | None = None,
         timezone: str | None = None,
         language: str | None = None,
+        state: str | None = None,
     ) -> str:
         params = {
             "client_id": self.client_id,
@@ -255,9 +278,9 @@ class GoogleOAuth(OAuth):
             "redirect_uri": self.redirect_uri,
             "scope": "openid email",
         }
-        state = encode_oauth_state(invite_token=invite_token, timezone=timezone, language=language)
-        if state:
-            params["state"] = state
+        encoded_state = state or encode_oauth_state(invite_token=invite_token, timezone=timezone, language=language)
+        if encoded_state:
+            params["state"] = encoded_state
         return f"{self._AUTH_URL}?{urllib.parse.urlencode(params)}"
 
     @override
@@ -291,3 +314,79 @@ class GoogleOAuth(OAuth):
     def _transform_user_info(self, raw_info: JsonObject) -> OAuthUserInfo:
         payload = GOOGLE_RAW_USER_INFO_ADAPTER.validate_python(raw_info)
         return OAuthUserInfo(id=str(payload["sub"]), name="", email=payload["email"])
+
+
+class FeishuOAuth(OAuth):
+    _AUTH_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
+    _TOKEN_URL = "https://accounts.feishu.cn/oauth/v3/token"
+    _USER_INFO_URL = "https://open.feishu.cn/open-apis/authen/v1/user_info"
+
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        scopes: list[str] | None = None,
+    ) -> None:
+        super().__init__(client_id, client_secret, redirect_uri)
+        self.scopes = scopes or []
+
+    @override
+    def get_authorization_url(
+        self,
+        invite_token: str | None = None,
+        timezone: str | None = None,
+        language: str | None = None,
+        state: str | None = None,
+    ) -> str:
+        _ = invite_token, timezone, language
+        params: dict[str, str] = {
+            "client_id": self.client_id,
+            "response_type": "code",
+            "redirect_uri": self.redirect_uri,
+            "prompt": "consent",
+        }
+        if self.scopes:
+            params["scope"] = " ".join(self.scopes)
+        if state:
+            params["state"] = state
+        return f"{self._AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+    @override
+    def get_access_token(self, code: str) -> str:
+        data = {
+            "grant_type": "authorization_code",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "redirect_uri": self.redirect_uri,
+        }
+        headers = {"Accept": "application/json", "Content-Type": "application/json; charset=utf-8"}
+        response = _http_client.post(self._TOKEN_URL, json=data, headers=headers)
+        response_json = FEISHU_ACCESS_TOKEN_RESPONSE_ADAPTER.validate_python(_json_object(response))
+        access_token = response_json.get("access_token")
+
+        if not access_token:
+            raise ValueError(f"Error in Feishu OAuth: {response_json}")
+
+        return access_token
+
+    @override
+    def get_raw_user_info(self, token: str) -> JsonObject:
+        headers = {"Authorization": f"Bearer {token}"}
+        response = _http_client.get(self._USER_INFO_URL, headers=headers)
+        response.raise_for_status()
+        return _json_object(response)
+
+    @override
+    def _transform_user_info(self, raw_info: JsonObject) -> OAuthUserInfo:
+        payload = FEISHU_RAW_USER_INFO_ADAPTER.validate_python(raw_info)
+        data = payload.get("data") or {}
+        open_id = data.get("open_id")
+        if not open_id:
+            raise ValueError(f"Error in Feishu OAuth: {payload}")
+        return OAuthUserInfo(
+            id=open_id,
+            name=data.get("name") or "",
+            email=data.get("email") or "",
+        )

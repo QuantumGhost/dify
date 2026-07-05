@@ -10,6 +10,7 @@ from .data_migration import (
     import_migration_data,
     migration_data_wizard,
 )
+from .feishu import import_member_contacts, run_feishu_hitl_listener
 from .plugin import (
     backfill_plugin_auto_upgrade,
     extract_plugins,
@@ -70,6 +71,7 @@ __all__ = [
     "extract_unique_plugins",
     "file_usage",
     "fix_app_site_missing",
+    "import_member_contacts",
     "import_migration_data",
     "install_plugins",
     "install_rag_pipeline_plugins",
@@ -86,6 +88,7 @@ __all__ = [
     "reset_email",
     "reset_encrypt_key_pair",
     "reset_password",
+    "run_feishu_hitl_listener",
     "restore_workflow_runs",
     "setup_datasource_oauth_client",
     "setup_system_tool_oauth_client",

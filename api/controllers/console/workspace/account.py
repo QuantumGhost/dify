@@ -469,7 +469,8 @@ class AccountIntegrateApi(Resource):
 
         base_url = request.url_root.rstrip("/")
         oauth_base_path = "/console/api/oauth/login"
-        providers = ["github", "google"]
+        bind_base_path = "/console/api/oauth/feishu-im/bind"
+        providers = ["github", "google", "feishu_im"]
 
         integrate_data = []
         for provider in providers:
@@ -491,7 +492,11 @@ class AccountIntegrateApi(Resource):
                         "provider": provider,
                         "created_at": None,
                         "is_bound": False,
-                        "link": f"{base_url}{oauth_base_path}/{provider}",
+                        "link": (
+                            f"{base_url}{bind_base_path}"
+                            if provider == "feishu_im"
+                            else f"{base_url}{oauth_base_path}/{provider}"
+                        ),
                     }
                 )
 
