@@ -47,7 +47,7 @@
 - [ ] 6.1 新增新 HITL `NodeType`、新 `Version` 和 Contact recipient schema。
 - [ ] 6.2 新增 `Allow Current Initiator to Approve` 配置与 actor 解析：Console/CLI OpenAPI 为 Account，Web App/Service API 为 EndUser。
 - [ ] 6.3 实现 demo compatibility mapping，将前端提交的 HumanInput v1 node config 映射为 HumanInput v2 runtime model，覆盖 form content、inputs、actions、timeout 和 member recipients。
-- [ ] 6.4 在 runtime 创建 Human Input form recipient 时保存 Contact snapshot 和 initiator approval snapshot。
+- [x] 6.4 在 runtime 创建 Human Input form recipient 时保存 Contact snapshot 和 initiator approval snapshot。
 - [ ] 6.5 新增 `dispatch_human_input_im_task`，按 form id 加载 form、recipient snapshot、binding、resolver 返回的 app context 和 variable pool。
 - [ ] 6.6 实现 member Contact 投递：有 IM binding 发 IM，无 IM binding fallback email，无 email skip 并写入 `process_data`。
 - [ ] 6.7 实现 external Contact 投递：只发 email。

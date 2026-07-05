@@ -1,6 +1,7 @@
+import json
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal, Self, final
+from typing import Any, Annotated, Literal, Self, final
 
 import sqlalchemy as sa
 from pydantic import BaseModel, Field
@@ -9,9 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.workflow.human_input_adapter import DeliveryMethodType
 from core.workflow.nodes.human_input.enums import HumanInputFormKind, HumanInputFormStatus
 from libs.helper import generate_string
+from models.contact import Contact, ContactSource, ContactStatus, ContactType
+from models.enums import CreatorUserRole
 
 from .base import Base, DefaultFieldsMixin
-from .types import EnumText, StringUUID
+from .types import EnumText, JSONModelColumn, StringUUID
 
 _token_length = 22
 # A 32-character string can store a base64-encoded value with 192 bits of entropy
@@ -23,6 +26,43 @@ _email_field_length = 330
 
 def _generate_token() -> str:
     return generate_string(_token_length)
+
+
+@final
+class HumanInputContactSnapshot(BaseModel):
+    """Durable recipient contact shape captured at form creation time."""
+
+    schema_version: Literal[1] = 1
+    contact_id: str
+    tenant_id: str
+    type: ContactType
+    source: ContactSource
+    status: ContactStatus
+    name: str
+    account_id: str | None = None
+    email: str | None = None
+
+    @classmethod
+    def from_contact(cls, contact: Contact) -> "HumanInputContactSnapshot":
+        return cls(
+            contact_id=contact.id,
+            tenant_id=contact.tenant_id,
+            type=contact.type,
+            source=contact.source,
+            status=contact.status,
+            name=contact.name,
+            account_id=contact.account_id,
+            email=contact.email,
+        )
+
+
+@final
+class HumanInputInitiatorApprovalSnapshot(BaseModel):
+    """Durable initiator identity captured when initiator approval is enabled."""
+
+    schema_version: Literal[1] = 1
+    actor_type: CreatorUserRole
+    actor_id: str
 
 
 class HumanInputForm(DefaultFieldsMixin, Base):
@@ -74,6 +114,10 @@ class HumanInputForm(DefaultFieldsMixin, Base):
     submitted_at: Mapped[datetime | None] = mapped_column(sa.DateTime, nullable=True)
     submission_user_id: Mapped[str | None] = mapped_column(StringUUID, nullable=True)
     submission_end_user_id: Mapped[str | None] = mapped_column(StringUUID, nullable=True)
+    initiator_approval_snapshot: Mapped[HumanInputInitiatorApprovalSnapshot | None] = mapped_column(
+        JSONModelColumn(HumanInputInitiatorApprovalSnapshot),
+        nullable=True,
+    )
 
     completed_by_recipient_id: Mapped[str | None] = mapped_column(
         StringUUID,
@@ -93,6 +137,16 @@ class HumanInputForm(DefaultFieldsMixin, Base):
         lazy="raise",
         viewonly=True,
     )
+
+    @property
+    def initiator_approval_snapshot_dict(self) -> dict[str, Any]:
+        if not self.initiator_approval_snapshot:
+            return {}
+        if hasattr(self.initiator_approval_snapshot, "model_dump"):
+            return self.initiator_approval_snapshot.model_dump(mode="json")
+        if isinstance(self.initiator_approval_snapshot, str):
+            return json.loads(self.initiator_approval_snapshot)
+        return dict(self.initiator_approval_snapshot)
 
 
 class HumanInputDelivery(DefaultFieldsMixin, Base):
@@ -235,6 +289,10 @@ class HumanInputFormRecipient(DefaultFieldsMixin, Base):
     )
     recipient_type: Mapped["RecipientType"] = mapped_column(EnumText(RecipientType), nullable=False)
     recipient_payload: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    contact_snapshot: Mapped[HumanInputContactSnapshot | None] = mapped_column(
+        JSONModelColumn(HumanInputContactSnapshot),
+        nullable=True,
+    )
 
     # Token primarily used for authenticated resume links (email, etc.).
     access_token: Mapped[str | None] = mapped_column(
@@ -269,15 +327,28 @@ class HumanInputFormRecipient(DefaultFieldsMixin, Base):
         form_id: str,
         delivery_id: str,
         payload: RecipientPayload,
+        *,
+        contact_snapshot: HumanInputContactSnapshot | None = None,
     ) -> Self:
         recipient_model = cls(
             form_id=form_id,
             delivery_id=delivery_id,
             recipient_type=payload.TYPE,
             recipient_payload=payload.model_dump_json(),
+            contact_snapshot=contact_snapshot,
             access_token=_generate_token(),
         )
         return recipient_model
+
+    @property
+    def contact_snapshot_dict(self) -> dict[str, Any]:
+        if not self.contact_snapshot:
+            return {}
+        if hasattr(self.contact_snapshot, "model_dump"):
+            return self.contact_snapshot.model_dump(mode="json")
+        if isinstance(self.contact_snapshot, str):
+            return json.loads(self.contact_snapshot)
+        return dict(self.contact_snapshot)
 
 
 class HumanInputFormUploadToken(DefaultFieldsMixin, Base):
