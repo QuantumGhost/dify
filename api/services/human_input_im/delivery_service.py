@@ -39,6 +39,7 @@ from models.human_input import (
 )
 from models.im_delivery import IMMessageCardStatus, IMMessageCorrelation, IMMessageDeliveryStatus
 from models.workflow import WorkflowNodeExecutionModel
+from services.entities.im_binding_entities import IMBindingRecord
 from services.feature_service import FeatureService
 from services.human_input_delivery_support import (
     build_human_input_form_link,
@@ -56,9 +57,30 @@ from services.human_input_im.provider_types import (
     IMInlineInputOption,
     IMInteractionRenderPayload,
 )
+from services.human_input_observability import build_human_input_log_context
 from services.human_input_im.service import HumanInputIMService
 
 logger = logging.getLogger(__name__)
+
+
+def _build_delivery_status_entry(
+    *,
+    status: str,
+    form: HumanInputForm,
+    recipient: HumanInputFormRecipient,
+    contact_snapshot: HumanInputContactSnapshot | None = None,
+    correlation: IMMessageCorrelation | None = None,
+    extra: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    status_entry = build_human_input_log_context(
+        form=form,
+        recipient=recipient,
+        contact_snapshot=contact_snapshot,
+        correlation=correlation,
+        extra=extra,
+    )
+    status_entry["status"] = status
+    return status_entry
 
 
 @dataclass(frozen=True)
@@ -83,7 +105,10 @@ class ContactV2HumanInputDeliveryService:
     ) -> None:
         runtimes = self._load_email_delivery_runtimes(session=session, form=form)
         if not runtimes:
-            logger.info("No email delivery runtimes found for contact-v2 form %s", form.id)
+            logger.info(
+                "No email delivery runtimes found for contact-v2 Human Input form",
+                extra=build_human_input_log_context(form=form),
+            )
             return
 
         definition = FormDefinition.model_validate_json(form.form_definition)
@@ -91,7 +116,17 @@ class ContactV2HumanInputDeliveryService:
         email_available = mail.is_inited() and FeatureService.get_features(
             form.tenant_id, exclude_vector_space=True
         ).human_input_email_delivery_enabled
-        active_bindings_by_account_id: dict[str, object | None] = {}
+        logger.info(
+            "Starting contact-v2 Human Input delivery",
+            extra=build_human_input_log_context(
+                form=form,
+                extra={
+                    "delivery_runtime_count": len(runtimes),
+                    "email_available": email_available,
+                },
+            ),
+        )
+        active_bindings_by_account_id: dict[str, IMBindingRecord | None] = {}
         im_contact_ids_sent: set[str] = set()
 
         for runtime in runtimes:
@@ -101,9 +136,20 @@ class ContactV2HumanInputDeliveryService:
                 snapshot = recipient.contact_snapshot
                 if snapshot is None:
                     logger.warning(
-                        "Contact-v2 delivery encountered recipient without contact snapshot, form_id=%s, recipient_id=%s",
-                        form.id,
-                        recipient.id,
+                        "Skipped contact-v2 delivery recipient because the contact snapshot is missing",
+                        extra=build_human_input_log_context(
+                            form=form,
+                            recipient=recipient,
+                            extra={"delivery_id": runtime.delivery.id},
+                        ),
+                    )
+                    self._append_process_data_status(
+                        session=session,
+                        form=form,
+                        status="skipped_missing_contact_snapshot",
+                        recipient=recipient,
+                        contact_snapshot=None,
+                        extra={"delivery_id": runtime.delivery.id},
                     )
                     continue
 
@@ -130,13 +176,31 @@ class ContactV2HumanInputDeliveryService:
                     variable_pool=variable_pool,
                     email_available=email_available,
                 )
+                external_status = "external_email" if delivery_status == "email_sent" else f"skipped_{delivery_status}"
+                log_method = logger.info if delivery_status == "email_sent" else logger.warning
+                log_method(
+                    "Delivered contact-v2 Human Input to external email recipient"
+                    if delivery_status == "email_sent"
+                    else "Skipped contact-v2 external email recipient delivery",
+                    extra=build_human_input_log_context(
+                        form=form,
+                        recipient=recipient,
+                        contact_snapshot=snapshot,
+                        extra={"delivery_id": runtime.delivery.id, "delivery_result": delivery_status},
+                    ),
+                )
                 self._append_process_data_status(
                     session=session,
                     form=form,
-                    status="external_email" if delivery_status == "email_sent" else f"skipped_{delivery_status}",
+                    status=external_status,
                     recipient=recipient,
-                    extra={"delivery_id": runtime.delivery.id},
+                    contact_snapshot=snapshot,
+                    extra={"delivery_id": runtime.delivery.id, "delivery_result": delivery_status},
                 )
+        logger.info(
+            "Finished contact-v2 Human Input delivery",
+            extra=build_human_input_log_context(form=form),
+        )
 
     def _deliver_member_recipient(
         self,
@@ -150,16 +214,26 @@ class ContactV2HumanInputDeliveryService:
         node_title: str | None,
         variable_pool,
         email_available: bool,
-        active_bindings_by_account_id: dict[str, object | None],
+        active_bindings_by_account_id: dict[str, IMBindingRecord | None],
         im_contact_ids_sent: set[str],
     ) -> None:
         account_id = snapshot.account_id
         if not account_id:
+            logger.warning(
+                "Skipped member Contact delivery because the contact snapshot has no account id",
+                extra=build_human_input_log_context(
+                    form=form,
+                    recipient=recipient,
+                    contact_snapshot=snapshot,
+                    extra={"delivery_id": runtime.delivery.id},
+                ),
+            )
             self._append_process_data_status(
                 session=session,
                 form=form,
                 status="skipped_missing_account",
                 recipient=recipient,
+                contact_snapshot=snapshot,
                 extra={"delivery_id": runtime.delivery.id},
             )
             return
@@ -172,6 +246,16 @@ class ContactV2HumanInputDeliveryService:
         binding = active_bindings_by_account_id[account_id]
         if binding is not None:
             if snapshot.contact_id in im_contact_ids_sent:
+                logger.info(
+                    "Skipped duplicate IM delivery for Contact already notified in this form",
+                    extra=build_human_input_log_context(
+                        form=form,
+                        recipient=recipient,
+                        contact_snapshot=snapshot,
+                        binding=binding,
+                        extra={"delivery_id": runtime.delivery.id},
+                    ),
+                )
                 return
             im_contact_ids_sent.add(snapshot.contact_id)
             self._send_im(
@@ -194,20 +278,44 @@ class ContactV2HumanInputDeliveryService:
                 variable_pool=variable_pool,
                 email_available=email_available,
             )
+            fallback_status = "fallback_email" if delivery_status == "email_sent" else f"skipped_{delivery_status}"
+            log_method = logger.info if delivery_status == "email_sent" else logger.warning
+            log_method(
+                "Delivered Human Input via email fallback for unbound member Contact"
+                if delivery_status == "email_sent"
+                else "Skipped Human Input email fallback for unbound member Contact",
+                extra=build_human_input_log_context(
+                    form=form,
+                    recipient=recipient,
+                    contact_snapshot=snapshot,
+                    extra={"delivery_id": runtime.delivery.id, "delivery_result": delivery_status},
+                ),
+            )
             self._append_process_data_status(
                 session=session,
                 form=form,
-                status="fallback_email" if delivery_status == "email_sent" else f"skipped_{delivery_status}",
+                status=fallback_status,
                 recipient=recipient,
-                extra={"delivery_id": runtime.delivery.id},
+                contact_snapshot=snapshot,
+                extra={"delivery_id": runtime.delivery.id, "delivery_result": delivery_status},
             )
             return
 
+        logger.warning(
+            "Skipped member Contact delivery because neither IM binding nor fallback email is available",
+            extra=build_human_input_log_context(
+                form=form,
+                recipient=recipient,
+                contact_snapshot=snapshot,
+                extra={"delivery_id": runtime.delivery.id},
+            ),
+        )
         self._append_process_data_status(
             session=session,
             form=form,
             status="skipped_no_email",
             recipient=recipient,
+            contact_snapshot=snapshot,
             extra={"delivery_id": runtime.delivery.id},
         )
 
@@ -238,6 +346,17 @@ class ContactV2HumanInputDeliveryService:
         )
         session.add(correlation)
         session.flush([correlation])
+        logger.info(
+            "Sending IM Human Input form to bound Contact",
+            extra=build_human_input_log_context(
+                form=form,
+                recipient=recipient,
+                contact_snapshot=snapshot,
+                binding=binding,
+                correlation=correlation,
+                extra={"interaction_id": interaction_mapping.interaction_id},
+            ),
+        )
 
         content = self._render_im_content(
             definition=definition,
@@ -272,19 +391,44 @@ class ContactV2HumanInputDeliveryService:
             correlation.delivery_status = IMMessageDeliveryStatus.SENT
             correlation.sent_at = naive_utc_now()
             session.flush([correlation])
+            logger.info(
+                "Delivered IM Human Input form",
+                extra=build_human_input_log_context(
+                    form=form,
+                    recipient=recipient,
+                    contact_snapshot=snapshot,
+                    binding=binding,
+                    correlation=correlation,
+                    provider_message_id=send_result.provider_message_id,
+                    interaction_id=interaction_mapping.interaction_id,
+                ),
+            )
             return
 
         correlation.delivery_status = IMMessageDeliveryStatus.FAILED
         correlation.error_reason = send_result.error or "IM provider rejected form send"
         session.flush([correlation])
+        logger.warning(
+            "IM provider rejected Human Input form delivery",
+            extra=build_human_input_log_context(
+                form=form,
+                recipient=recipient,
+                contact_snapshot=snapshot,
+                binding=binding,
+                correlation=correlation,
+                interaction_id=interaction_mapping.interaction_id,
+                extra={"error_reason": correlation.error_reason},
+            ),
+        )
         self._append_process_data_status(
             session=session,
             form=form,
             status="im_failed",
             recipient=recipient,
+            contact_snapshot=snapshot,
+            correlation=correlation,
             extra={
-                "correlation_id": correlation.id,
-                "error": correlation.error_reason or "",
+                "error_reason": correlation.error_reason or "",
             },
         )
 
@@ -298,11 +442,6 @@ class ContactV2HumanInputDeliveryService:
         email_available: bool,
     ) -> str:
         if not email_available:
-            logger.info(
-                "Email delivery unavailable for contact-v2 human input, form_id=%s, recipient_id=%s",
-                form.id,
-                recipient.id,
-            )
             return "email_unavailable"
         email = self._recipient_email(recipient)
         if not email or not recipient.access_token:
@@ -465,7 +604,9 @@ class ContactV2HumanInputDeliveryService:
         form: HumanInputForm,
         status: str,
         recipient: HumanInputFormRecipient,
-        extra: Mapping[str, str],
+        contact_snapshot: HumanInputContactSnapshot | None = None,
+        correlation: IMMessageCorrelation | None = None,
+        extra: Mapping[str, object],
     ) -> None:
         if not form.workflow_run_id:
             return
@@ -486,11 +627,14 @@ class ContactV2HumanInputDeliveryService:
         delivery_data = dict(process_data.get("human_input_delivery") or {})
         recipient_statuses = list(delivery_data.get("recipient_statuses") or [])
         recipient_statuses.append(
-            {
-                "recipient_id": recipient.id,
-                "status": status,
-                **dict(extra),
-            }
+            _build_delivery_status_entry(
+                status=status,
+                form=form,
+                recipient=recipient,
+                contact_snapshot=contact_snapshot,
+                correlation=correlation,
+                extra=extra,
+            )
         )
         delivery_data["recipient_statuses"] = recipient_statuses
         process_data["human_input_delivery"] = delivery_data

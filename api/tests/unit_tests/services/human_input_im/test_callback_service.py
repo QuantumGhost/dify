@@ -362,16 +362,23 @@ def test_callback_service_handles_submission_success_and_enqueues_compensation(
         submission_user_id=submission_user_id,
         submission_end_user_id=submission_end_user_id,
     )
-    queue.enqueue.assert_called_once_with(
-        IMCardUpdateCompensationRequest(
-            correlation_id=correlation_id,
-            provider=IMProvider.FEISHU,
-            provider_message_id="message-1",
-            target_status=IMMessageCardStatus.SUBMITTED,
-            last_provider_event_id="event-1",
-            metadata={"form_id": "form-1", "recipient_id": "recipient-1"},
-        )
-    )
+    queue.enqueue.assert_called_once()
+    request = queue.enqueue.call_args.args[0]
+    assert isinstance(request, IMCardUpdateCompensationRequest)
+    assert request.correlation_id == correlation_id
+    assert request.provider == IMProvider.FEISHU
+    assert request.provider_message_id == "message-1"
+    assert request.target_status == IMMessageCardStatus.SUBMITTED
+    assert request.last_provider_event_id == "event-1"
+    assert request.metadata["form_id"] == "form-1"
+    assert request.metadata["recipient_id"] == "recipient-1"
+    assert request.metadata["recipient_type"] == RecipientType.STANDALONE_WEB_APP.value
+    assert request.metadata["provider"] == IMProvider.FEISHU.value
+    assert request.metadata["provider_workspace_id"] == "ws-1"
+    assert request.metadata["provider_user_id"] == "user-1"
+    assert request.metadata["provider_event_id"] == "event-1"
+    assert request.metadata["interaction_id"] == "interaction-1"
+    assert request.metadata["correlation_id"] == correlation_id
 
     with Session(engine) as session:
         correlation = session.get(IMMessageCorrelation, correlation_id)

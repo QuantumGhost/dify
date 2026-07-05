@@ -9,6 +9,7 @@ into provider-local action/component identifiers.
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -27,9 +28,12 @@ from services.human_input_service import (
     InvalidFormDataError,
     WebAppDeliveryNotEnabledError,
 )
+from services.human_input_observability import build_human_input_log_context, stringify_log_context
 from services.human_input_im.orchestration_service import HumanInputIMOrchestrationService
 from services.human_input_im.provider_types import IMParsedSubmissionPayload, IMSubmissionEvent
 from services.human_input_im.submission_result_service import HumanInputIMSubmissionResultService
+
+logger = logging.getLogger(__name__)
 
 
 class IMBindingCompletionEvent(BaseModel):
@@ -97,6 +101,20 @@ class IMSubmissionCallbackContext(BaseModel):
     recipient_provider_workspace_id: str
     recipient_provider_user_id: str
     interaction_mapping: IMInteractionMappingSnapshot
+    tenant_id: str | None = None
+    app_id: str | None = None
+    workflow_run_id: str | None = None
+    conversation_id: str | None = None
+    form_id: str | None = None
+    node_id: str | None = None
+    recipient_id: str | None = None
+    contact_id: str | None = None
+    contact_tenant_id: str | None = None
+    contact_type: str | None = None
+    contact_source: str | None = None
+    contact_status: str | None = None
+    contact_account_id: str | None = None
+    provider_message_id: str | None = None
     submission_user_id: str | None = None
     submission_end_user_id: str | None = None
 
@@ -162,6 +180,15 @@ class HumanInputIMCallbackService:
         event: IMBindingCompletionEvent,
     ) -> IMBindingCompletionResult:
         if not self.record_event_once(session=session, provider=event.provider, event_id=event.event_id):
+            logger.info(
+                "Ignored duplicate IM binding completion callback event",
+                extra=build_human_input_log_context(
+                    provider=event.provider,
+                    provider_event_id=event.event_id,
+                    provider_workspace_id=event.provider_workspace_id,
+                    provider_user_id=event.provider_user_id,
+                ),
+            )
             return IMBindingCompletionResult(
                 binding=None,
                 duplicate_event=True,
@@ -176,6 +203,15 @@ class HumanInputIMCallbackService:
             provider_union_id=event.provider_union_id,
             provider_user_display_name=event.provider_user_display_name,
             provider_user_avatar_url=event.provider_user_avatar_url,
+        )
+        logger.info(
+            "Completed IM binding callback event",
+            extra=build_human_input_log_context(
+                binding=binding,
+                provider_event_id=event.event_id,
+                provider_workspace_id=event.provider_workspace_id,
+                provider_user_id=event.provider_user_id,
+            ),
         )
         return IMBindingCompletionResult(
             binding=binding,
@@ -217,7 +253,11 @@ class HumanInputIMCallbackService:
         idempotency, status persistence, and async-compensation enqueueing.
         """
 
+        callback_log_context = self._build_callback_log_context(event=event, context=context)
+        logger.info("Handling IM submission callback event", extra=callback_log_context)
+
         if not self.record_event_once(session=session, provider=event.provider, event_id=event.event_id):
+            logger.info("Ignored duplicate IM submission callback event", extra=callback_log_context)
             return IMSubmissionCallbackResult(
                 duplicate_event=True,
                 acknowledgement=self.acknowledge_event(event_id=event.event_id),
@@ -231,6 +271,12 @@ class HumanInputIMCallbackService:
             )
             self._submit_command(submitter=submitter, command=command)
         except IMBindingValidationError as exc:
+            logger.warning(
+                "Rejected IM submission callback during binding or interaction validation",
+                extra=build_human_input_log_context(
+                    extra=callback_log_context | {"error_reason": self._describe_error(exc)}
+                ),
+            )
             self._submission_result_service.mark_validation_error(
                 session=session,
                 correlation_id=context.correlation_id,
@@ -238,6 +284,12 @@ class HumanInputIMCallbackService:
                 error_reason=self._describe_error(exc),
             )
         except InvalidFormDataError as exc:
+            logger.warning(
+                "Rejected IM submission callback because the submitted form payload is invalid",
+                extra=build_human_input_log_context(
+                    extra=callback_log_context | {"error_reason": self._describe_error(exc)}
+                ),
+            )
             self._submission_result_service.mark_validation_error(
                 session=session,
                 correlation_id=context.correlation_id,
@@ -245,6 +297,12 @@ class HumanInputIMCallbackService:
                 error_reason=self._describe_error(exc),
             )
         except WebAppDeliveryNotEnabledError as exc:
+            logger.warning(
+                "Rejected IM submission callback because the form token does not match the recipient delivery channel",
+                extra=build_human_input_log_context(
+                    extra=callback_log_context | {"error_reason": self._describe_error(exc)}
+                ),
+            )
             self._submission_result_service.mark_validation_error(
                 session=session,
                 correlation_id=context.correlation_id,
@@ -252,6 +310,12 @@ class HumanInputIMCallbackService:
                 error_reason=self._describe_error(exc),
             )
         except FormExpiredError as exc:
+            logger.warning(
+                "Rejected IM submission callback because the Human Input form is expired",
+                extra=build_human_input_log_context(
+                    extra=callback_log_context | {"error_reason": self._describe_error(exc)}
+                ),
+            )
             self._submission_result_service.mark_expired(
                 session=session,
                 correlation_id=context.correlation_id,
@@ -259,6 +323,12 @@ class HumanInputIMCallbackService:
                 error_reason=self._describe_error(exc),
             )
         except FormSubmittedError as exc:
+            logger.info(
+                "Ignored IM submission callback because the Human Input form was already handled",
+                extra=build_human_input_log_context(
+                    extra=callback_log_context | {"error_reason": self._describe_error(exc)}
+                ),
+            )
             self._submission_result_service.mark_already_handled(
                 session=session,
                 correlation_id=context.correlation_id,
@@ -266,6 +336,12 @@ class HumanInputIMCallbackService:
                 error_reason=self._describe_error(exc),
             )
         except RepositoryFormNotFoundError as exc:
+            logger.warning(
+                "Rejected IM submission callback because the underlying Human Input form state is not available",
+                extra=build_human_input_log_context(
+                    extra=callback_log_context | {"error_reason": self._describe_error(exc)}
+                ),
+            )
             self._mark_repository_submission_failure(
                 session=session,
                 correlation_id=context.correlation_id,
@@ -277,7 +353,12 @@ class HumanInputIMCallbackService:
                 session=session,
                 correlation_id=context.correlation_id,
                 provider_event_id=event.event_id,
+                compensation_metadata=self._build_compensation_metadata(
+                    event=event,
+                    context=context,
+                ),
             )
+            logger.info("Submitted Human Input form from IM callback", extra=callback_log_context)
 
         return IMSubmissionCallbackResult(
             duplicate_event=False,
@@ -379,3 +460,43 @@ class HumanInputIMCallbackService:
         if isinstance(description, str) and description:
             return description
         return str(error) or error.__class__.__name__
+
+    def _build_callback_log_context(
+        self,
+        *,
+        event: IMSubmissionEvent,
+        context: IMSubmissionCallbackContext,
+    ) -> dict[str, object]:
+        return build_human_input_log_context(
+            tenant_id=context.tenant_id,
+            app_id=context.app_id,
+            workflow_run_id=context.workflow_run_id,
+            conversation_id=context.conversation_id,
+            form_id=context.form_id,
+            node_id=context.node_id,
+            recipient_id=context.recipient_id,
+            recipient_type=context.recipient_type,
+            provider=event.provider,
+            provider_workspace_id=event.provider_workspace_id,
+            provider_user_id=event.provider_user_id,
+            provider_message_id=context.provider_message_id,
+            provider_event_id=event.event_id,
+            interaction_id=event.interaction_id,
+            extra={
+                "correlation_id": context.correlation_id,
+                "contact_id": context.contact_id,
+                "contact_tenant_id": context.contact_tenant_id,
+                "contact_type": context.contact_type,
+                "contact_source": context.contact_source,
+                "contact_status": context.contact_status,
+                "contact_account_id": context.contact_account_id,
+            },
+        )
+
+    def _build_compensation_metadata(
+        self,
+        *,
+        event: IMSubmissionEvent,
+        context: IMSubmissionCallbackContext,
+    ) -> dict[str, str]:
+        return stringify_log_context(self._build_callback_log_context(event=event, context=context))

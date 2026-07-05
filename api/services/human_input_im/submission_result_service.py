@@ -7,6 +7,8 @@ card-compensation command only for successful submissions.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from sqlalchemy.orm import Session
 
 from models.im_delivery import IMMessageCorrelation
@@ -35,13 +37,17 @@ class HumanInputIMSubmissionResultService:
         session: Session,
         correlation_id: str,
         provider_event_id: str,
+        compensation_metadata: Mapping[str, str] | None = None,
     ) -> IMMessageCorrelation:
         correlation = self._status_service.mark_submitted(
             session=session,
             correlation_id=correlation_id,
             provider_event_id=provider_event_id,
         )
-        self._compensation_service.enqueue_for_correlation(correlation)
+        self._compensation_service.enqueue_for_correlation(
+            correlation,
+            metadata=dict(compensation_metadata or {}),
+        )
         return correlation
 
     def mark_validation_error(

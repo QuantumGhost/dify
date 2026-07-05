@@ -48,6 +48,7 @@ def test_seed_workspace_contacts_calls_service_with_optional_account_ids(monkeyp
     assert captured["account_ids"] == ["account-1", "account-2"]
     assert session_context.entered is True
     assert session_context.exited is True
+    assert "Tenant: tenant-1" in result.output
     assert "Resolved member contacts: 2" in result.output
 
 

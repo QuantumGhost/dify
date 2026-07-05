@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import logging
 
-import click
 from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models.human_input import HumanInputForm, HumanInputFormRecipient, RecipientType
 from services.human_input_delivery_support import open_human_input_delivery_session
+from services.human_input_observability import build_human_input_log_context
 from services.human_input_im.delivery_service import ContactV2HumanInputDeliveryService
 from tasks.mail_human_input_delivery_task import dispatch_human_input_email_task
 
@@ -40,19 +40,30 @@ def _form_uses_contact_v2_delivery_in_session(*, session: Session, form_id: str)
 
 @shared_task(queue="mail")
 def dispatch_human_input_im_task(form_id: str, node_title: str | None = None, session_factory=None):
-    logger.info(click.style(f"Start contact-v2 human input delivery for form {form_id}", fg="green"))
+    logger.info(
+        "Starting contact-v2 Human Input delivery task",
+        extra=build_human_input_log_context(form_id=form_id),
+    )
     try:
         with open_human_input_delivery_session(session_factory) as session:
             form = session.get(HumanInputForm, form_id)
             if form is None:
-                logger.warning("Human input form not found, form_id=%s", form_id)
+                logger.warning("Human Input form not found for contact-v2 delivery task", extra={"form_id": form_id})
                 return
             if not _form_uses_contact_v2_delivery_in_session(session=session, form_id=form_id):
+                logger.info(
+                    "Delegating Human Input delivery task to legacy email path because the form has no contact snapshots",
+                    extra=build_human_input_log_context(form=form),
+                )
                 dispatch_human_input_email_task(form_id=form_id, node_title=node_title, session_factory=session_factory)
                 return
 
             ContactV2HumanInputDeliveryService().deliver_form(session=session, form=form, node_title=node_title)
             if hasattr(session, "commit"):
                 session.commit()
+            logger.info("Completed contact-v2 Human Input delivery task", extra=build_human_input_log_context(form=form))
     except Exception:
-        logger.exception("Contact-v2 human input delivery failed, form_id=%s", form_id)
+        logger.exception(
+            "Contact-v2 Human Input delivery task failed",
+            extra=build_human_input_log_context(form_id=form_id),
+        )

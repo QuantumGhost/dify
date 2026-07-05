@@ -193,6 +193,28 @@ Provider callback 层按 provider event id 去重。Form submission 层保证 fo
 - [IM file/file-list 支持不一致] → 保留 Web form fallback，IM card 只内嵌 provider 能稳定支持的字段。
 - [卡片状态更新失败] → workflow 不阻塞，异步补偿并保留 operator 可排障状态。
 
+## Operator Troubleshooting Path
+
+本期 operator 排障以结构化日志和已有持久化状态为主，不新增独立后台页面。排障入口按下面顺序进行：
+
+1. 先用 `tenant_id + form_id` 或 `workflow_run_id / conversation_id` 过滤结构化日志，确认当前问题落在 seed、binding、delivery、callback 还是 resume enqueue 路径。
+2. 如果问题发生在投递阶段，再读取对应 node execution 的 `process_data.human_input_delivery.recipient_statuses`；该状态暂存 delivery fallback / skip / IM failure 的 operator 视图，并补齐 `recipient_id`、`contact_id`、`provider`、`provider_message_id`、`provider_event_id`、`workflow_run_id`、`conversation_id` 等标识。
+
+具体 failure mode 的定位路径如下：
+
+- Contact missing
+  先看 `seed-workspace-contacts` command / bootstrap logs 中的 `tenant_id`、`member_account_ids`、`contact_ids`。如果 delivery 日志出现 `skipped_missing_contact_snapshot` 或 `skipped_missing_account`，说明运行时 recipient snapshot 本身不完整，需要回查 form 创建链路，而不是继续重试 callback。
+- Delivery fallback / skip
+  优先查看 `process_data.human_input_delivery.recipient_statuses`。`fallback_email` 表示 member Contact 未绑定 IM，已改走 email；`skipped_email_unavailable`、`skipped_missing_email`、`skipped_no_email` 表示 fallback 不成立；`im_failed` 说明 provider send 已拒绝并会在日志里带 `correlation_id`、`provider_message_id`、`error_reason`。
+- Callback rejected
+  查看 callback logs 中同一 `provider_event_id`、`correlation_id`、`interaction_id` 的记录。`validation_error` 对应 provider identity / interaction mapping / form payload 校验失败；若是 duplicate callback，会明确记录 duplicate event，不应再继续人工重放同一个 provider event。
+- Form expired
+  callback 或 submission logs 出现 expired 路径时，优先核对 `form_id`、`workflow_run_id`、`conversation_id`、`expiration_time` 所对应的 form 生命周期。此类问题应重建新的表单或重新触发 workflow pause，而不是强推 resume。
+- Card update failed
+  当前卡片更新失败不阻塞 workflow resume。先根据 `correlation_id`、`provider_message_id`、`provider_event_id` 查 callback success log，再查看 compensation enqueue log；如果只有 submission success 没有 compensation enqueue，说明问题在补偿入队。
+- Resume enqueue failed
+  通过 `workflow_run_id` 或 `conversation_id + form_id` 查 `HumanInputService` 的 enqueue logs。`Enqueued ... resume task` 表示已交给 Celery；`Failed to enqueue ...` 表示任务未入队，需要排查 broker / worker；`App is missing` 或 `App mode does not support resume` 表示是数据或模式问题，不是队列问题。
+
 ## Migration Plan
 
 1. 新增 Contact、IM app config resolver、必要的 ISV install/tenant config storage、IM binding credential scope、IM message correlation 和必要 snapshot 字段。

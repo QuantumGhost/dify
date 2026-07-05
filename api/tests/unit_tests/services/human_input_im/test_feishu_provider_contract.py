@@ -1,4 +1,5 @@
 import json
+import logging
 from types import SimpleNamespace
 from typing import Any
 
@@ -273,7 +274,9 @@ def test_feishu_provider_maps_send_success_response_to_provider_message_id() -> 
     assert request.request_body.uuid == "correlation-1"
 
 
-def test_feishu_provider_includes_troubleshooter_in_send_rejection_mapping() -> None:
+def test_feishu_provider_includes_troubleshooter_in_send_rejection_mapping(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     transport = _FakeTransport(
         create_response=_FakeResponse(
             success=False,
@@ -285,18 +288,19 @@ def test_feishu_provider_includes_troubleshooter_in_send_rejection_mapping() -> 
     )
     provider = FeishuHumanInputIMProvider(client_factory=_FakeClientFactory(), transport=transport)
 
-    result = provider.send_form(
-        IMSendCommand(
-            provider=IMProvider.FEISHU,
-            app_context=_build_app_context(),
-            recipient_id="open-id-1",
-            form_id="form-1",
-            title="Need approval",
-            content="Please approve",
-            metadata={"correlation_id": "correlation-1"},
-            interaction_payload=_build_interaction_payload(),
+    with caplog.at_level(logging.WARNING, logger="services.human_input_im.feishu_provider"):
+        result = provider.send_form(
+            IMSendCommand(
+                provider=IMProvider.FEISHU,
+                app_context=_build_app_context(),
+                recipient_id="open-id-1",
+                form_id="form-1",
+                title="Need approval",
+                content="Please approve",
+                metadata={"correlation_id": "correlation-1"},
+                interaction_payload=_build_interaction_payload(),
+            )
         )
-    )
 
     assert result == IMSendResult(
         provider=IMProvider.FEISHU,
@@ -307,6 +311,10 @@ def test_feishu_provider_includes_troubleshooter_in_send_rejection_mapping() -> 
             "log_id=log-send-1, troubleshooter=https://docs.example.com/feishu/send"
         ),
     )
+    assert "Feishu IM send rejected by provider" in caplog.text
+    assert "recipient_open_id=open-id-1" in caplog.text
+    assert "form_id=form-1" in caplog.text
+    assert "troubleshooter=https://docs.example.com/feishu/send" in caplog.text
 
 
 def test_feishu_provider_rejects_invalid_signature() -> None:

@@ -177,6 +177,41 @@ def test_enqueue_resume_skips_unsupported_app_mode(mocker: MockerFixture, mock_s
     resume_task.apply_async.assert_not_called()
 
 
+def test_enqueue_resume_logs_workflow_run_identifier_when_enqueue_fails(
+    mocker: MockerFixture,
+    mock_session_factory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session_factory, session = mock_session_factory
+    service = HumanInputService(session_factory)
+
+    workflow_run = MagicMock()
+    workflow_run.app_id = "app-id"
+
+    workflow_run_repo = MagicMock()
+    workflow_run_repo.get_workflow_run_by_id_without_tenant.return_value = workflow_run
+    mocker.patch(
+        "services.human_input_service.DifyAPIRepositoryFactory.create_api_workflow_run_repository",
+        return_value=workflow_run_repo,
+    )
+
+    app = MagicMock()
+    app.mode = "workflow"
+    session.execute.return_value.scalar_one_or_none.return_value = app
+
+    resume_task = mocker.patch("services.human_input_service.resume_app_execution")
+    resume_task.apply_async.side_effect = RuntimeError("queue unavailable")
+
+    with caplog.at_level(logging.ERROR, logger="services.human_input_service"):
+        service.enqueue_resume("workflow-run-id")
+
+    assert "Failed to enqueue Human Input workflow resume task" in caplog.text
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.workflow_run_id == "workflow-run-id"
+    assert record.app_mode == "workflow"
+
+
 def test_get_form_definition_by_token_for_console_uses_repository(
     sample_form_record: HumanInputFormRecord, mock_session_factory
 ):

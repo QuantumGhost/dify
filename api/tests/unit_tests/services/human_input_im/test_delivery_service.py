@@ -56,6 +56,30 @@ class _FakeSession:
         self.flush_calls.append(list(objs))
 
 
+class _ProcessDataExecution:
+    def __init__(self, process_data: dict[str, object] | None = None):
+        self.process_data = json.dumps(process_data) if process_data is not None else None
+
+    @property
+    def process_data_dict(self):
+        return json.loads(self.process_data) if self.process_data else None
+
+
+class _ProcessDataSession:
+    def __init__(self, execution: _ProcessDataExecution | None):
+        self.execution = execution
+        self.flush_calls: list[list[object] | None] = []
+
+    def scalars(self, _stmt):
+        return SimpleNamespace(first=lambda: self.execution)
+
+    def flush(self, objs=None) -> None:  # type: ignore[no-untyped-def]
+        if objs is None:
+            self.flush_calls.append(None)
+            return
+        self.flush_calls.append(list(objs))
+
+
 def _build_form_definition() -> FormDefinition:
     return FormDefinition(
         form_content="ignored",
@@ -232,18 +256,17 @@ def test_delivery_service_bound_member_uses_im_send_and_records_failed_correlati
         "provider_action_approve": {"action_id": "approve"},
         "provider_action_reject": {"action_id": "reject"},
     }
-    assert recorded_statuses == [
-        {
-            "session": session,
-            "form": form,
-            "status": "im_failed",
-            "recipient": recipient,
-            "extra": {
-                "correlation_id": correlation.id,
-                "error": "phase-1 provider transport adapter not implemented",
-            },
-        }
-    ]
+    assert len(recorded_statuses) == 1
+    status_entry = recorded_statuses[0]
+    assert status_entry["session"] is session
+    assert status_entry["form"] is form
+    assert status_entry["status"] == "im_failed"
+    assert status_entry["recipient"] is recipient
+    assert status_entry["contact_snapshot"] is recipient.contact_snapshot
+    assert status_entry["correlation"] is correlation
+    assert status_entry["extra"] == {
+        "error_reason": "phase-1 provider transport adapter not implemented",
+    }
 
 
 def test_delivery_service_missing_binding_falls_back_to_email(monkeypatch):
@@ -405,3 +428,53 @@ def test_delivery_service_dedupes_duplicate_member_contact_im_sends(monkeypatch)
     service.deliver_form(session=session, form=form, node_title="Review")
 
     im_service.send_form.assert_called_once()
+
+
+def test_append_process_data_status_records_recipient_identifiers() -> None:
+    form = _build_form()
+    recipient = _build_member_recipient(email="member@example.com", snapshot_email="member@example.com")
+    execution = _ProcessDataExecution(
+        {
+            "human_input_delivery": {
+                "recipient_statuses": [
+                    {
+                        "recipient_id": "recipient-existing",
+                        "status": "fallback_email",
+                        "delivery_id": "delivery-existing",
+                    }
+                ]
+            }
+        }
+    )
+    session = _ProcessDataSession(execution)
+
+    delivery_module.ContactV2HumanInputDeliveryService._append_process_data_status(
+        session=session,
+        form=form,
+        status="im_failed",
+        recipient=recipient,
+        extra={
+            "delivery_id": "delivery-1",
+            "correlation_id": "correlation-1",
+        },
+    )
+
+    assert execution.process_data is not None
+    process_data = json.loads(execution.process_data)
+    assert process_data["human_input_delivery"]["recipient_statuses"][0] == {
+        "recipient_id": "recipient-existing",
+        "status": "fallback_email",
+        "delivery_id": "delivery-existing",
+    }
+    appended_status = process_data["human_input_delivery"]["recipient_statuses"][1]
+    assert appended_status["recipient_id"] == "recipient-1"
+    assert appended_status["status"] == "im_failed"
+    assert appended_status["delivery_id"] == "delivery-1"
+    assert appended_status["correlation_id"] == "correlation-1"
+    assert appended_status["tenant_id"] == "tenant-1"
+    assert appended_status["app_id"] == "app-1"
+    assert appended_status["workflow_run_id"] == "run-1"
+    assert appended_status["form_id"] == "form-1"
+    assert appended_status["node_id"] == "node-1"
+    assert appended_status["recipient_type"] == RecipientType.EMAIL_MEMBER.value
+    assert session.flush_calls == [[execution]]

@@ -37,6 +37,7 @@ from libs.exception import BaseHTTPException
 from models.human_input import RecipientType
 from models.model import App, AppMode
 from repositories.factory import DifyAPIRepositoryFactory
+from services.human_input_observability import build_human_input_log_context
 from tasks.app_generate.workflow_execute_task import resume_app_execution
 
 _file_access_controller = DatabaseFileAccessController()
@@ -268,26 +269,47 @@ class HumanInputService:
 
         if workflow_run is None:
             raise AssertionError(f"WorkflowRun not found, id={workflow_run_id}")
+        resume_log_context = build_human_input_log_context(
+            tenant_id=getattr(workflow_run, "tenant_id", None),
+            app_id=getattr(workflow_run, "app_id", None),
+            workflow_run_id=workflow_run_id,
+            conversation_id=getattr(workflow_run, "conversation_id", None),
+        )
         with self._session_factory(expire_on_commit=False) as session:
             app_query = select(App).where(App.id == workflow_run.app_id)
             app = session.execute(app_query).scalar_one_or_none()
         if app is None:
             logger.error(
-                "App not found for WorkflowRun, workflow_run_id=%s, app_id=%s", workflow_run_id, workflow_run.app_id
+                "Cannot enqueue Human Input workflow resume because the App is missing",
+                extra=resume_log_context,
             )
             return
 
         if app.mode in {AppMode.WORKFLOW, AppMode.ADVANCED_CHAT}:
             payload = {"workflow_run_id": workflow_run_id}
             try:
+                logger.info(
+                    "Enqueuing Human Input workflow resume task",
+                    extra=build_human_input_log_context(extra=resume_log_context | {"app_mode": app.mode}),
+                )
                 resume_app_execution.apply_async(
                     kwargs={"payload": payload},
                 )
+                logger.info(
+                    "Enqueued Human Input workflow resume task",
+                    extra=build_human_input_log_context(extra=resume_log_context | {"app_mode": app.mode}),
+                )
             except Exception:  # pragma: no cover
-                logger.exception("Failed to enqueue resume task for workflow run %s", workflow_run_id)
+                logger.exception(
+                    "Failed to enqueue Human Input workflow resume task",
+                    extra=build_human_input_log_context(extra=resume_log_context | {"app_mode": app.mode}),
+                )
             return
 
-        logger.warning("App mode %s does not support resume for workflow run %s", app.mode, workflow_run_id)
+        logger.warning(
+            "Skipped Human Input workflow resume because the App mode does not support it",
+            extra=build_human_input_log_context(extra=resume_log_context | {"app_mode": app.mode}),
+        )
 
     def enqueue_agent_app_resume(self, *, conversation_id: str, form_id: str) -> None:
         """ENG-635: resume an Agent v2 chat after its ask_human form is submitted.
@@ -299,11 +321,22 @@ class HumanInputService:
         from tasks.app_generate.resume_agent_app_task import resume_agent_app_execution
 
         try:
+            logger.info(
+                "Enqueuing Agent App Human Input resume task",
+                extra=build_human_input_log_context(conversation_id=conversation_id, form_id=form_id),
+            )
             resume_agent_app_execution.apply_async(
                 kwargs={"conversation_id": conversation_id, "form_id": form_id},
             )
+            logger.info(
+                "Enqueued Agent App Human Input resume task",
+                extra=build_human_input_log_context(conversation_id=conversation_id, form_id=form_id),
+            )
         except Exception:  # pragma: no cover
-            logger.exception("Failed to enqueue Agent App resume for conversation %s form %s", conversation_id, form_id)
+            logger.exception(
+                "Failed to enqueue Agent App Human Input resume task",
+                extra=build_human_input_log_context(conversation_id=conversation_id, form_id=form_id),
+            )
 
     def _load_variable_pool_for_form(self, form: Form) -> ReadOnlyVariablePool | None:
         workflow_run_id = form.workflow_run_id
