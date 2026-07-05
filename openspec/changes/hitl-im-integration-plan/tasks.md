@@ -29,7 +29,7 @@
 - [x] 4.1 新增 provider-neutral DTOs，用于 binding callback、send command、send result、submission callback 和 card update command。
 - [x] 4.2 定义 `HumanInputIMProvider` protocol，覆盖 signature verification、form send、submission parse、message update 和 challenge response。
 - [x] 4.3 新增 provider registry，通过 app config resolver 获取 provider credentials。
-- [ ] 4.4 新增 provider-neutral service，协调 binding lookup、delivery send、callback idempotency、card update compensation 和 form submission。
+- [x] 4.4 新增 provider-neutral service，协调 binding lookup、delivery send、callback idempotency、card update compensation 和 form submission。
 - [ ] 4.5 为 provider-neutral service 添加单元测试，覆盖 provider missing、signature failure、binding mismatch、duplicate event 和 card update retry。
 
 ## 5. Contact IM Binding
