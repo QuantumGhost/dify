@@ -81,6 +81,10 @@ vi.mock('@/service/use-common', () => ({
   useMembers: vi.fn(() => ({ data: { accounts: [] }, refetch: vi.fn() })),
   useProviderContext: vi.fn(),
 }))
+vi.mock('@/features/workspace-contacts/client', () => ({
+  useContacts: vi.fn(() => ({ data: [], isPending: false })),
+  useCreateExternalContact: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}))
 
 vi.mock('@/service/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/service/client')>()

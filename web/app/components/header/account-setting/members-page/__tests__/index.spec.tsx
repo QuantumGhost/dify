@@ -9,6 +9,7 @@ import { renderWithSystemFeatures } from '@/__tests__/utils/mock-system-features
 import { Plan } from '@/app/components/billing/type'
 import { useAppContext } from '@/context/app-context'
 import { useProviderContext } from '@/context/provider-context'
+import { useContacts, useCreateExternalContact } from '@/features/workspace-contacts/client'
 import { useFormatTimeFromNow } from '@/hooks/use-format-time-from-now'
 import { useUpdateRolesOfMember } from '@/service/access-control/use-member-roles'
 import { useMembers } from '@/service/use-common'
@@ -19,6 +20,7 @@ vi.mock('@/context/provider-context')
 vi.mock('@/hooks/use-format-time-from-now')
 vi.mock('@/service/access-control/use-member-roles')
 vi.mock('@/service/use-common')
+vi.mock('@/features/workspace-contacts/client')
 
 const renderMembersPage = () => renderWithSystemFeatures(<MembersPage />, {
   systemFeatures: { is_email_setup: true },
@@ -193,6 +195,14 @@ describe('MembersPage', () => {
       data: { accounts: mockAccounts },
       refetch: mockRefetch,
     } as unknown as ReturnType<typeof useMembers>)
+    vi.mocked(useContacts).mockReturnValue({
+      data: { data: [] },
+      isPending: false,
+    } as unknown as ReturnType<typeof useContacts>)
+    vi.mocked(useCreateExternalContact).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateExternalContact>)
     mockUpdateRolesOfMember.mockImplementation((_payload, options) => {
       options?.onSuccess?.()
       return Promise.resolve()
@@ -222,7 +232,7 @@ describe('MembersPage', () => {
   it('should render fixed name column and flexible role column layout', () => {
     renderMembersPage()
 
-    expect(screen.getByText('common.members.name', { selector: '.system-xs-medium-uppercase' }))!.toHaveClass('w-65', 'shrink-0')
+    expect(screen.getAllByText('common.members.name', { selector: '.system-xs-medium-uppercase' })[0])!.toHaveClass('w-65', 'shrink-0')
     expect(screen.getByText('common.members.role', { selector: '.system-xs-medium-uppercase' }))!.toHaveClass('min-w-0', 'grow')
     expect(getMemberDetailsButton('1').children[0])!.toHaveClass('w-65', 'shrink-0')
     expect(getMemberDetailsButton('1').children[2])!.toHaveClass('min-w-0', 'grow')
@@ -238,6 +248,70 @@ describe('MembersPage', () => {
 
     expect(screen.getByText('common.members.roles', { selector: '.system-xs-medium-uppercase' }))!.toHaveClass('min-w-0', 'grow')
     expect(screen.queryByText('common.members.role', { selector: '.system-xs-medium-uppercase' })).not.toBeInTheDocument()
+  })
+
+  it('should render workspace contacts with delivery status badges', () => {
+    vi.mocked(useContacts).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'contact-1',
+            tenant_id: 'tenant-1',
+            type: 'member',
+            status: 'active',
+            source: 'workspace_member',
+            account_id: 'account-1',
+            name: 'Approver One',
+            email: 'approver@example.com',
+            delivery_status: 'im',
+            delivery_provider: 'feishu',
+          },
+          {
+            id: 'contact-2',
+            tenant_id: 'tenant-1',
+            type: 'member',
+            status: 'active',
+            source: 'workspace_member',
+            account_id: 'account-2',
+            name: 'Reviewer Two',
+            email: 'reviewer@example.com',
+            delivery_status: 'email',
+            delivery_provider: null,
+          },
+        ],
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useContacts>)
+
+    renderMembersPage()
+
+    expect(screen.getByText('Approver One')).toBeInTheDocument()
+    expect(screen.getByText('Reviewer Two')).toBeInTheDocument()
+    expect(screen.getAllByText('common.account.imBinding.status.bound').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('common.account.email').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Feishu').length).toBeGreaterThan(0)
+  })
+
+  it('should create an external contact from the contacts section', async () => {
+    const user = userEvent.setup()
+    const mutateAsync = vi.fn().mockResolvedValue({})
+    vi.mocked(useCreateExternalContact).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateExternalContact>)
+
+    renderMembersPage()
+
+    await user.click(screen.getAllByRole('button', { name: 'common.operation.add' }).at(-1)!)
+    const [nameInput, emailInput] = screen.getAllByRole('textbox')
+    await user.type(nameInput!, 'Vendor')
+    await user.type(emailInput!, 'vendor@example.com')
+    await user.click(screen.getAllByRole('button', { name: 'common.operation.add' }).at(-1)!)
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      name: 'Vendor',
+      email: 'vendor@example.com',
+    })
   })
 
   it('should open and close invite modal', async () => {

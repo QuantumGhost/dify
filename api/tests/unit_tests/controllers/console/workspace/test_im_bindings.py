@@ -2,10 +2,13 @@ from inspect import unwrap
 import importlib
 
 from flask import Flask
+import pytest
+from werkzeug.exceptions import UnprocessableEntity
 
 from controllers.console.workspace.im_bindings import AccountIMBindingApi, AccountIMBindingSessionApi
 from models.im_integration import IMBindingStatus, IMInstallMode, IMProvider, IMScopeType
 from services.entities.im_binding_entities import IMBindingRecord, IMBindingSessionRecord
+from services.errors.im_binding import IMBindingValidationError
 from services.human_input_im.app_config_service import (
     IMAppConfigStatus,
     IMAppContext,
@@ -43,6 +46,20 @@ class TestAccountIMBindingApi:
         assert result["data"]["id"] == "binding-1"
         assert result["data"]["provider_user_display_name"] == "User 1"
 
+    def test_get_returns_422_when_binding_lookup_is_invalid(self, app: Flask):
+        api = AccountIMBindingApi()
+        method = unwrap(api.get)
+        current_user = type("User", (), {"id": "account-1"})()
+
+        from unittest.mock import patch
+
+        with patch(
+            "controllers.console.workspace.im_bindings.get_active_binding",
+            side_effect=IMBindingValidationError("binding state is invalid"),
+        ):
+            with pytest.raises(UnprocessableEntity, match="binding state is invalid"):
+                method(api, current_user)
+
     def test_delete_success(self, app: Flask):
         api = AccountIMBindingApi()
         method = unwrap(api.delete)
@@ -60,6 +77,25 @@ class TestAccountIMBindingApi:
         assert result["result"] == "success"
         revoke_mock.assert_called_once_with(session=__import__("controllers.console.workspace.im_bindings", fromlist=["db"]).db.session, account_id="account-1")
         commit_mock.assert_called_once()
+
+    def test_delete_returns_422_when_revoke_fails_validation(self, app: Flask):
+        api = AccountIMBindingApi()
+        method = unwrap(api.delete)
+        current_user = type("User", (), {"id": "account-1"})()
+
+        from unittest.mock import patch
+
+        with (
+            patch(
+                "controllers.console.workspace.im_bindings.revoke_active_binding",
+                side_effect=IMBindingValidationError("binding state is invalid"),
+            ),
+            patch("controllers.console.workspace.im_bindings.db.session.commit") as commit_mock,
+        ):
+            with pytest.raises(UnprocessableEntity, match="binding state is invalid"):
+                method(api, current_user)
+
+        commit_mock.assert_not_called()
 
 
 class TestAccountIMBindingSessionApi:
@@ -107,3 +143,39 @@ class TestAccountIMBindingSessionApi:
         assert status == 201
         assert result["id"] == "session-1"
         commit_mock.assert_called_once()
+
+    def test_post_returns_422_when_binding_session_creation_fails(self, app: Flask):
+        api = AccountIMBindingSessionApi()
+        method = unwrap(api.post)
+        payload = {"provider": "feishu"}
+        current_user = type("User", (), {"id": "account-1"})()
+        app_context = IMAppContext(
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            status=IMAppConfigStatus.CONFIGURED,
+            token_status=IMTokenStatus.NOT_APPLICABLE,
+            event_mode=IMEventMode.LONG_CONNECTION,
+            app_id="cli_a",
+            app_secret_configured=True,
+            errors=[],
+        )
+
+        from unittest.mock import PropertyMock, patch
+        module = importlib.import_module("controllers.console.workspace.im_bindings")
+
+        with (
+            app.test_request_context("/", json=payload),
+            patch.object(type(module.console_ns), "payload", new_callable=PropertyMock, return_value=payload),
+            patch("controllers.console.workspace.im_bindings.resolve_im_app_context", return_value=app_context),
+            patch(
+                "controllers.console.workspace.im_bindings.create_binding_session",
+                side_effect=IMBindingValidationError("binding session cannot be created"),
+            ),
+            patch("controllers.console.workspace.im_bindings.db.session.commit") as commit_mock,
+        ):
+            with pytest.raises(UnprocessableEntity, match="binding session cannot be created"):
+                method(api, current_user, "tenant-1")
+
+        commit_mock.assert_not_called()

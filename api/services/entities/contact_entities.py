@@ -1,6 +1,13 @@
 from pydantic import BaseModel, ConfigDict
 
 from models.contact import Contact, ContactSource, ContactStatus, ContactType
+from models.im_integration import IMProvider
+
+
+class ContactDeliveryStatus(str):
+    IM = "im"
+    EMAIL = "email"
+    NONE = "none"
 
 
 class ContactRecord(BaseModel):
@@ -37,11 +44,16 @@ class ResolvedContact(BaseModel):
     account_id: str | None = None
     name: str
     email: str | None = None
+    delivery_status: str
+    delivery_provider: IMProvider | None = None
 
     model_config = ConfigDict(frozen=True)
 
     @classmethod
-    def from_external_contact(cls, contact: Contact) -> "ResolvedContact":
+    def from_external_contact(
+        cls,
+        contact: Contact,
+    ) -> "ResolvedContact":
         return cls(
             id=contact.id,
             tenant_id=contact.tenant_id,
@@ -51,6 +63,8 @@ class ResolvedContact(BaseModel):
             account_id=None,
             name=contact.name,
             email=contact.email,
+            delivery_status=ContactDeliveryStatus.EMAIL if contact.email else ContactDeliveryStatus.NONE,
+            delivery_provider=None,
         )
 
     @classmethod
@@ -60,6 +74,8 @@ class ResolvedContact(BaseModel):
         contact: ContactRecord,
         account_name: str,
         account_email: str | None,
+        delivery_status: str,
+        delivery_provider: IMProvider | None,
     ) -> "ResolvedContact":
         return cls(
             id=contact.id,
@@ -70,4 +86,6 @@ class ResolvedContact(BaseModel):
             account_id=contact.account_id,
             name=account_name,
             email=account_email,
+            delivery_status=delivery_status,
+            delivery_provider=delivery_provider,
         )

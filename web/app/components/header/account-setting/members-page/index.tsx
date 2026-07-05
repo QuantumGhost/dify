@@ -17,6 +17,7 @@ import { getAccessControlTemplateLanguage, LanguagesSupported } from '@/i18n-con
 import { useUpdateRolesOfMember } from '@/service/access-control/use-member-roles'
 import { useMembers } from '@/service/use-common'
 import { hasPermission } from '@/utils/permission'
+import ContactsSection from './contacts-section'
 import EditWorkspaceModal from './edit-workspace-modal'
 import InviteButton from './invite-button'
 import InviteModal from './invite-modal'
@@ -172,6 +173,7 @@ const MembersPage = () => {
             ))}
           </div>
         </div>
+        <ContactsSection />
       </div>
       {
         inviteModalVisible && (

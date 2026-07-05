@@ -17,6 +17,12 @@
 
 当前 demo 的所有前端编排仍必须在现有前端代码中完成，或只做极少非结构性调整。新的 Contact recipient 配置 UI、Contact 管理 UI、IM binding/config UI 和 HumanInput v2 前端配置面不属于 demo 范围。为此需要一个 transitional compatibility layer：前端仍使用现有 HumanInput v1 编排界面并提交 v1 node config；后端/runtime 在执行前将 v1 config 映射为 HumanInput v2 runtime model，并使用新的 v2 runtime 执行。该 compatibility layer 不能成为正式 v2 schema 的长期边界。
 
+为了避免 demo 期间完全没有用户可见的 Contact / binding 反馈，本期允许增加极小的辅助 UI：
+
+- workspace settings 中可以增加一个最小 Contacts 管理 surface，用于查看当前 Contact 列表、external Contact 创建入口，以及 member Contact 的当前 delivery status；
+- account preferences 中可以增加当前 account 的 IM binding status / revoke surface；
+- workflow 编排侧可以增加通往上述管理 surface 的入口，但不新增正式的 Contact recipient 配置 schema。
+
 ## Goals / Non-Goals
 
 **Goals:**

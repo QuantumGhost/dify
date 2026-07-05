@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from models.account import Account, TenantAccountJoin
 from models.base import TypeBase
 from models.contact import Contact, ContactInvariantError, ContactSource, ContactStatus, ContactType
+from models.im_integration import IMBinding, IMBindingStatus, IMInstallMode, IMProvider, IMScopeType
 from services.contact_bootstrap_service import seed_member_contacts
 from services.contact_resolution_service import resolve_contact_records
 from services.contact_service import create_external_contact, ensure_member_contact, list_contact_records
@@ -223,7 +224,7 @@ def test_list_contact_records_filters_type_and_disabled_rows() -> None:
 
 def test_list_contacts_prefers_current_account_profile_for_member_contact() -> None:
     engine = sa.create_engine("sqlite:///:memory:")
-    TypeBase.metadata.create_all(engine, tables=[Account.__table__, Contact.__table__])
+    TypeBase.metadata.create_all(engine, tables=[Account.__table__, Contact.__table__, IMBinding.__table__])
 
     member_account = Account(name="Current Name", email="current@example.com")
     member_account.id = "account-1"
@@ -245,6 +246,7 @@ def test_list_contacts_prefers_current_account_profile_for_member_contact() -> N
 
     assert [contact.name for contact in contacts] == ["Current Name"]
     assert [contact.email for contact in contacts] == ["current@example.com"]
+    assert [contact.delivery_status for contact in contacts] == ["email"]
 
 
 def test_list_contacts_falls_back_to_contact_row_when_member_account_missing() -> None:
@@ -269,6 +271,67 @@ def test_list_contacts_falls_back_to_contact_row_when_member_account_missing() -
 
     assert [contact.name for contact in contacts] == ["Seeded Name"]
     assert [contact.email for contact in contacts] == ["seeded@example.com"]
+    assert [contact.delivery_status for contact in contacts] == ["email"]
+
+
+def test_list_contacts_marks_member_contact_as_im_when_active_binding_exists() -> None:
+    engine = sa.create_engine("sqlite:///:memory:")
+    TypeBase.metadata.create_all(engine, tables=[Account.__table__, Contact.__table__, IMBinding.__table__])
+
+    member_account = Account(name="Current Name", email="current@example.com")
+    member_account.id = "account-1"
+    member_contact = Contact(
+        tenant_id="tenant-1",
+        type=ContactType.MEMBER,
+        account_id="account-1",
+        name="Seeded Name",
+        email="seeded@example.com",
+        status=ContactStatus.ACTIVE,
+        source=ContactSource.WORKSPACE_MEMBER,
+    )
+    active_binding = IMBinding(
+        account_id="account-1",
+        provider=IMProvider.FEISHU,
+        install_mode=IMInstallMode.SELF_BUILT,
+        scope_type=IMScopeType.DEPLOYMENT,
+        scope_id="deployment",
+        provider_workspace_id="ws-1",
+        provider_user_id="user-1",
+        status=IMBindingStatus.ACTIVE,
+    )
+
+    with Session(engine) as session:
+        session.add_all([member_account, member_contact, active_binding])
+        session.commit()
+        contact_records = list_contact_records(session=session, tenant_id="tenant-1")
+        contacts = resolve_contact_records(session=session, contacts=contact_records)
+
+    assert [contact.delivery_status for contact in contacts] == ["im"]
+    assert [contact.delivery_provider for contact in contacts] == [IMProvider.FEISHU]
+
+
+def test_list_contacts_marks_member_contact_as_none_when_email_and_binding_are_missing() -> None:
+    engine = sa.create_engine("sqlite:///:memory:")
+    TypeBase.metadata.create_all(engine, tables=[Contact.__table__, IMBinding.__table__])
+
+    member_contact = Contact(
+        tenant_id="tenant-1",
+        type=ContactType.MEMBER,
+        account_id="account-1",
+        name="Seeded Name",
+        email=None,
+        status=ContactStatus.ACTIVE,
+        source=ContactSource.WORKSPACE_MEMBER,
+    )
+
+    with Session(engine) as session:
+        session.add(member_contact)
+        session.commit()
+        contact_records = list_contact_records(session=session, tenant_id="tenant-1")
+        contacts = resolve_contact_records(session=session, contacts=contact_records)
+
+    assert [contact.delivery_status for contact in contacts] == ["none"]
+    assert [contact.delivery_provider for contact in contacts] == [None]
 
 
 def test_ensure_member_contact_returns_existing_authoritative_row() -> None:

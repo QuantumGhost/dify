@@ -25,6 +25,8 @@ class TestWorkspaceContactsApi:
             account_id=None,
             name="Vendor",
             email="vendor@example.com",
+            delivery_status="email",
+            delivery_provider=None,
         )
 
         from unittest.mock import patch
@@ -51,6 +53,7 @@ class TestWorkspaceContactsApi:
         assert status == 200
         assert result["data"][0]["id"] == "contact-1"
         assert result["data"][0]["type"] == "external"
+        assert result["data"][0]["delivery_status"] == "email"
         list_contacts_mock.assert_called_once_with(
             session=module.db.session,
             tenant_id="tenant-1",
@@ -87,6 +90,8 @@ class TestWorkspaceContactsApi:
             account_id=None,
             name="Vendor",
             email="vendor@example.com",
+            delivery_status="email",
+            delivery_provider=None,
         )
 
         from unittest.mock import PropertyMock, patch
@@ -114,6 +119,54 @@ class TestWorkspaceContactsApi:
             email="vendor@example.com",
         )
         commit_mock.assert_called_once()
+
+    def test_post_normalizes_name_and_email_before_create(self, app: Flask):
+        api = WorkspaceContactsApi()
+        method = unwrap(api.post)
+        payload = {"name": "  Vendor Name  ", "email": "  Vendor@Example.COM  "}
+        contact = ContactRecord(
+            id="contact-1",
+            tenant_id="tenant-1",
+            type=ContactType.EXTERNAL,
+            status=ContactStatus.ACTIVE,
+            source=ContactSource.MANUAL_EXTERNAL,
+            account_id=None,
+        )
+        resolved_contact = ResolvedContact(
+            id="contact-1",
+            tenant_id="tenant-1",
+            type=ContactType.EXTERNAL,
+            status=ContactStatus.ACTIVE,
+            source=ContactSource.MANUAL_EXTERNAL,
+            account_id=None,
+            name="Vendor Name",
+            email="vendor@example.com",
+            delivery_status="email",
+            delivery_provider=None,
+        )
+
+        from unittest.mock import PropertyMock, patch
+
+        with (
+            app.test_request_context("/", json=payload),
+            patch.object(
+                type(module.console_ns),
+                "payload",
+                new_callable=PropertyMock,
+                return_value=payload,
+            ),
+            patch("controllers.console.workspace.contacts.create_external_contact", return_value=contact) as create_mock,
+            patch("controllers.console.workspace.contacts.resolve_contact_records", return_value=[resolved_contact]),
+            patch("controllers.console.workspace.contacts.db.session.commit"),
+        ):
+            method(api, "tenant-1")
+
+        create_mock.assert_called_once_with(
+            session=module.db.session,
+            tenant_id="tenant-1",
+            name="Vendor Name",
+            email="vendor@example.com",
+        )
 
     def test_post_invalid_email_raises_validation_error(self, app: Flask):
         api = WorkspaceContactsApi()

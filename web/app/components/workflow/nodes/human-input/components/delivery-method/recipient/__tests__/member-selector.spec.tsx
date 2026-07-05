@@ -4,6 +4,12 @@ import userEvent from '@testing-library/user-event'
 import MemberSelector from '../member-selector'
 
 const mockMemberList = vi.hoisted(() => vi.fn())
+const mockSetShowAccountSettingModal = vi.hoisted(() => vi.fn())
+
+vi.mock('@/context/modal-context', () => ({
+  useModalContextSelector: (selector: (state: { setShowAccountSettingModal: typeof mockSetShowAccountSettingModal }) => unknown) =>
+    selector({ setShowAccountSettingModal: mockSetShowAccountSettingModal }),
+}))
 
 vi.mock('../member-list', () => ({
   __esModule: true,
@@ -107,5 +113,22 @@ describe('human-input/delivery-method/recipient/member-selector', () => {
 
     expect(handleSelect).toHaveBeenCalledWith('member-1')
     expect(screen.queryByTestId('member-list')).not.toBeInTheDocument()
+  })
+
+  it('should open workspace members settings as a contact management entry', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemberSelector
+        value={[]}
+        email="owner@example.com"
+        onSelect={vi.fn()}
+        list={members}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'common.settings.members' }))
+
+    expect(mockSetShowAccountSettingModal).toHaveBeenCalledWith({ payload: 'members' })
   })
 })

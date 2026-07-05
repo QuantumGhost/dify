@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from models.account import Account
 from models.contact import Contact
-from services.entities.contact_entities import ContactRecord, ResolvedContact
+from models.im_integration import IMBinding, IMBindingStatus
+from services.entities.contact_entities import ContactDeliveryStatus, ContactRecord, ResolvedContact
 
 
 def resolve_contact_records(
@@ -21,6 +22,7 @@ def resolve_contact_records(
 
     member_account_ids = sorted({contact.account_id for contact in contacts if contact.account_id is not None})
     member_profiles: dict[str, tuple[str, str | None]] = {}
+    member_delivery_providers: dict[str, str] = {}
     if member_account_ids:
         profile_stmt = select(Account.id, Account.name, Account.email).where(Account.id.in_(member_account_ids))
         try:
@@ -28,8 +30,17 @@ def resolve_contact_records(
                 row.id: (row.name, row.email)
                 for row in session.execute(profile_stmt).all()
             }
+            binding_stmt = select(IMBinding.account_id, IMBinding.provider).where(
+                IMBinding.account_id.in_(member_account_ids),
+                IMBinding.status == IMBindingStatus.ACTIVE,
+            )
+            member_delivery_providers = {
+                row.account_id: row.provider
+                for row in session.execute(binding_stmt).all()
+            }
         except OperationalError:
             member_profiles = {}
+            member_delivery_providers = {}
 
     records: list[ResolvedContact] = []
     for contact in contacts:
@@ -47,12 +58,21 @@ def resolve_contact_records(
         account_profile = member_profiles.get(contact.account_id)
         if account_profile is not None:
             account_name, account_email = account_profile
+        delivery_provider = member_delivery_providers.get(contact.account_id)
+        if delivery_provider is not None:
+            delivery_status = ContactDeliveryStatus.IM
+        elif account_email:
+            delivery_status = ContactDeliveryStatus.EMAIL
+        else:
+            delivery_status = ContactDeliveryStatus.NONE
 
         records.append(
             ResolvedContact.from_member_contact(
                 contact=contact,
                 account_name=account_name,
                 account_email=account_email,
+                delivery_status=delivery_status,
+                delivery_provider=delivery_provider,
             )
         )
 

@@ -295,6 +295,37 @@ describe('PreferencePage - Interactions', () => {
 
 // IM binding status
 describe('PreferencePage - IM Binding', () => {
+  it('should render the unbound IM binding status when no active binding exists', async () => {
+    renderPage()
+
+    expect(await screen.findAllByText('common.account.imBinding.status.unbound')).toHaveLength(2)
+    expect(screen.getByText('common.account.imBinding.emptyDescription')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'common.account.imBinding.revokeAction' })).not.toBeInTheDocument()
+  })
+
+  it('should render a loading skeleton while the current IM binding is pending', () => {
+    mockGetIMBindingRequest.mockImplementation(() => new Promise(() => {}))
+
+    renderPage()
+
+    expect(screen.getByRole('status', { name: 'common.loading' })).toBeInTheDocument()
+  })
+
+  it('should allow refreshing the IM binding after the initial load fails', async () => {
+    mockGetIMBindingRequest
+      .mockRejectedValueOnce(new Error('Load failed'))
+      .mockResolvedValueOnce({ data: null })
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'common.operation.refresh' }))
+
+    await waitFor(() => {
+      expect(mockGetIMBindingRequest).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findAllByText('common.account.imBinding.status.unbound')).toHaveLength(2)
+  })
+
   it('should render the active IM binding status and removal action when the account is bound', async () => {
     mockGetIMBindingRequest.mockResolvedValue({
       data: {
@@ -314,6 +345,26 @@ describe('PreferencePage - IM Binding', () => {
     expect(screen.getAllByText('Feishu')).toHaveLength(2)
     expect(screen.getAllByText('Approver One')).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'common.account.imBinding.revokeAction' })).toBeInTheDocument()
+  })
+
+  it('should fall back to the provider user id when the display name is missing', async () => {
+    mockGetIMBindingRequest.mockResolvedValue({
+      data: {
+        provider: 'dingtalk',
+        scope_type: 'tenant_self_built',
+        scope_id: 'tenant-1',
+        provider_workspace_id: 'ws-1',
+        provider_user_id: 'user-1',
+        provider_user_display_name: null,
+        status: 'active',
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findAllByText('DingTalk')).toHaveLength(2)
+    expect(screen.getAllByText('user-1')).toHaveLength(2)
+    expect(screen.getByText('tenant self built · tenant-1')).toBeInTheDocument()
   })
 
   it('should revoke the active IM binding and show a success toast', async () => {
@@ -343,5 +394,28 @@ describe('PreferencePage - IM Binding', () => {
     })
     expect(await screen.findByText('common.actionMsg.modifiedSuccessfully')).toBeInTheDocument()
     expect(await screen.findAllByText('common.account.imBinding.status.unbound')).toHaveLength(2)
+  })
+
+  it('should show an error toast when revoking the active IM binding fails', async () => {
+    mockGetIMBindingRequest.mockResolvedValue({
+      data: {
+        provider: 'feishu',
+        scope_type: 'deployment',
+        scope_id: 'deployment',
+        provider_workspace_id: 'ws-1',
+        provider_user_id: 'user-1',
+        provider_user_display_name: 'Approver One',
+        status: 'active',
+      },
+    })
+    mockRevokeIMBindingRequest.mockRejectedValueOnce(new Error('Revoke failed'))
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'common.account.imBinding.revokeAction' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'common.operation.confirm' }))
+
+    expect(await screen.findByText('Revoke failed')).toBeInTheDocument()
+    expect(screen.getByText('common.account.imBinding.status.bound')).toBeInTheDocument()
   })
 })
