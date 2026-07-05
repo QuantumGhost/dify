@@ -17,6 +17,10 @@ from core.workflow.human_input_adapter import (
     InteractiveSurfaceDeliveryMethod,
     is_human_input_webapp_enabled,
 )
+from core.workflow.nodes.human_input.contact_runtime import (
+    ContactRecipientSeedType,
+    HumanInputRecipientSeed,
+)
 from core.workflow.nodes.human_input.entities import FormDefinition, HumanInputNodeData
 from core.workflow.nodes.human_input.enums import HumanInputFormKind, HumanInputFormStatus
 from libs.datetime_utils import naive_utc_now
@@ -30,8 +34,10 @@ from models.human_input import (
     EmailExternalRecipientPayload,
     EmailMemberRecipientPayload,
     HumanInputDelivery,
+    HumanInputContactSnapshot,
     HumanInputForm,
     HumanInputFormRecipient,
+    HumanInputInitiatorApprovalSnapshot,
     RecipientType,
     StandaloneWebAppRecipientPayload,
 )
@@ -47,6 +53,7 @@ class _DeliveryAndRecipients:
 class _WorkspaceMemberInfo:
     user_id: str
     email: str
+    contact_snapshot: HumanInputContactSnapshot | None = None
 
 
 class FormNotFoundError(Exception):
@@ -67,6 +74,10 @@ class FormCreateParams:
     # workflow_execution_id for chatflow runs; set alone (workflow_execution_id None)
     # for Agent v2 chat ask_human forms, which have no workflow run.
     conversation_id: str | None = None
+    initiator_approval_snapshot: HumanInputInitiatorApprovalSnapshot | None = None
+    recipient_seeds_by_delivery_config_id: Mapping[str, Sequence[HumanInputRecipientSeed]] = dataclasses.field(
+        default_factory=dict
+    )
 
 
 class HumanInputFormRecipientEntity(Protocol):
@@ -294,6 +305,8 @@ class HumanInputFormRepositoryImpl:
         session: Session,
         form_id: str,
         delivery_method: DeliveryChannelConfig,
+        form_config: HumanInputNodeData | None = None,
+        recipient_seeds: Sequence[HumanInputRecipientSeed] | None = None,
     ) -> _DeliveryAndRecipients:
         delivery_id = str(uuidv7())
         delivery_model = HumanInputDelivery(
@@ -314,15 +327,25 @@ class HumanInputFormRepositoryImpl:
                 )
                 recipients.append(recipient_model)
             case EmailDeliveryMethod():
-                email_recipients_config = delivery_method.config.recipients
-                recipients.extend(
-                    self._build_email_recipients(
-                        session=session,
-                        form_id=form_id,
-                        delivery_id=delivery_id,
-                        recipients_config=email_recipients_config,
+                if recipient_seeds is not None:
+                    recipients.extend(
+                        self._build_recipients_from_seeds(
+                            form_id=form_id,
+                            delivery_id=delivery_id,
+                            recipient_seeds=recipient_seeds,
+                        )
                     )
-                )
+                else:
+                    recipients.extend(
+                        self._build_email_recipients(
+                            session=session,
+                            form_id=form_id,
+                            delivery_id=delivery_id,
+                            recipients_config=delivery_method.config.recipients,
+                        )
+                    )
+                if recipient_seeds is None and form_config is not None:
+                    _ = form_config
 
         return _DeliveryAndRecipients(delivery=delivery_model, recipients=recipients)
 
@@ -357,7 +380,7 @@ class HumanInputFormRepositoryImpl:
         form_id: str,
         delivery_id: str,
         members: Sequence[_WorkspaceMemberInfo],
-        external_emails: Sequence[str],
+        external_emails: Sequence[str] | None = None,
     ) -> list[HumanInputFormRecipient]:
         recipient_models: list[HumanInputFormRecipient] = []
         seen_emails: set[str] = set()
@@ -377,7 +400,7 @@ class HumanInputFormRepositoryImpl:
                 )
             )
 
-        for email in external_emails:
+        for email in external_emails or ():
             if not email:
                 continue
             if email in seen_emails:
@@ -391,6 +414,46 @@ class HumanInputFormRepositoryImpl:
                 )
             )
 
+        return recipient_models
+
+    @staticmethod
+    def _build_recipients_from_seeds(
+        *,
+        form_id: str,
+        delivery_id: str,
+        recipient_seeds: Sequence[HumanInputRecipientSeed],
+    ) -> list[HumanInputFormRecipient]:
+        recipient_models: list[HumanInputFormRecipient] = []
+        for seed in recipient_seeds:
+            contact_snapshot = HumanInputContactSnapshot(
+                contact_id=seed.contact_id,
+                tenant_id=seed.contact_tenant_id,
+                type=seed.contact_type,
+                source=seed.contact_source,
+                status=seed.contact_status,
+                name=seed.contact_name,
+                account_id=seed.contact_account_id,
+                email=seed.contact_email,
+            )
+            match seed.recipient_type:
+                case ContactRecipientSeedType.EMAIL_MEMBER:
+                    if seed.user_id is None:
+                        msg = f"member recipient seed missing user_id, contact_id={seed.contact_id}"
+                        raise ValueError(msg)
+                    payload = EmailMemberRecipientPayload(user_id=seed.user_id, email=seed.email)
+                case ContactRecipientSeedType.EMAIL_EXTERNAL:
+                    payload = EmailExternalRecipientPayload(email=seed.email)
+                case _:
+                    msg = f"unsupported contact recipient seed type: {seed.recipient_type}"
+                    raise ValueError(msg)
+            recipient_models.append(
+                HumanInputFormRecipient.new(
+                    form_id=form_id,
+                    delivery_id=delivery_id,
+                    payload=payload,
+                    contact_snapshot=contact_snapshot,
+                )
+            )
         return recipient_models
 
     def _query_all_workspace_members(
@@ -486,14 +549,18 @@ class HumanInputFormRepositoryImpl:
                 rendered_content=params.rendered_content,
                 expiration_time=node_expiration,
                 created_at=start_time,
+                initiator_approval_snapshot=params.initiator_approval_snapshot,
             )
             session.add(form_model)
             recipient_models: list[HumanInputFormRecipient] = []
             for delivery in params.delivery_methods:
+                delivery_config_id = str(delivery.id)
                 delivery_and_recipients = self._delivery_method_to_model(
                     session=session,
                     form_id=form_id,
                     delivery_method=delivery,
+                    form_config=form_config,
+                    recipient_seeds=params.recipient_seeds_by_delivery_config_id.get(delivery_config_id),
                 )
                 session.add(delivery_and_recipients.delivery)
                 session.add_all(delivery_and_recipients.recipients)

@@ -1,8 +1,13 @@
-"""Workflow-to-Graphon adapters for persisted node payloads.
+"""Workflow adapters for persisted Human Input and Tool node payloads.
 
 Stored workflow graphs and editor payloads still contain a small set of
 Dify-owned field spellings and value shapes. Adapt them here before handing the
 payload to Graphon so Graphon-owned models only see current contracts.
+
+This module also hosts the demo-only Human Input v1 -> v2 compatibility seam
+for the upcoming contact-oriented runtime. Keep that mapping narrow and local:
+it exists to bridge the current frontend config shape until the frontend can
+emit the native v2 schema directly.
 """
 
 from __future__ import annotations
@@ -21,6 +26,17 @@ from graphon.enums import BuiltinNodeTypes
 from graphon.nodes.base.variable_template_parser import VariableTemplateParser
 from graphon.runtime import VariablePool
 from graphon.variables.consts import SELECTORS_LENGTH
+
+from core.workflow.nodes.human_input.entities import HumanInputNodeData
+from core.workflow.nodes.human_input.contact_runtime import (
+    CONTACT_HUMAN_INPUT_NODE_TYPE,
+    ContactHumanInputNodeData,
+    ContactRecipientConfig,
+    ContactRecipientType,
+    ExternalContactRecipient,
+    MemberContactRecipient,
+    WorkspaceMembersContactRecipient,
+)
 
 
 class DeliveryMethodType(enum.StrEnum):
@@ -216,11 +232,40 @@ def adapt_human_input_node_data_for_graph(node_data: Mapping[str, Any] | BaseMod
 
 
 def parse_human_input_delivery_methods(node_data: Mapping[str, Any] | BaseModel) -> list[DeliveryChannelConfig]:
+    if isinstance(node_data, ContactHumanInputNodeData):
+        return list(node_data.delivery_methods)
+
     normalized = adapt_human_input_node_data_for_graph(node_data)
     raw_delivery_methods = normalized.get("delivery_methods")
     if not isinstance(raw_delivery_methods, list):
         return []
     return list(_DELIVERY_METHODS_ADAPTER.validate_python(raw_delivery_methods))
+
+
+def adapt_human_input_node_data_to_contact_runtime(
+    node_data: Mapping[str, Any] | BaseModel,
+) -> ContactHumanInputNodeData:
+    """Map a v1 Human Input config into the transitional v2 runtime-facing DTO.
+
+    Phase-1 only supports one effective Contact recipient set across all enabled
+    email deliveries. If persisted v1 config uses multiple enabled email
+    deliveries with differing recipient sets, fail fast instead of silently
+    flattening those affiliations into one v2 recipient union.
+    """
+    normalized = adapt_human_input_node_data_for_graph(node_data)
+    ensure_supported_contact_runtime_recipient_shape(normalized)
+    v1_node_data = HumanInputNodeData.model_validate(normalized)
+    return ContactHumanInputNodeData(
+        **v1_node_data.model_dump(
+            mode="python",
+            exclude={"type", "version", "delivery_methods", "allow_current_initiator_to_approve"},
+        ),
+        type=CONTACT_HUMAN_INPUT_NODE_TYPE,
+        version="2",
+        delivery_methods=parse_human_input_delivery_methods(normalized),
+        recipients=_build_contact_recipients(normalized),
+        allow_current_initiator_to_approve=_resolve_allow_current_initiator_to_approve(normalized),
+    )
 
 
 def is_human_input_webapp_enabled(node_data: Mapping[str, Any] | BaseModel) -> bool:
@@ -238,6 +283,8 @@ def adapt_node_data_for_graph(node_data: Mapping[str, Any] | BaseModel) -> dict[
     node_type = normalized.get("type")
     if node_type == BuiltinNodeTypes.HUMAN_INPUT:
         return adapt_human_input_node_data_for_graph(normalized)
+    if node_type == CONTACT_HUMAN_INPUT_NODE_TYPE:
+        return normalized
     if node_type == BuiltinNodeTypes.TOOL:
         return _adapt_tool_node_data_for_graph(normalized)
     return normalized
@@ -253,6 +300,25 @@ def adapt_node_config_for_graph(node_config: Mapping[str, Any] | BaseModel) -> d
         return normalized
 
     normalized["data"] = adapt_node_data_for_graph(data_mapping)
+    return normalized
+
+
+def adapt_node_config_for_runtime_graph(node_config: Mapping[str, Any] | BaseModel) -> dict[str, Any]:
+    """Apply runtime-only node upgrades on top of the persisted graph adapter.
+
+    The contact-oriented Human Input v2 shim is intentionally scoped to runtime
+    graph execution. Persisted workflow validation and non-runtime tooling should
+    continue to see the stored v1 payload shape until the frontend emits the
+    native v2 schema directly.
+    """
+
+    normalized = adapt_node_config_for_graph(node_config)
+    data_mapping = _copy_mapping(normalized.get("data"))
+    if data_mapping is None:
+        return normalized
+
+    if data_mapping.get("type") == BuiltinNodeTypes.HUMAN_INPUT:
+        normalized["data"] = adapt_human_input_node_data_to_contact_runtime(data_mapping).model_dump(mode="python")
     return normalized
 
 
@@ -368,6 +434,96 @@ def _normalize_email_recipients(recipients: Mapping[str, Any]) -> dict[str, Any]
     return normalized
 
 
+def _build_contact_recipients(node_data: Mapping[str, Any]) -> list[ContactRecipientConfig]:
+    contact_recipients: list[ContactRecipientConfig] = []
+    seen_targets: set[tuple[str, str]] = set()
+
+    for method in parse_human_input_delivery_methods(node_data):
+        if not method.enabled or not isinstance(method, EmailDeliveryMethod):
+            continue
+
+        email_recipients = method.config.recipients
+        if email_recipients.include_bound_group:
+            workspace_members_key = (ContactRecipientType.WORKSPACE_MEMBERS.value, "")
+            if workspace_members_key not in seen_targets:
+                seen_targets.add(workspace_members_key)
+                contact_recipients.append(WorkspaceMembersContactRecipient())
+
+        for recipient in email_recipients.items:
+            mapped_recipient = _map_email_recipient_to_contact_recipient(recipient)
+            recipient_key = _contact_recipient_key(mapped_recipient)
+            if recipient_key in seen_targets:
+                continue
+            seen_targets.add(recipient_key)
+            contact_recipients.append(mapped_recipient)
+
+    return contact_recipients
+
+
+def ensure_supported_contact_runtime_recipient_shape(node_data: Mapping[str, Any] | BaseModel) -> None:
+    """Reject legacy multi-delivery shapes that lose recipient affiliation in v2.
+
+    The transitional v2 runtime stores one contact-recipient set plus channel
+    configs. When persisted v1 config contains multiple enabled email
+    deliveries with different recipient sets, flattening them would silently
+    change semantics. Phase-1 rejects that shape until native v2 frontend
+    config can preserve affiliation explicitly.
+    """
+
+    enabled_email_recipient_sets = [
+        _email_delivery_recipient_identity_set(method)
+        for method in parse_human_input_delivery_methods(node_data)
+        if method.enabled and isinstance(method, EmailDeliveryMethod)
+    ]
+    if len(enabled_email_recipient_sets) <= 1:
+        return
+
+    first_recipient_set = enabled_email_recipient_sets[0]
+    if all(recipient_set == first_recipient_set for recipient_set in enabled_email_recipient_sets[1:]):
+        return
+
+    msg = (
+        "phase-1 contact-oriented human input does not support multiple enabled email deliveries "
+        "with differing recipient sets in the transitional v1->v2 runtime path"
+    )
+    raise ValueError(msg)
+
+
+def _email_delivery_recipient_identity_set(method: EmailDeliveryMethod) -> frozenset[tuple[str, str]]:
+    identities: set[tuple[str, str]] = set()
+    if method.config.recipients.include_bound_group:
+        identities.add((ContactRecipientType.WORKSPACE_MEMBERS.value, ""))
+    for recipient in method.config.recipients.items:
+        if isinstance(recipient, BoundRecipient):
+            identities.add((ContactRecipientType.MEMBER.value, recipient.reference_id))
+        else:
+            identities.add((ContactRecipientType.EXTERNAL.value, recipient.email.strip().lower()))
+    return frozenset(identities)
+
+
+def _map_email_recipient_to_contact_recipient(
+    recipient: EmailRecipient,
+) -> MemberContactRecipient | ExternalContactRecipient:
+    if isinstance(recipient, BoundRecipient):
+        return MemberContactRecipient(account_id=recipient.reference_id)
+    return ExternalContactRecipient(email=recipient.email)
+
+
+def _contact_recipient_key(recipient: ContactRecipientConfig) -> tuple[str, str]:
+    match recipient:
+        case MemberContactRecipient():
+            return recipient.type.value, recipient.account_id
+        case ExternalContactRecipient():
+            return recipient.type.value, recipient.email
+        case WorkspaceMembersContactRecipient():
+            return recipient.type.value, ""
+
+
+def _resolve_allow_current_initiator_to_approve(node_data: Mapping[str, Any]) -> bool:
+    raw_value = node_data.get("allow_current_initiator_to_approve")
+    return raw_value is True
+
+
 __all__ = [
     "BoundRecipient",
     "DeliveryChannelConfig",
@@ -377,12 +533,22 @@ __all__ = [
     "EmailRecipientType",
     "EmailRecipients",
     "ExternalRecipient",
+    "ContactHumanInputNodeData",
+    "CONTACT_HUMAN_INPUT_NODE_TYPE",
+    "ContactRecipientConfig",
+    "ContactRecipientType",
+    "ExternalContactRecipient",
+    "MemberContactRecipient",
     "MemberRecipient",
+    "WorkspaceMembersContactRecipient",
     "WebAppDeliveryMethod",
     "_WebAppDeliveryConfig",
     "adapt_human_input_node_data_for_graph",
+    "adapt_human_input_node_data_to_contact_runtime",
     "adapt_node_config_for_graph",
+    "adapt_node_config_for_runtime_graph",
     "adapt_node_data_for_graph",
+    "ensure_supported_contact_runtime_recipient_shape",
     "is_human_input_webapp_enabled",
     "parse_human_input_delivery_methods",
 ]

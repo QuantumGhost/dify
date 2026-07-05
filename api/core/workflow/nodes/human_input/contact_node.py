@@ -1,0 +1,139 @@
+"""Transitional contact-oriented HITL runtime node.
+
+This node exists only so the phase-1 backend can execute a real v2 node type
+while the persisted workflow graph still contains the v1 `human-input` payload.
+The runtime adapter upgrades that payload before `NodeFactory` resolves the
+implementation class.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Generator, Mapping, Sequence
+from typing import Any, override
+
+from graphon.entities.graph_init_params import GraphInitParams
+from graphon.entities.pause_reason import HitlRequired
+from graphon.enums import NodeExecutionType, WorkflowNodeExecutionStatus
+from graphon.node_events.base import NodeEventBase, NodeRunResult
+from graphon.node_events.node import PauseRequestedEvent, StreamCompletedEvent
+from graphon.nodes.human_input.entities import Completed, Expired, HITLContext, PauseRequested
+from graphon.nodes.base.node import Node
+from graphon.runtime.graph_runtime_state import GraphRuntimeState
+from graphon.variables.segments import Segment
+
+from .callback import DifyHITLCallback
+from .contact_runtime import CONTACT_HUMAN_INPUT_NODE_TYPE, ContactHumanInputNodeData
+
+_WORKFLOW_EXECUTION_ID_KEYS = ("workflow_execution_id", "workflow_run_id")
+_WORKFLOW_EXECUTION_ID_SELECTORS = (
+    ("sys", "workflow_execution_id"),
+    ("sys", "workflow_run_id"),
+)
+
+
+class ContactHumanInputNode(Node[ContactHumanInputNodeData]):
+    """Minimal v2 HITL runtime that reuses the existing Graphon HITL contract."""
+
+    node_type = CONTACT_HUMAN_INPUT_NODE_TYPE
+    execution_type = NodeExecutionType.BRANCH
+
+    @override
+    def __init__(
+        self,
+        node_id: str,
+        data: ContactHumanInputNodeData,
+        *,
+        graph_init_params: GraphInitParams,
+        graph_runtime_state: GraphRuntimeState,
+        hitl_callback: DifyHITLCallback,
+    ) -> None:
+        super().__init__(
+            node_id=node_id,
+            data=data,
+            graph_init_params=graph_init_params,
+            graph_runtime_state=graph_runtime_state,
+        )
+        self._hitl_callback = hitl_callback
+
+    @classmethod
+    @override
+    def version(cls) -> str:
+        return "2"
+
+    @override
+    def _run(self) -> Generator[NodeEventBase, None, None]:
+        decision = self._hitl_callback(
+            HITLContext(
+                workflow_execution_id=self._resolve_workflow_execution_id(),
+                node_id=self.id,
+                node_title=self.title,
+                variable_pool=self.graph_runtime_state.variable_pool,
+            )
+        )
+
+        match decision:
+            case PauseRequested(session_id=session_id):
+                yield PauseRequestedEvent(
+                    reason=HitlRequired(
+                        session_id=session_id,
+                        node_id=self.id,
+                        node_title=self.title,
+                    )
+                )
+            case Completed(selected_handle=handle, inputs=inputs, outputs=outputs):
+                yield self._completed_event(
+                    selected_handle=handle,
+                    inputs=inputs,
+                    outputs=outputs,
+                )
+            case Expired(selected_handle=handle, outputs=outputs):
+                yield self._completed_event(
+                    selected_handle=handle,
+                    outputs=outputs,
+                )
+            case _:
+                msg = f"unsupported HITL decision: {type(decision).__name__}"
+                raise AssertionError(msg)
+
+    def _resolve_workflow_execution_id(self) -> str:
+        variable_pool = self.graph_runtime_state.variable_pool
+        for selector in _WORKFLOW_EXECUTION_ID_SELECTORS:
+            segment = variable_pool.get(selector)
+            if segment is not None and segment.text:
+                return segment.text
+
+        for key in _WORKFLOW_EXECUTION_ID_KEYS:
+            value = self.get_run_context_value(key)
+            if isinstance(value, str) and value:
+                return value
+
+        msg = "workflow_execution_id is required for HITL"
+        raise ValueError(msg)
+
+    @staticmethod
+    def _completed_event(
+        *,
+        selected_handle: str,
+        outputs: Mapping[str, Segment],
+        inputs: Mapping[str, Segment] | None = None,
+    ) -> StreamCompletedEvent:
+        return StreamCompletedEvent(
+            node_run_result=NodeRunResult(
+                status=WorkflowNodeExecutionStatus.SUCCEEDED,
+                inputs={} if inputs is None else inputs,
+                outputs=outputs,
+                edge_source_handle=selected_handle,
+            ),
+        )
+
+    @classmethod
+    @override
+    def _extract_variable_selector_to_variable_mapping(
+        cls,
+        *,
+        graph_config: Mapping[str, Any],
+        node_id: str,
+        node_data: ContactHumanInputNodeData,
+    ) -> Mapping[str, Sequence[str]]:
+        _ = graph_config, node_id, node_data
+        return {}

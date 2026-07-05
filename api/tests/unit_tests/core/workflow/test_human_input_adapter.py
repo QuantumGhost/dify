@@ -4,6 +4,8 @@ import pytest
 from pydantic import BaseModel
 
 from core.workflow.human_input_adapter import (
+    ContactHumanInputNodeData,
+    ContactRecipientType,
     DeliveryMethodType,
     EmailDeliveryConfig,
     EmailDeliveryMethod,
@@ -11,6 +13,7 @@ from core.workflow.human_input_adapter import (
     WebAppDeliveryMethod,
     _WebAppDeliveryConfig,
     adapt_human_input_node_data_for_graph,
+    adapt_human_input_node_data_to_contact_runtime,
     adapt_node_config_for_graph,
     adapt_node_data_for_graph,
     is_human_input_webapp_enabled,
@@ -18,6 +21,152 @@ from core.workflow.human_input_adapter import (
 )
 from graphon.enums import BuiltinNodeTypes
 from graphon.nodes.base.variable_template_parser import VariableTemplateParser
+
+
+def _legacy_form_input_payloads() -> list[dict[str, object]]:
+    return [
+        {
+            "type": "paragraph",
+            "output_variable_name": "reason",
+            "default": {
+                "type": "constant",
+                "selector": [],
+                "value": "Need approval",
+            },
+        },
+        {
+            "type": "select",
+            "output_variable_name": "decision",
+            "option_source": {
+                "type": "constant",
+                "selector": [],
+                "value": ["approve", "reject"],
+            },
+        },
+        {
+            "type": "file",
+            "output_variable_name": "attachment",
+            "allowed_file_types": ["document"],
+            "allowed_file_extensions": [],
+            "allowed_file_upload_methods": ["remote_url"],
+        },
+        {
+            "type": "file-list",
+            "output_variable_name": "attachments",
+            "allowed_file_types": ["document"],
+            "allowed_file_extensions": [],
+            "allowed_file_upload_methods": ["remote_url"],
+            "number_limits": 3,
+        },
+    ]
+
+
+def _legacy_user_action_payloads() -> list[dict[str, str]]:
+    return [
+        {
+            "id": "approve",
+            "title": "Approve",
+            "button_style": "primary",
+        },
+        {
+            "id": "reject",
+            "title": "Reject",
+            "button_style": "default",
+        },
+    ]
+
+
+def _legacy_human_input_v1_node_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "type": BuiltinNodeTypes.HUMAN_INPUT,
+        "title": "Human Input",
+        "form_content": "Please review {{#$output.reason#}}",
+        "inputs": _legacy_form_input_payloads(),
+        "user_actions": _legacy_user_action_payloads(),
+        "timeout": 2,
+        "timeout_unit": "day",
+        "delivery_methods": [
+            {
+                "type": DeliveryMethodType.WEBAPP,
+                "enabled": True,
+                "config": {},
+            },
+            {
+                "type": DeliveryMethodType.EMAIL,
+                "enabled": True,
+                "config": {
+                    "recipients": {
+                        "whole_workspace": True,
+                        "items": [
+                            {"type": "member", "user_id": "user-1"},
+                            {"type": "member", "reference_id": "user-2"},
+                            {"type": "external", "email": "external@example.com"},
+                            {"type": "external", "email": "external@example.com"},
+                        ],
+                    },
+                    "subject": "Subject",
+                    "body": "Body",
+                },
+            },
+            {
+                "type": DeliveryMethodType.EMAIL,
+                "enabled": False,
+                "config": {
+                    "recipients": {
+                        "include_bound_group": False,
+                        "items": [{"type": "external", "email": "ignored@example.com"}],
+                    },
+                    "subject": "Ignored",
+                    "body": "Ignored",
+                },
+            },
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _legacy_human_input_v1_multi_email_delivery_payload(**overrides: object) -> dict[str, object]:
+    payload = _legacy_human_input_v1_node_payload()
+    payload["delivery_methods"] = [
+        {
+            "type": DeliveryMethodType.WEBAPP,
+            "enabled": True,
+            "config": {},
+        },
+        {
+            "type": DeliveryMethodType.EMAIL,
+            "enabled": True,
+            "config": {
+                "recipients": {
+                    "whole_workspace": True,
+                    "items": [
+                        {"type": "member", "user_id": "user-1"},
+                        {"type": "external", "email": "external@example.com"},
+                    ],
+                },
+                "subject": "Subject",
+                "body": "Body",
+            },
+        },
+        {
+            "type": DeliveryMethodType.EMAIL,
+            "enabled": True,
+            "config": {
+                "recipients": {
+                    "include_bound_group": False,
+                    "items": [
+                        {"type": "member", "reference_id": "user-2"},
+                        {"type": "external", "email": "other@example.com"},
+                    ],
+                },
+                "subject": "Subject 2",
+                "body": "Body 2",
+            },
+        },
+    ]
+    payload.update(overrides)
+    return payload
 
 
 def test_email_delivery_config_helpers_render_and_sanitize_text() -> None:
@@ -89,6 +238,67 @@ def test_parse_human_input_delivery_methods_normalizes_legacy_recipient_keys() -
 
 def test_parse_human_input_delivery_methods_returns_empty_for_non_lists() -> None:
     assert parse_human_input_delivery_methods({"delivery_methods": None}) == []
+
+
+def test_adapt_human_input_node_data_to_contact_runtime_uses_new_v2_identity() -> None:
+    runtime_data = adapt_human_input_node_data_to_contact_runtime(_legacy_human_input_v1_node_payload())
+
+    assert isinstance(runtime_data, ContactHumanInputNodeData)
+    assert runtime_data.version == "2"
+    assert runtime_data.type != BuiltinNodeTypes.HUMAN_INPUT
+
+
+def test_adapt_human_input_node_data_to_contact_runtime_preserves_form_fields_and_dedupes_recipients() -> None:
+    payload = _legacy_human_input_v1_node_payload()
+    enabled_email_deliveries = [
+        method
+        for method in payload["delivery_methods"]
+        if method["enabled"] and method["type"] == DeliveryMethodType.EMAIL
+    ]
+    assert len(enabled_email_deliveries) == 1
+
+    runtime_data = adapt_human_input_node_data_to_contact_runtime(payload)
+
+    assert runtime_data.title == "Human Input"
+    assert runtime_data.form_content == "Please review {{#$output.reason#}}"
+    assert [input_config.output_variable_name for input_config in runtime_data.inputs] == [
+        "reason",
+        "decision",
+        "attachment",
+        "attachments",
+    ]
+    assert runtime_data.inputs[3].number_limits == 3
+    assert [(action.id, action.title) for action in runtime_data.user_actions] == [
+        ("approve", "Approve"),
+        ("reject", "Reject"),
+    ]
+    assert runtime_data.timeout == 2
+    assert runtime_data.timeout_unit.value == "day"
+    assert [recipient.type for recipient in runtime_data.recipients] == [
+        ContactRecipientType.WORKSPACE_MEMBERS,
+        ContactRecipientType.MEMBER,
+        ContactRecipientType.MEMBER,
+        ContactRecipientType.EXTERNAL,
+    ]
+    member_recipients = [recipient for recipient in runtime_data.recipients if recipient.type == ContactRecipientType.MEMBER]
+    external_recipients = [
+        recipient for recipient in runtime_data.recipients if recipient.type == ContactRecipientType.EXTERNAL
+    ]
+    assert [recipient.account_id for recipient in member_recipients] == ["user-1", "user-2"]
+    assert [recipient.email for recipient in external_recipients] == ["external@example.com"]
+
+
+def test_adapt_human_input_node_data_to_contact_runtime_preserves_allow_current_initiator_to_approve() -> None:
+    runtime_data = adapt_human_input_node_data_to_contact_runtime(
+        _legacy_human_input_v1_node_payload(allow_current_initiator_to_approve=True)
+    )
+
+    assert runtime_data.allow_current_initiator_to_approve is True
+
+
+def test_adapt_human_input_node_data_to_contact_runtime_rejects_multiple_enabled_email_deliveries() -> None:
+    with pytest.raises(ValueError, match="email"):
+        adapt_human_input_node_data_to_contact_runtime(_legacy_human_input_v1_multi_email_delivery_payload())
 
 
 def test_is_human_input_webapp_enabled_checks_enabled_delivery_methods() -> None:

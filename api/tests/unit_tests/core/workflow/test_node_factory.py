@@ -8,6 +8,7 @@ from core.app.entities.app_invoke_entities import DIFY_RUN_CONTEXT_KEY, DifyRunC
 from core.plugin.impl.model import PluginModelClient
 from core.plugin.impl.model_runtime import PluginModelRuntime
 from core.plugin.plugin_service import PluginService
+from core.workflow.human_input_adapter import CONTACT_HUMAN_INPUT_NODE_TYPE
 from core.workflow import node_factory
 from core.workflow import template_rendering as workflow_template_rendering
 from core.workflow.node_runtime import DifyPreparedLLM
@@ -610,7 +611,17 @@ class TestDifyNodeFactoryCreateNode:
         assert result is created_node
         kwargs = constructor.call_args.kwargs
         assert kwargs["node_id"] == "node-id"
-        _assert_constructor_node_data(kwargs["data"], node_id="node-id", node_type=node_type)
+        expected_node_type = node_type
+        expected_version = "1"
+        if node_type == BuiltinNodeTypes.HUMAN_INPUT:
+            expected_node_type = CONTACT_HUMAN_INPUT_NODE_TYPE
+            expected_version = "2"
+        _assert_constructor_node_data(
+            kwargs["data"],
+            node_id="node-id",
+            node_type=expected_node_type,
+            version=expected_version,
+        )
         assert kwargs["graph_init_params"] is sentinel.graph_init_params
         assert kwargs["graph_runtime_state"] is factory.graph_runtime_state
 
@@ -656,6 +667,12 @@ class TestDifyNodeFactoryCreateNode:
 
         assert result is created_node
         kwargs = constructor.call_args.kwargs
+        _assert_constructor_node_data(
+            kwargs["data"],
+            node_id="human-node",
+            node_type=CONTACT_HUMAN_INPUT_NODE_TYPE,
+            version="2",
+        )
         assert kwargs["hitl_callback"] is sentinel.hitl_callback
         factory._build_human_input_callback.assert_called_once()
 

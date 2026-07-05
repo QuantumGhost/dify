@@ -22,12 +22,20 @@ from core.workflow.human_input_adapter import (
     ExternalRecipient,
     MemberRecipient,
 )
+from core.workflow.nodes.human_input.contact_runtime import (
+    ContactHumanInputNodeData,
+    ContactRecipientSeedType,
+    ExternalContactRecipient,
+    HumanInputRecipientSeed,
+    MemberContactRecipient,
+)
 from core.workflow.nodes.human_input.entities import (
     FormDefinition,
     UserActionConfig,
 )
 from core.workflow.nodes.human_input.enums import HumanInputFormKind, HumanInputFormStatus
 from libs.datetime_utils import naive_utc_now
+from models.contact import ContactSource, ContactStatus, ContactType
 from models.human_input import (
     EmailExternalRecipientPayload,
     EmailMemberRecipientPayload,
@@ -41,15 +49,54 @@ def _build_repository() -> HumanInputFormRepositoryImpl:
     return HumanInputFormRepositoryImpl(tenant_id="tenant-id")
 
 
+def _build_contact_form_config(*, recipients) -> ContactHumanInputNodeData:  # type: ignore[no-untyped-def]
+    return ContactHumanInputNodeData(
+        title="Contact HITL",
+        form_content="hello",
+        inputs=[],
+        user_actions=[UserActionConfig(id="submit", title="Submit")],
+        recipients=list(recipients),
+    )
+
+
+def _build_recipient_seed(
+    *,
+    recipient_type: ContactRecipientSeedType,
+    email: str,
+    contact_id: str,
+    name: str,
+    user_id: str | None = None,
+    account_id: str | None = None,
+) -> HumanInputRecipientSeed:
+    return HumanInputRecipientSeed(
+        recipient_type=recipient_type,
+        email=email,
+        user_id=user_id,
+        contact_id=contact_id,
+        contact_tenant_id="tenant-id",
+        contact_type=ContactType.MEMBER if recipient_type == ContactRecipientSeedType.EMAIL_MEMBER else ContactType.EXTERNAL,
+        contact_source=(
+            ContactSource.WORKSPACE_MEMBER
+            if recipient_type == ContactRecipientSeedType.EMAIL_MEMBER
+            else ContactSource.MANUAL_EXTERNAL
+        ),
+        contact_status=ContactStatus.ACTIVE,
+        contact_name=name,
+        contact_account_id=account_id,
+        contact_email=email,
+    )
+
+
 def _patch_recipient_factory(monkeypatch: pytest.MonkeyPatch) -> list[SimpleNamespace]:
     created: list[SimpleNamespace] = []
 
-    def fake_new(cls, form_id: str, delivery_id: str, payload):  # type: ignore[no-untyped-def]
+    def fake_new(cls, form_id: str, delivery_id: str, payload, **kwargs):  # type: ignore[no-untyped-def]
         recipient = SimpleNamespace(
             form_id=form_id,
             delivery_id=delivery_id,
             recipient_type=payload.TYPE,
             recipient_payload=payload.model_dump_json(),
+            contact_snapshot=kwargs.get("contact_snapshot"),
         )
         created.append(recipient)
         return recipient
@@ -76,6 +123,65 @@ def _stub_selectinload(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestHumanInputFormRepositoryImplHelpers:
+    def test_delivery_method_to_model_contact_v2_uses_runtime_resolved_recipient_seeds(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        repo = _build_repository()
+        created = _patch_recipient_factory(monkeypatch)
+        method = EmailDeliveryMethod(
+            config=EmailDeliveryConfig(
+                recipients=EmailRecipients(
+                    include_bound_group=False,
+                    items=[
+                        MemberRecipient(reference_id="legacy-member"),
+                        ExternalRecipient(email="legacy@example.com"),
+                    ],
+                ),
+                subject="subject",
+                body="body",
+            )
+        )
+
+        result = repo._delivery_method_to_model(
+            session=object(),
+            form_id="form-id",
+            delivery_method=method,
+            form_config=_build_contact_form_config(
+                recipients=[
+                    MemberContactRecipient(account_id="contact-member"),
+                    ExternalContactRecipient(email="contact@example.com"),
+                ]
+            ),
+            recipient_seeds=[
+                _build_recipient_seed(
+                    recipient_type=ContactRecipientSeedType.EMAIL_MEMBER,
+                    email="member@example.com",
+                    contact_id="contact-member-id",
+                    name="Member Contact",
+                    user_id="contact-member",
+                    account_id="contact-member",
+                ),
+                _build_recipient_seed(
+                    recipient_type=ContactRecipientSeedType.EMAIL_EXTERNAL,
+                    email="contact@example.com",
+                    contact_id="contact-external-id",
+                    name="External Contact",
+                ),
+            ],
+        )
+
+        assert len(result.recipients) == 2
+        member_payload = EmailMemberRecipientPayload.model_validate_json(created[0].recipient_payload)
+        external_payload = EmailExternalRecipientPayload.model_validate_json(created[1].recipient_payload)
+        assert member_payload.user_id == "contact-member"
+        assert member_payload.email == "member@example.com"
+        assert created[0].contact_snapshot.contact_id == "contact-member-id"
+        assert created[0].contact_snapshot.account_id == "contact-member"
+        assert external_payload.email == "contact@example.com"
+        assert created[1].contact_snapshot.contact_id == "contact-external-id"
+        assert created[1].contact_snapshot.email == "contact@example.com"
+
     def test_build_email_recipients_with_member_and_external(self, monkeypatch: pytest.MonkeyPatch) -> None:
         repo = _build_repository()
         session_stub = object()
@@ -226,6 +332,45 @@ class TestHumanInputFormRepositoryImplHelpers:
 
         assert len(recipients) == 1
         assert recipients[0].recipient_type == RecipientType.EMAIL_MEMBER
+
+    def test_delivery_method_to_model_without_explicit_recipient_seeds_uses_delivery_recipient_config(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        repo = _build_repository()
+        created = _patch_recipient_factory(monkeypatch)
+
+        def fake_query(self, session, restrict_to_user_ids):  # type: ignore[no-untyped-def]
+            assert session is object_session
+            assert restrict_to_user_ids == ["legacy-member"]
+            return [_WorkspaceMemberInfo(user_id="legacy-member", email="legacy-member@example.com")]
+
+        object_session = object()
+        monkeypatch.setattr(HumanInputFormRepositoryImpl, "_query_workspace_members_by_ids", fake_query)
+        method = EmailDeliveryMethod(
+            config=EmailDeliveryConfig(
+                recipients=EmailRecipients(
+                    include_bound_group=False,
+                    items=[MemberRecipient(reference_id="legacy-member")],
+                ),
+                subject="subject",
+                body="body",
+            )
+        )
+
+        result = repo._delivery_method_to_model(
+            session=object_session,
+            form_id="form-id",
+            delivery_method=method,
+            form_config=_build_contact_form_config(
+                recipients=[MemberContactRecipient(account_id="contact-member")]
+            ),
+        )
+
+        assert len(result.recipients) == 1
+        payload = EmailMemberRecipientPayload.model_validate_json(created[0].recipient_payload)
+        assert payload.user_id == "legacy-member"
+        assert payload.email == "legacy-member@example.com"
 
     def test_delivery_method_to_model_includes_external_recipients_with_whole_workspace(
         self,

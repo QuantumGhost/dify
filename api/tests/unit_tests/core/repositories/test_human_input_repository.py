@@ -32,7 +32,13 @@ from core.workflow.human_input_adapter import (
 from core.workflow.nodes.human_input.entities import HumanInputNodeData, UserActionConfig
 from core.workflow.nodes.human_input.enums import HumanInputFormKind, HumanInputFormStatus
 from libs.datetime_utils import naive_utc_now
-from models.human_input import HumanInputFormRecipient, RecipientType
+from models.enums import CreatorUserRole
+from models.human_input import (
+    HumanInputForm,
+    HumanInputFormRecipient,
+    HumanInputInitiatorApprovalSnapshot,
+    RecipientType,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -487,6 +493,53 @@ def test_create_form_adds_console_and_backstage_recipients(monkeypatch: pytest.M
     # Console token should take precedence when console recipient is present.
     assert entity.submission_token == "token-console"
     assert len(entity.recipients) == 3
+
+
+def test_create_form_persists_initiator_approval_snapshot_without_rederiving_from_repo_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2024, 1, 1, 0, 0, 0)
+    monkeypatch.setattr("core.repositories.human_input_repository.naive_utc_now", lambda: fixed_now)
+
+    ids = iter(["form-id", "del-web", "del-console", "del-backstage"])
+    monkeypatch.setattr("core.repositories.human_input_repository.uuidv7", lambda: next(ids))
+
+    session = _FakeSession()
+    _patch_session_factory(monkeypatch, session)
+    repo = HumanInputFormRepositoryImpl(
+        tenant_id="tenant",
+        app_id="app",
+        workflow_execution_id="run",
+        invoke_source="debugger",
+        submission_actor_id="account-actor",
+    )
+
+    snapshot = HumanInputInitiatorApprovalSnapshot(
+        actor_type=CreatorUserRole.END_USER,
+        actor_id="end-user-1",
+    )
+    params = FormCreateParams(
+        workflow_execution_id=None,
+        node_id="node",
+        form_config=HumanInputNodeData(
+            title="Title",
+            delivery_methods=[],
+            form_content="hello",
+            inputs=[],
+            user_actions=[UserActionConfig(id="submit", title="Submit")],
+        ),
+        rendered_content="<p>hello</p>",
+        delivery_methods=[WebAppDeliveryMethod()],
+        display_in_ui=True,
+        resolved_default_values={},
+        form_kind=HumanInputFormKind.RUNTIME,
+        initiator_approval_snapshot=snapshot,
+    )
+
+    repo.create_form(params)
+
+    form_model = next(obj for obj in session.added if isinstance(obj, HumanInputForm))
+    assert form_model.initiator_approval_snapshot == snapshot
 
 
 def test_submission_get_by_token_returns_none_when_missing_or_form_missing(monkeypatch: pytest.MonkeyPatch) -> None:

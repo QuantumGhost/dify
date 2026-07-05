@@ -37,6 +37,9 @@ from core.tools.tool_file_manager import ToolFileManager
 from core.tools.tool_manager import ToolManager
 from core.tools.utils.message_transformer import ToolFileMessageTransformer
 from core.workflow.file_reference import build_file_reference
+from models.account import Account
+from models.contact import Contact, ContactType
+from models.human_input import HumanInputInitiatorApprovalSnapshot
 from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
     FileListInputConfig,
@@ -82,8 +85,18 @@ from .human_input_adapter import (
     DeliveryMethodType,
     EmailDeliveryMethod,
     EmailRecipients,
+    ensure_supported_contact_runtime_recipient_shape,
     is_human_input_webapp_enabled,
     parse_human_input_delivery_methods,
+)
+from .nodes.human_input.contact_runtime import (
+    ContactHumanInputNodeData,
+    ContactRecipientType,
+    ExternalContactRecipient,
+    HumanInputRecipientSeed,
+    MemberContactRecipient,
+    WorkspaceMembersContactRecipient,
+    ContactRecipientSeedType,
 )
 from .system_variables import SystemVariableKey, get_system_text
 
@@ -806,6 +819,204 @@ class DifyHumanInputNodeRuntime:
             return True
         return is_human_input_webapp_enabled(node_data)
 
+    def resolve_initiator_approval_snapshot(
+        self,
+        *,
+        node_data: HumanInputNodeData,
+    ) -> HumanInputInitiatorApprovalSnapshot | None:
+        if not isinstance(node_data, ContactHumanInputNodeData):
+            return None
+        if not node_data.allow_current_initiator_to_approve:
+            return None
+
+        return HumanInputInitiatorApprovalSnapshot(
+            actor_type=self._run_context.creator_user_role(),
+            actor_id=self._run_context.user_id,
+        )
+
+    def resolve_recipient_seeds(
+        self,
+        *,
+        node_data: HumanInputNodeData,
+        delivery_methods: Sequence[DeliveryChannelConfig] | None = None,
+    ) -> Mapping[str, Sequence[HumanInputRecipientSeed]]:
+        if not isinstance(node_data, ContactHumanInputNodeData):
+            return {}
+
+        resolved_delivery_methods = tuple(delivery_methods or self._resolve_delivery_methods(node_data=node_data))
+        ensure_supported_contact_runtime_recipient_shape(node_data)
+        email_delivery_methods = [
+            method for method in resolved_delivery_methods if isinstance(method, EmailDeliveryMethod) and method.enabled
+        ]
+        if not email_delivery_methods:
+            return {}
+
+        seeds = self._load_contact_recipient_seeds(node_data=node_data)
+        return {str(method.id): tuple(seeds) for method in email_delivery_methods}
+
+    def _load_contact_recipient_seeds(
+        self,
+        *,
+        node_data: ContactHumanInputNodeData,
+    ) -> Sequence[HumanInputRecipientSeed]:
+        with session_factory.create_session() as session:
+            seeds: list[HumanInputRecipientSeed] = []
+            seen_contacts: set[str] = set()
+            for recipient in node_data.recipients:
+                for seed in self._resolve_contact_recipient_seeds(session=session, recipient=recipient):
+                    if seed.contact_id in seen_contacts:
+                        continue
+                    seen_contacts.add(seed.contact_id)
+                    seeds.append(seed)
+            return seeds
+
+    def _resolve_contact_recipient_seeds(
+        self,
+        *,
+        session: Session,
+        recipient: object,
+    ) -> Sequence[HumanInputRecipientSeed]:
+        match recipient:
+            case MemberContactRecipient():
+                return [self._resolve_member_contact_seed(session=session, account_id=recipient.account_id)]
+            case ExternalContactRecipient():
+                return [self._resolve_external_contact_seed(session=session, email=recipient.email)]
+            case WorkspaceMembersContactRecipient():
+                return self._resolve_workspace_member_contact_seeds(session=session)
+            case _:
+                msg = f"unsupported contact recipient config: {type(recipient).__name__}"
+                raise ValueError(msg)
+
+    def _resolve_member_contact_seed(
+        self,
+        *,
+        session: Session,
+        account_id: str,
+    ) -> HumanInputRecipientSeed:
+        rows = session.execute(
+            select(Contact, Account.name, Account.email)
+            .outerjoin(Account, Account.id == Contact.account_id)
+            .where(
+                Contact.tenant_id == self._run_context.tenant_id,
+                Contact.type == ContactType.MEMBER,
+                Contact.account_id == account_id,
+            )
+        ).all()
+        if len(rows) != 1:
+            msg = (
+                "contact-oriented human input requires exactly one authoritative member contact, "
+                f"tenant_id={self._run_context.tenant_id}, account_id={account_id}, matched={len(rows)}"
+            )
+            raise ValueError(msg)
+
+        contact, account_name, account_email = rows[0]
+        resolved_email = account_email or contact.email
+        if not resolved_email:
+            msg = (
+                "contact-oriented human input member contact requires a resolvable email fallback, "
+                f"contact_id={contact.id}, account_id={account_id}"
+            )
+            raise ValueError(msg)
+
+        return HumanInputRecipientSeed(
+            recipient_type=ContactRecipientSeedType.EMAIL_MEMBER,
+            email=resolved_email,
+            user_id=account_id,
+            contact_id=contact.id,
+            contact_tenant_id=contact.tenant_id,
+            contact_type=contact.type,
+            contact_source=contact.source,
+            contact_status=contact.status,
+            contact_name=account_name or contact.name,
+            contact_account_id=contact.account_id,
+            contact_email=resolved_email,
+        )
+
+    def _resolve_external_contact_seed(
+        self,
+        *,
+        session: Session,
+        email: str,
+    ) -> HumanInputRecipientSeed:
+        normalized_email = email.strip().lower()
+        rows = session.scalars(
+            select(Contact).where(
+                Contact.tenant_id == self._run_context.tenant_id,
+                Contact.type == ContactType.EXTERNAL,
+                Contact.email == normalized_email,
+            )
+        ).all()
+        if len(rows) != 1:
+            msg = (
+                "contact-oriented human input requires exactly one authoritative external contact, "
+                f"tenant_id={self._run_context.tenant_id}, email={normalized_email}, matched={len(rows)}"
+            )
+            raise ValueError(msg)
+
+        contact = rows[0]
+        if not contact.email:
+            msg = f"external contact missing delivery email, contact_id={contact.id}"
+            raise ValueError(msg)
+
+        return HumanInputRecipientSeed(
+            recipient_type=ContactRecipientSeedType.EMAIL_EXTERNAL,
+            email=contact.email,
+            contact_id=contact.id,
+            contact_tenant_id=contact.tenant_id,
+            contact_type=contact.type,
+            contact_source=contact.source,
+            contact_status=contact.status,
+            contact_name=contact.name,
+            contact_account_id=contact.account_id,
+            contact_email=contact.email,
+        )
+
+    def _resolve_workspace_member_contact_seeds(
+        self,
+        *,
+        session: Session,
+    ) -> Sequence[HumanInputRecipientSeed]:
+        rows = session.execute(
+            select(Contact, Account.name, Account.email)
+            .outerjoin(Account, Account.id == Contact.account_id)
+            .where(
+                Contact.tenant_id == self._run_context.tenant_id,
+                Contact.type == ContactType.MEMBER,
+            )
+        ).all()
+        return [
+            self._build_workspace_member_seed(contact=contact, account_name=account_name, account_email=account_email)
+            for contact, account_name, account_email in rows
+        ]
+
+    @staticmethod
+    def _build_workspace_member_seed(
+        *,
+        contact: Contact,
+        account_name: str | None,
+        account_email: str | None,
+    ) -> HumanInputRecipientSeed:
+        if not contact.account_id:
+            msg = f"member contact missing account_id, contact_id={contact.id}"
+            raise ValueError(msg)
+        resolved_email = account_email or contact.email
+        if not resolved_email:
+            msg = f"member contact missing resolvable email, contact_id={contact.id}, account_id={contact.account_id}"
+            raise ValueError(msg)
+        return HumanInputRecipientSeed(
+            recipient_type=ContactRecipientSeedType.EMAIL_MEMBER,
+            email=resolved_email,
+            user_id=contact.account_id,
+            contact_id=contact.id,
+            contact_tenant_id=contact.tenant_id,
+            contact_type=contact.type,
+            contact_source=contact.source,
+            contact_status=contact.status,
+            contact_name=account_name or contact.name,
+            contact_account_id=contact.account_id,
+            contact_email=resolved_email,
+        )
+
     def build_form_repository(self) -> HumanInputFormRepository:
         if self._form_repository is not None:
             return self._form_repository
@@ -871,6 +1082,8 @@ class DifyHumanInputNodeRuntime:
             delivery_methods=self._resolve_delivery_methods(node_data=node_data),
             display_in_ui=self._display_in_ui(node_data=node_data),
             resolved_default_values=resolved_default_values,
+            initiator_approval_snapshot=self.resolve_initiator_approval_snapshot(node_data=node_data),
+            recipient_seeds_by_delivery_config_id=self.resolve_recipient_seeds(node_data=node_data),
         )
         return repo.create_form(params)
 

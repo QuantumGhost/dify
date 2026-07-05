@@ -9,6 +9,7 @@ from core.app.app_config.entities import EasyUIBasedAppConfig, WorkflowUIBasedAp
 from core.entities.provider_configuration import ProviderModelBundle
 from graphon.file import File, FileUploadConfig
 from graphon.model_runtime.entities.model_entities import AIModelEntity
+from models.enums import CreatorUserRole
 
 if TYPE_CHECKING:
     from core.ops.ops_trace_manager import TraceQueueManager
@@ -63,6 +64,17 @@ class DifyRunContext(BaseModel):
     user_from: UserFrom
     invoke_from: InvokeFrom
     trace_session_id: str | None = None
+
+    def creator_user_role(self) -> CreatorUserRole:
+        """Resolve the durable actor role from the shared Dify identity contract."""
+        return resolve_creator_user_role(user_from=self.user_from)
+
+
+def resolve_creator_user_role(*, user_from: UserFrom) -> CreatorUserRole:
+    """Translate Dify's runtime user origin into the durable creator-role enum."""
+    if user_from == UserFrom.ACCOUNT:
+        return CreatorUserRole.ACCOUNT
+    return CreatorUserRole.END_USER
 
 
 def build_dify_run_context(

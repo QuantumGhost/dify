@@ -16,7 +16,9 @@ from graphon.runtime.graph_runtime_state_protocol import ReadOnlyVariablePool
 from graphon.variables.factory import build_segment
 from graphon.variables.segments import Segment
 from libs.datetime_utils import ensure_naive_utc, naive_utc_now
+from models.human_input import HumanInputInitiatorApprovalSnapshot
 
+from .contact_runtime import HumanInputRecipientSeed
 from .entities import (
     FileInputConfig,
     FileListInputConfig,
@@ -91,6 +93,8 @@ class DifyHITLCallback:
         delivery_methods: Sequence[DeliveryChannelConfig] = (),
         display_in_ui: bool = False,
         file_reference_factory: DifyFileReferenceFactory | None = None,
+        initiator_approval_snapshot: HumanInputInitiatorApprovalSnapshot | None = None,
+        recipient_seeds_by_delivery_config_id: Mapping[str, Sequence[HumanInputRecipientSeed]] | None = None,
     ) -> None:
         self._form_repository = form_repository
         self._session_binding = default_session_binding
@@ -100,6 +104,8 @@ class DifyHITLCallback:
         self._delivery_methods = tuple(delivery_methods)
         self._display_in_ui = display_in_ui
         self._file_reference_factory = file_reference_factory
+        self._initiator_approval_snapshot = initiator_approval_snapshot
+        self._recipient_seeds_by_delivery_config_id = dict(recipient_seeds_by_delivery_config_id or {})
 
     def __call__(self, ctx: HITLContext) -> HITLDecision:
         form = self._form_repository.get_form(ctx.node_id)
@@ -181,6 +187,8 @@ class DifyHITLCallback:
                     variable_pool=ctx.variable_pool,
                 )
             ),
+            initiator_approval_snapshot=self._initiator_approval_snapshot,
+            recipient_seeds_by_delivery_config_id=self._recipient_seeds_by_delivery_config_id,
         )
         return self._form_repository.create_form(params)
 

@@ -18,6 +18,8 @@ from core.workflow.human_input_adapter import (
     EmailDeliveryConfig,
     EmailDeliveryMethod,
     EmailRecipients,
+    ExternalRecipient,
+    MemberRecipient,
     WebAppDeliveryMethod,
     _WebAppDeliveryConfig,
 )
@@ -34,6 +36,13 @@ from core.workflow.node_runtime import (
     build_dify_llm_file_saver,
     resolve_dify_run_context,
 )
+from core.workflow.nodes.human_input.contact_runtime import (
+    ContactHumanInputNodeData,
+    ContactRecipientSeedType,
+    ExternalContactRecipient,
+    HumanInputRecipientSeed,
+    MemberContactRecipient,
+)
 from core.workflow.nodes.human_input.entities import FileInputConfig, FileListInputConfig, HumanInputNodeData
 from graphon.file import File, FileTransferMethod, FileType
 from graphon.model_runtime.entities.common_entities import I18nObject
@@ -44,6 +53,8 @@ from graphon.model_runtime.model_providers.base.large_language_model import Larg
 from graphon.nodes.llm.runtime_protocols import LLMPollingCapableProtocol
 from graphon.nodes.tool.entities import ToolNodeData, ToolProviderType
 from graphon.variables.segments import ArrayFileSegment, FileSegment
+from models.contact import ContactSource, ContactStatus, ContactType
+from models.enums import CreatorUserRole
 from tests.workflow_test_utils import build_test_run_context
 
 
@@ -110,6 +121,51 @@ def _build_email_method(*, debug_mode: bool = False) -> EmailDeliveryMethod:
             body="Visit {{#url#}}",
             debug_mode=debug_mode,
         ),
+    )
+
+
+def _build_contact_node_data(
+    *,
+    allow_current_initiator_to_approve: bool,
+    recipients: list[object] | None = None,
+    delivery_methods: list[object] | None = None,
+) -> ContactHumanInputNodeData:
+    return ContactHumanInputNodeData(
+        title="Contact HITL",
+        form_content="hello",
+        inputs=[],
+        user_actions=[],
+        recipients=[] if recipients is None else recipients,
+        delivery_methods=[] if delivery_methods is None else delivery_methods,
+        allow_current_initiator_to_approve=allow_current_initiator_to_approve,
+    )
+
+
+def _build_contact_seed(
+    *,
+    recipient_type: ContactRecipientSeedType,
+    contact_id: str,
+    email: str,
+    name: str,
+    user_id: str | None = None,
+    account_id: str | None = None,
+) -> HumanInputRecipientSeed:
+    return HumanInputRecipientSeed(
+        recipient_type=recipient_type,
+        email=email,
+        user_id=user_id,
+        contact_id=contact_id,
+        contact_tenant_id="tenant-id",
+        contact_type=ContactType.MEMBER if recipient_type == ContactRecipientSeedType.EMAIL_MEMBER else ContactType.EXTERNAL,
+        contact_source=(
+            ContactSource.WORKSPACE_MEMBER
+            if recipient_type == ContactRecipientSeedType.EMAIL_MEMBER
+            else ContactSource.MANUAL_EXTERNAL
+        ),
+        contact_status=ContactStatus.ACTIVE,
+        contact_name=name,
+        contact_account_id=account_id,
+        contact_email=email,
     )
 
 
@@ -674,6 +730,202 @@ def test_dify_human_input_runtime_builds_debug_repository(monkeypatch: pytest.Mo
         invoke_source="debugger",
         submission_actor_id="user-id",
     )
+
+
+def test_dify_human_input_runtime_resolves_initiator_snapshot_from_user_from_account() -> None:
+    runtime = DifyHumanInputNodeRuntime(
+        build_test_run_context(
+            tenant_id="tenant-id",
+            app_id="app-id",
+            user_id="account-user",
+            user_from=UserFrom.ACCOUNT,
+            invoke_from=InvokeFrom.WEB_APP,
+        )
+    )
+
+    snapshot = runtime.resolve_initiator_approval_snapshot(
+        node_data=_build_contact_node_data(allow_current_initiator_to_approve=True)
+    )
+
+    assert snapshot is not None
+    assert snapshot.actor_type == CreatorUserRole.ACCOUNT
+    assert snapshot.actor_id == "account-user"
+
+
+def test_dify_human_input_runtime_resolves_initiator_snapshot_from_user_from_end_user() -> None:
+    runtime = DifyHumanInputNodeRuntime(
+        build_test_run_context(
+            tenant_id="tenant-id",
+            app_id="app-id",
+            user_id="end-user",
+            user_from=UserFrom.END_USER,
+            invoke_from=InvokeFrom.OPENAPI,
+        )
+    )
+
+    snapshot = runtime.resolve_initiator_approval_snapshot(
+        node_data=_build_contact_node_data(allow_current_initiator_to_approve=True)
+    )
+
+    assert snapshot is not None
+    assert snapshot.actor_type == CreatorUserRole.END_USER
+    assert snapshot.actor_id == "end-user"
+
+
+def test_dify_human_input_runtime_resolve_recipient_seeds_uses_contact_recipients() -> None:
+    class _SessionContext:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+    seen_recipients: list[object] = []
+
+    def fake_resolve(self, *, session, recipient):  # type: ignore[no-untyped-def]
+        _ = session
+        seen_recipients.append(recipient)
+        if isinstance(recipient, MemberContactRecipient):
+            return [
+                _build_contact_seed(
+                    recipient_type=ContactRecipientSeedType.EMAIL_MEMBER,
+                    contact_id="contact-member-id",
+                    email="member@example.com",
+                    name="Member Contact",
+                    user_id=recipient.account_id,
+                    account_id=recipient.account_id,
+                )
+            ]
+        if isinstance(recipient, ExternalContactRecipient):
+            return [
+                _build_contact_seed(
+                    recipient_type=ContactRecipientSeedType.EMAIL_EXTERNAL,
+                    contact_id="contact-external-id",
+                    email=recipient.email,
+                    name="External Contact",
+                )
+            ]
+        raise AssertionError(f"unexpected recipient type: {type(recipient).__name__}")
+
+    email_method = EmailDeliveryMethod(
+        config=EmailDeliveryConfig(
+            recipients=EmailRecipients(
+                include_bound_group=False,
+                items=[
+                    MemberRecipient(reference_id="legacy-member"),
+                    ExternalRecipient(email="legacy@example.com"),
+                ],
+            ),
+            subject="Subject",
+            body="Body",
+        )
+    )
+    runtime = DifyHumanInputNodeRuntime(_build_run_context())
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(node_runtime.session_factory, "create_session", lambda: _SessionContext())
+    monkeypatch.setattr(DifyHumanInputNodeRuntime, "_resolve_contact_recipient_seeds", fake_resolve)
+    try:
+        seeds_by_delivery = runtime.resolve_recipient_seeds(
+            node_data=_build_contact_node_data(
+                allow_current_initiator_to_approve=False,
+                recipients=[
+                    MemberContactRecipient(account_id="contact-member"),
+                    ExternalContactRecipient(email="contact@example.com"),
+                ],
+                delivery_methods=[email_method],
+            ),
+            delivery_methods=[email_method],
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert [type(recipient) for recipient in seen_recipients] == [
+        MemberContactRecipient,
+        ExternalContactRecipient,
+    ]
+    assert seen_recipients[0].account_id == "contact-member"
+    assert seen_recipients[1].email == "contact@example.com"
+    assert str(email_method.id) in seeds_by_delivery
+    assert [seed.contact_id for seed in seeds_by_delivery[str(email_method.id)]] == [
+        "contact-member-id",
+        "contact-external-id",
+    ]
+
+
+def test_dify_human_input_runtime_resolve_recipient_seeds_rejects_multiple_enabled_email_deliveries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_seed_loading_runs(self, *, node_data):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"should fail before loading contact seeds: {node_data}")
+
+    email_method_one = EmailDeliveryMethod(
+        config=EmailDeliveryConfig(
+            recipients=EmailRecipients(
+                include_bound_group=False,
+                items=[MemberRecipient(reference_id="legacy-member")],
+            ),
+            subject="Subject",
+            body="Body",
+        )
+    )
+    email_method_two = EmailDeliveryMethod(
+        config=EmailDeliveryConfig(
+            recipients=EmailRecipients(
+                include_bound_group=False,
+                items=[ExternalRecipient(email="legacy@example.com")],
+            ),
+            subject="Subject 2",
+            body="Body 2",
+        )
+    )
+    runtime = DifyHumanInputNodeRuntime(_build_run_context())
+    monkeypatch.setattr(DifyHumanInputNodeRuntime, "_load_contact_recipient_seeds", fail_if_seed_loading_runs)
+
+    with pytest.raises(ValueError, match="email"):
+        runtime.resolve_recipient_seeds(
+            node_data=_build_contact_node_data(
+                allow_current_initiator_to_approve=False,
+                recipients=[MemberContactRecipient(account_id="contact-member")],
+                delivery_methods=[email_method_one, email_method_two],
+            ),
+            delivery_methods=[email_method_one, email_method_two],
+        )
+
+
+def test_dify_human_input_runtime_resolve_member_contact_seed_requires_unique_authoritative_contact() -> None:
+    class _ExecuteResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return list(self._rows)
+
+    class _Session:
+        def execute(self, _stmt):
+            return _ExecuteResult([])
+
+    runtime = DifyHumanInputNodeRuntime(_build_run_context())
+
+    with pytest.raises(ValueError, match="exactly one authoritative member contact"):
+        runtime._resolve_member_contact_seed(session=_Session(), account_id="missing-member")  # type: ignore[arg-type]
+
+
+def test_dify_human_input_runtime_resolve_external_contact_seed_requires_unique_authoritative_contact() -> None:
+    class _ScalarResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return list(self._rows)
+
+    class _Session:
+        def scalars(self, _stmt):
+            return _ScalarResult([SimpleNamespace(id="contact-1"), SimpleNamespace(id="contact-2")])
+
+    runtime = DifyHumanInputNodeRuntime(_build_run_context())
+
+    with pytest.raises(ValueError, match="exactly one authoritative external contact"):
+        runtime._resolve_external_contact_seed(session=_Session(), email="external@example.com")  # type: ignore[arg-type]
 
 
 def test_dify_tool_runtime_spec_prefers_tool_parameters_for_runtime_form_values() -> None:

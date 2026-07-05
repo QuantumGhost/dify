@@ -21,7 +21,9 @@ from core.memory.token_buffer_memory import TokenBufferMemory
 from core.model_manager import ModelInstance
 from core.prompt.entities.advanced_prompt_entities import MemoryConfig
 from core.trigger.constants import TRIGGER_NODE_TYPES
-from core.workflow.human_input_adapter import adapt_node_config_for_graph
+from core.workflow.human_input_adapter import (
+    adapt_node_config_for_runtime_graph,
+)
 from core.workflow.node_runtime import (
     DifyFileReferenceFactory,
     DifyHumanInputNodeRuntime,
@@ -44,6 +46,7 @@ from core.workflow.nodes.agent_v2.binding_resolver import WorkflowAgentBindingRe
 from core.workflow.nodes.agent_v2.output_adapter import WorkflowAgentOutputAdapter
 from core.workflow.nodes.agent_v2.runtime_request_builder import WorkflowAgentRuntimeRequestBuilder
 from core.workflow.nodes.human_input.callback import DifyHITLCallback
+from core.workflow.nodes.human_input.contact_runtime import CONTACT_HUMAN_INPUT_NODE_TYPE, ContactHumanInputNodeData
 from core.workflow.nodes.human_input.entities import HumanInputNodeData as DifyHumanInputNodeData
 from core.workflow.system_variables import SystemVariableKey, get_system_text, system_variable_selector
 from core.workflow.template_rendering import CodeExecutorJinja2TemplateRenderer
@@ -384,7 +387,7 @@ class DifyNodeFactory(NodeFactory):
             (including pydantic ValidationError, which subclasses ValueError),
             if node type is unknown, or if no implementation exists for the resolved version
         """
-        adapted_node_config = adapt_node_config_for_graph(node_config)
+        adapted_node_config = adapt_node_config_for_runtime_graph(node_config)
         typed_node_config = NodeConfigDictAdapter.validate_python(adapted_node_config)
         node_id = typed_node_config["id"]
         node_data = typed_node_config["data"]
@@ -413,6 +416,11 @@ class DifyNodeFactory(NodeFactory):
             BuiltinNodeTypes.HUMAN_INPUT: lambda: {
                 "hitl_callback": self._build_human_input_callback(
                     node_data=DifyHumanInputNodeData.model_validate(adapted_node_config["data"])
+                ),
+            },
+            CONTACT_HUMAN_INPUT_NODE_TYPE: lambda: {
+                "hitl_callback": self._build_human_input_callback(
+                    node_data=ContactHumanInputNodeData.model_validate(adapted_node_config["data"])
                 ),
             },
             BuiltinNodeTypes.LLM: lambda: self._build_llm_compatible_node_init_kwargs(
@@ -520,15 +528,23 @@ class DifyNodeFactory(NodeFactory):
     def _build_human_input_callback(
         self,
         *,
-        node_data: DifyHumanInputNodeData,
+        node_data: DifyHumanInputNodeData | ContactHumanInputNodeData,
     ) -> DifyHITLCallback:
+        delivery_methods = self._human_input_runtime._resolve_delivery_methods(node_data=node_data)
         return DifyHITLCallback(
             form_repository=self._human_input_runtime.build_form_repository(),
             node_data=node_data,
             conversation_id=self._conversation_id(),
-            delivery_methods=self._human_input_runtime._resolve_delivery_methods(node_data=node_data),
+            delivery_methods=delivery_methods,
             display_in_ui=self._human_input_runtime._display_in_ui(node_data=node_data),
             file_reference_factory=self._file_reference_factory,
+            initiator_approval_snapshot=self._human_input_runtime.resolve_initiator_approval_snapshot(
+                node_data=node_data
+            ),
+            recipient_seeds_by_delivery_config_id=self._human_input_runtime.resolve_recipient_seeds(
+                node_data=node_data,
+                delivery_methods=delivery_methods,
+            ),
         )
 
     def _build_llm_compatible_node_init_kwargs(
