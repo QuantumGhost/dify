@@ -144,6 +144,29 @@ def _open_session(session_factory: sessionmaker | Session | None):
     return session_factory()
 
 
+def _load_form(session_factory: sessionmaker | Session | None, form_id: str) -> HumanInputForm | None:
+    with _open_session(session_factory) as session:
+        return session.get(HumanInputForm, form_id)
+
+
+def _dispatch_feishu_notifications(
+    *,
+    session_factory: sessionmaker | Session | None,
+    form_id: str,
+    variable_pool: VariablePool | None,
+) -> None:
+    with _open_session(session_factory) as session:
+        form = session.get(HumanInputForm, form_id)
+        if form is None:
+            logger.warning("Human input form not found for feishu dispatch, form_id=%s", form_id)
+            return
+        HumanInputFeishuService().dispatch_form_notifications(
+            session=session,
+            form=form,
+            variable_pool=variable_pool,
+        )
+
+
 @shared_task(queue="mail")
 def dispatch_human_input_email_task(form_id: str, node_title: str | None = None, session_factory=None):
     if not mail.is_inited():
@@ -153,19 +176,21 @@ def dispatch_human_input_email_task(form_id: str, node_title: str | None = None,
     start_at = time.perf_counter()
 
     try:
+        form = _load_form(session_factory, form_id)
+        if form is None:
+            logger.warning("Human input form not found, form_id=%s", form_id)
+            return
+
+        features = FeatureService.get_features(form.tenant_id, exclude_vector_space=True)
+        if not features.human_input_email_delivery_enabled:
+            logger.info(
+                "Human input email delivery is not available for tenant=%s, form_id=%s",
+                form.tenant_id,
+                form_id,
+            )
+            return
+
         with _open_session(session_factory) as session:
-            form = session.get(HumanInputForm, form_id)
-            if form is None:
-                logger.warning("Human input form not found, form_id=%s", form_id)
-                return
-            features = FeatureService.get_features(form.tenant_id, exclude_vector_space=True)
-            if not features.human_input_email_delivery_enabled:
-                logger.info(
-                    "Human input email delivery is not available for tenant=%s, form_id=%s",
-                    form.tenant_id,
-                    form_id,
-                )
-                return
             jobs = _load_email_jobs(session, form)
 
         variable_pool = _load_variable_pool(form.workflow_run_id)
@@ -182,15 +207,6 @@ def dispatch_human_input_email_task(form_id: str, node_title: str | None = None,
                     html=body,
                 )
 
-        with _open_session(session_factory) as session:
-            form = session.get(HumanInputForm, form_id)
-            if form is not None:
-                HumanInputFeishuService().dispatch_form_notifications(
-                    session=session,
-                    form=form,
-                    variable_pool=variable_pool,
-                )
-
         end_at = time.perf_counter()
         logger.info(
             click.style(
@@ -199,3 +215,34 @@ def dispatch_human_input_email_task(form_id: str, node_title: str | None = None,
         )
     except Exception:
         logger.exception("Send human input email failed, form_id=%s", form_id)
+
+
+@shared_task(queue="mail")
+def dispatch_human_input_feishu_task(form_id: str, node_title: str | None = None, session_factory=None):
+    del node_title
+
+    logger.info(click.style(f"Start human input feishu delivery for form {form_id}", fg="green"))
+    start_at = time.perf_counter()
+
+    try:
+        form = _load_form(session_factory, form_id)
+        if form is None:
+            logger.warning("Human input form not found, form_id=%s", form_id)
+            return
+
+        variable_pool = _load_variable_pool(form.workflow_run_id)
+        _dispatch_feishu_notifications(
+            session_factory=session_factory,
+            form_id=form_id,
+            variable_pool=variable_pool,
+        )
+
+        end_at = time.perf_counter()
+        logger.info(
+            click.style(
+                f"Human input feishu delivery succeeded for form {form_id}: latency: {end_at - start_at}",
+                fg="green",
+            )
+        )
+    except Exception:
+        logger.exception("Send human input feishu failed, form_id=%s", form_id)

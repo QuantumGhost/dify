@@ -34,7 +34,7 @@ class _DummyWorkflowEntry:
         self.graph_engine = _DummyGraphEngine()
 
 
-def test_handle_pause_event_enqueues_email_task(monkeypatch: pytest.MonkeyPatch):
+def test_handle_pause_event_enqueues_email_and_feishu_tasks(monkeypatch: pytest.MonkeyPatch):
     queue_manager = _DummyQueueManager()
     runner = WorkflowBasedAppRunner(queue_manager=queue_manager, app_id="app-id")
     workflow_entry = _DummyWorkflowEntry()
@@ -43,6 +43,7 @@ def test_handle_pause_event_enqueues_email_task(monkeypatch: pytest.MonkeyPatch)
     event = GraphRunPausedEvent(reasons=[graph_reason], outputs={})
 
     email_task = MagicMock()
+    feishu_task = MagicMock()
     enriched_reason = HumanInputRequired(
         form_id="form-123",
         form_content="content",
@@ -56,6 +57,7 @@ def test_handle_pause_event_enqueues_email_task(monkeypatch: pytest.MonkeyPatch)
         lambda **_: [enriched_reason],
     )
     monkeypatch.setattr("core.app.apps.workflow_app_runner.dispatch_human_input_email_task", email_task)
+    monkeypatch.setattr("core.app.apps.workflow_app_runner.dispatch_human_input_feishu_task", feishu_task)
 
     runner._handle_event(workflow_entry, event)
 
@@ -63,5 +65,9 @@ def test_handle_pause_event_enqueues_email_task(monkeypatch: pytest.MonkeyPatch)
     kwargs = email_task.apply_async.call_args.kwargs["kwargs"]
     assert kwargs["form_id"] == "form-123"
     assert kwargs["node_title"] == "Review"
+    feishu_task.apply_async.assert_called_once()
+    feishu_kwargs = feishu_task.apply_async.call_args.kwargs["kwargs"]
+    assert feishu_kwargs["form_id"] == "form-123"
+    assert feishu_kwargs["node_title"] == "Review"
 
     assert any(isinstance(evt, QueueWorkflowPausedEvent) for evt in queue_manager.published)
