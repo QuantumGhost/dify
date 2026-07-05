@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from configs import dify_config
 from core.workflow.human_input_policy import resolve_variable_select_input_options
+from core.workflow.nodes.human_input.callback import DifyHITLCallback
 from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
     FileListInputConfig,
@@ -759,10 +760,16 @@ class HumanInputFeishuService:
 
     def _build_result_card_data(self, record) -> dict[str, Any]:
         definition = record.definition
+        rendered_content = DifyHITLCallback.render_form_content_with_outputs(
+            definition.rendered_content or definition.form_content,
+            record.submitted_data or {},
+            list((record.submitted_data or {}).keys()),
+            definition.inputs,
+        )
         elements: list[dict[str, Any]] = [
             {
                 "tag": "markdown",
-                "content": definition.rendered_content or definition.form_content,
+                "content": rendered_content,
             }
         ]
         if record.selected_action_id:
