@@ -6,9 +6,10 @@ Create Date: 2026-07-05 12:00:00.000000
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
+from models import types as model_types
 
 # revision identifiers, used by Alembic.
 revision = "a4b5c6d7e8f9"
@@ -20,9 +21,9 @@ depends_on = None
 def upgrade():
     op.create_table(
         "member_contacts",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("tenant_id", sa.String(length=36), nullable=False),
-        sa.Column("account_id", sa.String(length=36), nullable=False),
+        sa.Column("id", model_types.StringUUID(), nullable=False),
+        sa.Column("tenant_id", model_types.StringUUID(), nullable=False),
+        sa.Column("account_id", model_types.StringUUID(), nullable=False),
         sa.Column("source", sa.String(length=32), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("email", sa.String(length=255), nullable=False),
@@ -36,12 +37,12 @@ def upgrade():
 
     op.create_table(
         "human_input_feishu_deliveries",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("tenant_id", sa.String(length=36), nullable=False),
-        sa.Column("form_id", sa.String(length=36), nullable=False),
-        sa.Column("recipient_id", sa.String(length=36), nullable=False),
-        sa.Column("member_contact_id", sa.String(length=36), nullable=True),
-        sa.Column("account_id", sa.String(length=36), nullable=False),
+        sa.Column("id", model_types.StringUUID(), nullable=False),
+        sa.Column("tenant_id", model_types.StringUUID(), nullable=False),
+        sa.Column("form_id", model_types.StringUUID(), nullable=False),
+        sa.Column("recipient_id", model_types.StringUUID(), nullable=False),
+        sa.Column("member_contact_id", model_types.StringUUID(), nullable=True),
+        sa.Column("account_id", model_types.StringUUID(), nullable=False),
         sa.Column("open_id", sa.String(length=255), nullable=True),
         sa.Column("message_id", sa.String(length=255), nullable=True),
         sa.Column("delivery_mode", sa.String(length=32), nullable=False),
