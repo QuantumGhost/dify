@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.repositories.human_input_repository import (
+    FormNotFoundError,
     HumanInputFormRecord,
     HumanInputFormRepositoryImpl,
     HumanInputFormSubmissionRepository,
@@ -355,7 +356,7 @@ class _FakeSession:
             result = None
         return _FakeScalarResult(result)
 
-    def get(self, model_cls, obj_id):  # type: ignore[no-untyped-def]
+    def get(self, model_cls, obj_id, **_kwargs):  # type: ignore[no-untyped-def]
         if getattr(model_cls, "__name__", None) == "HumanInputForm":
             return self.forms.get(obj_id)
         if getattr(model_cls, "__name__", None) == "HumanInputFormRecipient":
@@ -598,3 +599,41 @@ class TestHumanInputFormSubmissionRepository:
         assert record.submitted is True
         assert record.selected_action_id == "approve"
         assert record.submitted_data == {"field": "value"}
+
+    def test_mark_submitted_preserves_first_submission(self, monkeypatch: pytest.MonkeyPatch):
+        original_time = datetime(2024, 1, 1, 0, 0, 0)
+        monkeypatch.setattr("core.repositories.human_input_repository.naive_utc_now", lambda: datetime(2024, 1, 2, 0, 0, 0))
+
+        form = _DummyForm(
+            id="form-1",
+            workflow_run_id="run-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            app_id="app-1",
+            form_definition=_make_form_definition(),
+            rendered_content="<p>hello</p>",
+            expiration_time=original_time,
+            selected_action_id="approve",
+            submitted_data='{"field": "first"}',
+            submitted_at=original_time,
+            submission_user_id="user-1",
+            completed_by_recipient_id="recipient-1",
+            status=HumanInputFormStatus.SUBMITTED,
+        )
+        session = _FakeSession(forms={form.id: form})
+        _patch_repo_session_factory(monkeypatch, session)
+
+        repo = HumanInputFormSubmissionRepository()
+        with pytest.raises(FormNotFoundError, match="form already submitted"):
+            repo.mark_submitted(
+                form_id=form.id,
+                recipient_id="recipient-2",
+                selected_action_id="reject",
+                form_data={"field": "second"},
+                submission_user_id="user-2",
+                submission_end_user_id=None,
+            )
+
+        assert form.selected_action_id == "approve"
+        assert form.submitted_data == '{"field": "first"}'
+        assert form.submitted_at == original_time

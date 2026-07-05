@@ -147,7 +147,7 @@ class _FakeSession:
     def execute(self, _stmt: Any) -> _FakeExecuteResult:
         return _FakeExecuteResult(self._execute_rows)
 
-    def get(self, model_cls: Any, obj_id: str) -> Any:
+    def get(self, model_cls: Any, obj_id: str, **_kwargs: Any) -> Any:
         name = getattr(model_cls, "__name__", "")
         if name == "HumanInputForm":
             return self._forms.get(obj_id)
@@ -652,6 +652,91 @@ def test_mark_submitted_serializes_select_and_file_payloads(monkeypatch: pytest.
 
     assert json.loads(form.submitted_data or "") == payload
     assert record.submitted_data == payload
+
+
+def test_mark_submitted_raises_when_form_already_submitted(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_time = datetime(2024, 1, 1, 0, 0, 0)
+    monkeypatch.setattr("core.repositories.human_input_repository.naive_utc_now", lambda: datetime(2024, 1, 2, 0, 0, 0))
+
+    form = _DummyForm(
+        id="f-submitted",
+        workflow_run_id=None,
+        node_id="node",
+        tenant_id="tenant",
+        app_id="app",
+        form_definition=_make_form_definition_json(include_expiration_time=True),
+        rendered_content="<p>x</p>",
+        expiration_time=original_time,
+        selected_action_id="first-action",
+        submitted_data='{"winner": "first"}',
+        submitted_at=original_time,
+        submission_user_id="first-user",
+        submission_end_user_id=None,
+        completed_by_recipient_id="recipient-1",
+        status=HumanInputFormStatus.SUBMITTED,
+    )
+    session = _FakeSession(forms={form.id: form})
+    _patch_session_factory(monkeypatch, session)
+
+    repo = HumanInputFormSubmissionRepository()
+    with pytest.raises(FormNotFoundError, match="form already submitted"):
+        repo.mark_submitted(
+            form_id=form.id,
+            recipient_id="recipient-2",
+            selected_action_id="second-action",
+            form_data={"winner": "second"},
+            submission_user_id="second-user",
+            submission_end_user_id="second-end-user",
+        )
+
+    assert form.selected_action_id == "first-action"
+    assert form.submitted_data == '{"winner": "first"}'
+    assert form.submitted_at == original_time
+    assert form.submission_user_id == "first-user"
+    assert form.submission_end_user_id is None
+    assert form.completed_by_recipient_id == "recipient-1"
+
+
+@pytest.mark.parametrize(
+    ("recipient", "expected_message"),
+    [
+        (None, "recipient not found"),
+        (_DummyRecipient(id="r-other", form_id="other-form", recipient_type=RecipientType.CONSOLE, access_token="tok"), "recipient does not belong"),
+    ],
+)
+def test_mark_submitted_rejects_missing_or_mismatched_recipient(
+    monkeypatch: pytest.MonkeyPatch,
+    recipient: _DummyRecipient | None,
+    expected_message: str,
+) -> None:
+    form = _DummyForm(
+        id="f-recipient",
+        workflow_run_id=None,
+        node_id="node",
+        tenant_id="tenant",
+        app_id="app",
+        form_definition=_make_form_definition_json(include_expiration_time=True),
+        rendered_content="<p>x</p>",
+        expiration_time=naive_utc_now(),
+    )
+    recipients = {} if recipient is None else {recipient.id: recipient}
+    session = _FakeSession(forms={form.id: form}, recipients=recipients)
+    _patch_session_factory(monkeypatch, session)
+
+    repo = HumanInputFormSubmissionRepository()
+    with pytest.raises(FormNotFoundError, match=expected_message):
+        repo.mark_submitted(
+            form_id=form.id,
+            recipient_id="r-other",
+            selected_action_id="approve",
+            form_data={"k": "v"},
+            submission_user_id="user-1",
+            submission_end_user_id=None,
+        )
+
+    assert form.status == HumanInputFormStatus.WAITING
+    assert form.submitted_at is None
+    assert form.completed_by_recipient_id is None
 
 
 def test_mark_timeout_invalid_status_raises(monkeypatch: pytest.MonkeyPatch) -> None:

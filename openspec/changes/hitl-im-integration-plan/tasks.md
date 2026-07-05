@@ -70,7 +70,7 @@
 - [x] 8.2 在 callback service 中验证 provider event id 幂等，重复事件返回成功 ACK。
 - [ ] 8.3 校验 callback provider user 与 active binding、Contact snapshot、original recipient、provider workspace 一致。
 - [ ] 8.4 使用 interaction mapping snapshot 将 provider submission 映射为 `HumanInputService.submit_form_by_token` 参数，并按 actor 类型写入 `submission_user_id` 或 `submission_end_user_id`。
-- [ ] 8.5 加固 `HumanInputFormSubmissionRepository.mark_submitted` 的单次提交语义，避免并发 callback 重复 resume。
+- [x] 8.5 加固 `HumanInputFormSubmissionRepository.mark_submitted` 的单次提交语义，避免并发 callback 重复 resume。
 - [ ] 8.6 更新 IM message status，记录 submitted、validation error、expired、already handled 等状态。
 - [ ] 8.7 实现 card update 异步补偿任务，callback 成功后不阻塞 workflow resume。
 - [ ] 8.8 添加 callback/resume tests，覆盖 active form、expired form、already submitted form、binding mismatch、unknown component/action id、initiator approval 和 resume enqueue once。

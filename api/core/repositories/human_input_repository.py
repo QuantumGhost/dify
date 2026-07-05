@@ -616,12 +616,29 @@ class HumanInputFormSubmissionRepository:
         submission_user_id: str | None,
         submission_end_user_id: str | None,
     ) -> HumanInputFormRecord:
+        """Persist the first accepted submission for a form.
+
+        The form is one-shot: once a submission is recorded, later attempts must
+        fail without mutating the winning payload. When a recipient is supplied,
+        it must still exist and belong to the same form.
+        """
         with session_factory.create_session() as session, session.begin():
-            form_model = session.get(HumanInputForm, form_id)
+            form_model = session.get(HumanInputForm, form_id, with_for_update=True)
             if form_model is None:
                 raise FormNotFoundError(f"form not found, id={form_id}")
 
-            recipient_model = session.get(HumanInputFormRecipient, recipient_id) if recipient_id else None
+            if form_model.submitted_at is not None or form_model.status == HumanInputFormStatus.SUBMITTED:
+                raise FormNotFoundError(f"form already submitted, id={form_id}")
+
+            recipient_model = None
+            if recipient_id is not None:
+                recipient_model = session.get(HumanInputFormRecipient, recipient_id, with_for_update=True)
+                if recipient_model is None:
+                    raise FormNotFoundError(f"recipient not found, id={recipient_id}")
+                if recipient_model.form_id != form_id:
+                    raise FormNotFoundError(
+                        f"recipient does not belong to form, recipient_id={recipient_id}, form_id={form_id}"
+                    )
 
             form_model.selected_action_id = selected_action_id
             form_model.submitted_data = json.dumps(form_data)
