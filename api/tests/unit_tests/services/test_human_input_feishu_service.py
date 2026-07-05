@@ -49,7 +49,12 @@ class _FakeRecipientQuery:
         return self._recipients
 
 
-def _build_definition(*, with_file: bool = False) -> FormDefinition:
+def _build_definition(
+    *,
+    with_file: bool = False,
+    form_content: str = "Please approve",
+    rendered_content: str = "Please approve",
+) -> FormDefinition:
     inputs: list[ParagraphInputConfig | SelectInputConfig | FileInputConfig] = [
         ParagraphInputConfig(type=FormInputType.PARAGRAPH, output_variable_name="reason"),
         SelectInputConfig(
@@ -62,8 +67,8 @@ def _build_definition(*, with_file: bool = False) -> FormDefinition:
         inputs.append(FileInputConfig(type=FormInputType.FILE, output_variable_name="attachment"))
 
     return FormDefinition(
-        form_content="Please approve",
-        rendered_content="Please approve",
+        form_content=form_content,
+        rendered_content=rendered_content,
         expiration_time=datetime(2026, 7, 5, tzinfo=UTC),
         inputs=inputs,
         user_actions=[
@@ -85,7 +90,193 @@ def test_render_form_card_uses_interactive_mode_for_supported_inputs():
     )
 
     assert result.mode.value == "interactive_card"
-    assert result.content["body"]["elements"][1]["tag"] == "form"
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    assert form_element["elements"][-1]["tag"] == "column_set"
+
+
+def test_render_form_card_interleaves_inputs_with_output_placeholders():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(
+            form_content="Before {{#$output.reason#}} between {{#$output.priority#}} after",
+            rendered_content="Before {{#$output.reason#}} between {{#$output.priority#}} after",
+        ),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    form_elements = form_element["elements"]
+
+    assert [element["tag"] for element in form_elements] == [
+        "markdown",
+        "input",
+        "markdown",
+        "select_static",
+        "markdown",
+        "column_set",
+    ]
+    assert [form_elements[0]["content"], form_elements[2]["content"], form_elements[4]["content"]] == [
+        "Before ",
+        " between ",
+        " after",
+    ]
+    assert form_elements[1]["name"] == "reason"
+    assert form_elements[3]["name"] == "priority"
+
+
+def test_render_form_card_consumes_duplicate_output_placeholders_without_leaking_template_text():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(
+            form_content="Before {{#$output.reason#}} between {{#$output.reason#}} after",
+            rendered_content="Before {{#$output.reason#}} between {{#$output.reason#}} after",
+        ),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    form_elements = form_element["elements"]
+    markdown_contents = [element["content"] for element in form_elements if element["tag"] == "markdown"]
+    reason_inputs = [element for element in form_elements if element.get("name") == "reason"]
+
+    assert markdown_contents == ["Before ", " between ", " after"]
+    assert len(reason_inputs) == 1
+    assert "{{#$output.reason#}}" not in "".join(markdown_contents)
+
+
+def test_render_form_card_preserves_markdown_and_appends_unreferenced_inputs():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(
+            form_content="Intro\n{{#$output.priority#}}\nOutro",
+            rendered_content="Intro\n{{#$output.priority#}}\nOutro",
+        ),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    form_elements = form_element["elements"]
+
+    assert [element["tag"] for element in form_elements] == [
+        "markdown",
+        "select_static",
+        "markdown",
+        "input",
+        "column_set",
+    ]
+    assert form_elements[0]["content"] == "Intro\n"
+    assert form_elements[1]["name"] == "priority"
+    assert form_elements[2]["content"] == "\nOutro"
+    assert form_elements[3]["name"] == "reason"
+
+
+def test_render_form_card_uses_rendered_markdown_when_form_content_controls_output_placement():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(
+            form_content="Approve {{#node1.value#}} {{#$output.reason#}} after",
+            rendered_content="Approve Dify  after",
+        ),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    form_elements = form_element["elements"]
+    markdown_contents = [element["content"] for element in form_elements if element["tag"] == "markdown"]
+
+    assert [element["tag"] for element in form_elements] == [
+        "markdown",
+        "input",
+        "markdown",
+        "select_static",
+        "column_set",
+    ]
+    assert markdown_contents == ["Approve Dify ", " after"]
+    assert "{{#node1.value#}}" not in "".join(markdown_contents)
+
+
+def test_render_form_card_preserves_rendered_text_when_output_placeholder_is_adjacent_to_ordinary_template():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(
+            form_content="Approve {{#node1.value#}}{{#$output.reason#}} after",
+            rendered_content="Approve Dify after",
+        ),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    form_elements = form_element["elements"]
+    markdown_contents = [element["content"] for element in form_elements if element["tag"] == "markdown"]
+
+    assert [element["tag"] for element in form_elements] == [
+        "markdown",
+        "input",
+        "select_static",
+        "column_set",
+    ]
+    assert markdown_contents == ["Approve Dify after"]
+    assert "{{#node1.value#}}" not in "".join(markdown_contents)
+
+
+def test_render_form_card_falls_back_to_rendered_content_when_projection_fails():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(
+            form_content="Approve {{#node1.value#}} {{#$output.reason#}} after",
+            rendered_content="Manual override",
+        ),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    form_elements = form_element["elements"]
+    markdown_contents = [element["content"] for element in form_elements if element["tag"] == "markdown"]
+
+    assert [element["tag"] for element in form_elements] == [
+        "markdown",
+        "input",
+        "select_static",
+        "column_set",
+    ]
+    assert markdown_contents == ["Manual override"]
+    assert "{{#node1.value#}}" not in "".join(markdown_contents)
+    assert "{{#$output.reason#}}" not in "".join(markdown_contents)
+
+
+def test_render_form_card_uses_placeholder_instead_of_label_for_select_static():
+    service = HumanInputFeishuService()
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=_build_definition(),
+    )
+
+    form_element = next(element for element in result.content["body"]["elements"] if element["tag"] == "form")
+    select_element = next(element for element in form_element["elements"] if element["tag"] == "select_static")
+    assert select_element["tag"] == "select_static"
+    assert "label" not in select_element
+    assert select_element["placeholder"]["content"] == "priority"
 
 
 def test_render_form_card_falls_back_to_link_mode_for_unsupported_inputs():
@@ -227,6 +418,59 @@ def test_dispatch_form_notifications_records_successful_delivery(monkeypatch):
     assert delivery.message_id == "om_123"
 
 
+def test_dispatch_form_notifications_uses_deterministic_compact_message_uuid(monkeypatch):
+    form_id = "123e4567-e89b-12d3-a456-426614174000"
+    recipient_id = "987e6543-e21b-12d3-a456-426614174999"
+    recipient = SimpleNamespace(
+        id=recipient_id,
+        recipient_payload=EmailMemberRecipientPayload(
+            user_id="acc-1",
+            contact_id="contact-1",
+            name="Demo User",
+            email="demo@example.com",
+        ).model_dump_json(),
+        access_token="token-1",
+    )
+    session = MagicMock()
+    session.scalars.return_value = _FakeRecipientQuery([recipient])
+    session.scalar.return_value = None
+    form = SimpleNamespace(
+        id=form_id,
+        tenant_id="tenant-1",
+        form_definition=json.dumps(_build_definition().model_dump(mode="json")),
+    )
+    client = MagicMock()
+    client.im.v1.message.create.return_value = SimpleNamespace(
+        code=0,
+        data=SimpleNamespace(message_id="om_123"),
+    )
+    monkeypatch.setattr(
+        MemberContactService,
+        "resolve_workspace_member_binding",
+        lambda self, _session, tenant_id, account_id: SimpleNamespace(
+            tenant_id=tenant_id,
+            account_id=account_id,
+            contact_id="contact-1",
+            feishu_open_id="ou_123",
+        ),
+    )
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_ID", "cli_test")
+    monkeypatch.setattr("services.human_input_feishu_service.dify_config.FEISHU_APP_SECRET", "secret")
+    service = HumanInputFeishuService(client=client)
+
+    service.dispatch_form_notifications(session=session, form=form, variable_pool=None)
+    service.dispatch_form_notifications(session=session, form=form, variable_pool=None)
+
+    first_request = client.im.v1.message.create.call_args_list[0].args[0]
+    second_request = client.im.v1.message.create.call_args_list[1].args[0]
+    first_uuid = first_request.request_body.uuid
+    second_uuid = second_request.request_body.uuid
+
+    assert len(first_uuid) <= 50
+    assert first_uuid == second_uuid
+    assert first_uuid != f"{form_id}:{recipient_id}"
+
+
 def test_dispatch_form_notifications_renders_form_body_variables_in_card_payload(monkeypatch):
     recipient = SimpleNamespace(
         id="recipient-1",
@@ -277,7 +521,9 @@ def test_dispatch_form_notifications_renders_form_body_variables_in_card_payload
 
     delivery = session.add.call_args.args[0]
     payload = json.loads(delivery.card_payload)
-    assert payload["body"]["elements"][0]["content"] == "Approve Dify"
+    form_element = next(element for element in payload["body"]["elements"] if element["tag"] == "form")
+    markdown_element = next(element for element in form_element["elements"] if element["tag"] == "markdown")
+    assert markdown_element["content"] == "Approve Dify"
 
 
 def test_dispatch_form_notifications_records_feishu_validation_error_details(

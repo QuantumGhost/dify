@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +44,8 @@ if TYPE_CHECKING:
     from services.human_input_service import HumanInputService
 
 logger = logging.getLogger(__name__)
+OUTPUT_PLACEHOLDER_PATTERN = re.compile(r"{{#\$output\.([^#{}]+)#}}")
+TEMPLATE_VARIABLE_PATTERN = re.compile(r"{{#([^#{}]+)#}}")
 
 
 @dataclass(frozen=True)
@@ -270,7 +274,7 @@ class HumanInputFeishuService:
                     .receive_id(binding.feishu_open_id)
                     .msg_type("interactive")
                     .content(json.dumps(render_result.content, ensure_ascii=False))
-                    .uuid(f"{form.id}:{recipient.id}")
+                    .uuid(self._build_message_uuid(form_id=form.id, recipient_id=recipient.id))
                     .build()
                 )
                 .build()
@@ -362,6 +366,11 @@ class HumanInputFeishuService:
     def _build_form_link(token: str) -> str:
         base_url = dify_config.APP_WEB_URL.rstrip("/")
         return f"{base_url}/form/{token}"
+
+    @staticmethod
+    def _build_message_uuid(*, form_id: str, recipient_id: str) -> str:
+        digest = hashlib.blake2s(f"{form_id}:{recipient_id}".encode(), digest_size=16).hexdigest()
+        return f"hitl:{digest}"
 
     @staticmethod
     def _render_form_body_template(body: str, *, variable_pool) -> str:
@@ -463,7 +472,7 @@ class HumanInputFeishuService:
         recipient_id: str,
         definition: FormDefinition,
     ) -> dict[str, Any]:
-        form_elements = [self._build_input_element(form_input) for form_input in definition.inputs]
+        form_elements = self._build_interactive_form_elements(definition)
         form_elements.append(
             self._build_action_buttons(
                 form_id=form_id,
@@ -484,16 +493,110 @@ class HumanInputFeishuService:
             "body": {
                 "elements": [
                     {
-                        "tag": "markdown",
-                        "content": definition.rendered_content or definition.form_content,
-                    },
-                    {
                         "tag": "form",
                         "name": f"form_{form_id}",
                         "elements": form_elements,
                     },
                 ]
             },
+        }
+
+    @classmethod
+    def _build_interactive_form_elements(cls, definition: FormDefinition) -> list[dict[str, Any]]:
+        template = cls._resolve_interactive_form_template(definition)
+        input_elements = {
+            form_input.output_variable_name: cls._build_input_element(form_input) for form_input in definition.inputs
+        }
+        used_inputs: set[str] = set()
+        form_elements: list[dict[str, Any]] = []
+        cursor = 0
+
+        for match in OUTPUT_PLACEHOLDER_PATTERN.finditer(template):
+            output_variable_name = match.group(1)
+            markdown_segment = template[cursor : match.start()]
+            if markdown_segment:
+                form_elements.append(cls._build_markdown_element(markdown_segment))
+
+            cursor = match.end()
+            if output_variable_name in used_inputs or output_variable_name not in input_elements:
+                continue
+
+            form_elements.append(input_elements[output_variable_name])
+            used_inputs.add(output_variable_name)
+
+        tail_segment = template[cursor:]
+        if tail_segment:
+            form_elements.append(cls._build_markdown_element(tail_segment))
+
+        for form_input in definition.inputs:
+            if form_input.output_variable_name in used_inputs:
+                continue
+            form_elements.append(input_elements[form_input.output_variable_name])
+
+        return form_elements
+
+    @staticmethod
+    def _resolve_interactive_form_template(definition: FormDefinition) -> str:
+        template = definition.rendered_content or definition.form_content
+        if OUTPUT_PLACEHOLDER_PATTERN.search(template):
+            return template
+        if definition.form_content and OUTPUT_PLACEHOLDER_PATTERN.search(definition.form_content):
+            projected_template = HumanInputFeishuService._project_output_placeholders(
+                rendered_content=template,
+                form_content=definition.form_content,
+            )
+            # Keep rendered text on projection failure so Feishu cards never leak raw workflow templates.
+            return projected_template or template
+        return template
+
+    @staticmethod
+    def _project_output_placeholders(*, rendered_content: str, form_content: str) -> str | None:
+        pattern_parts: list[str] = []
+        output_placeholders: list[tuple[str, str]] = []
+        matches = list(TEMPLATE_VARIABLE_PATTERN.finditer(form_content))
+        cursor = 0
+
+        for match_index, match in enumerate(matches):
+            left_literal = form_content[cursor : match.start()]
+            pattern_parts.append(re.escape(left_literal))
+            placeholder = match.group(0)
+            if OUTPUT_PLACEHOLDER_PATTERN.fullmatch(placeholder):
+                next_match = matches[match_index + 1] if match_index + 1 < len(matches) else None
+                right_literal = form_content[match.end() : next_match.start()] if next_match is not None else ""
+                is_adjacent_to_previous_placeholder = match_index > 0 and left_literal == ""
+                is_adjacent_to_next_placeholder = next_match is not None and right_literal == ""
+
+                if is_adjacent_to_previous_placeholder or is_adjacent_to_next_placeholder:
+                    pattern_parts.append(".*?")
+                else:
+                    group_name = f"output_{match_index}"
+                    pattern_parts.append(f"(?P<{group_name}>.*?)")
+                    output_placeholders.append((group_name, placeholder))
+            else:
+                pattern_parts.append(".*?")
+            cursor = match.end()
+
+        pattern_parts.append(re.escape(form_content[cursor:]))
+        rendered_match = re.fullmatch("".join(pattern_parts), rendered_content, flags=re.DOTALL)
+        if rendered_match is None:
+            return None
+
+        projected_parts: list[str] = []
+        cursor = 0
+        for group_name, placeholder in output_placeholders:
+            start, end = rendered_match.span(group_name)
+            projected_parts.append(rendered_content[cursor:start])
+            projected_parts.append(placeholder)
+            cursor = end
+
+        projected_parts.append(rendered_content[cursor:])
+        return "".join(projected_parts)
+
+    @staticmethod
+    def _build_markdown_element(content: str) -> dict[str, Any]:
+        return {
+            "tag": "markdown",
+            "content": content,
         }
 
     @staticmethod
@@ -529,7 +632,7 @@ class HumanInputFeishuService:
             return {
                 "tag": "select_static",
                 "name": form_input.output_variable_name,
-                "label": {
+                "placeholder": {
                     "tag": "plain_text",
                     "content": form_input.output_variable_name,
                 },
