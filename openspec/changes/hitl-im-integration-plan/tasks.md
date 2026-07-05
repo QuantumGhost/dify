@@ -22,7 +22,7 @@
 - [ ] 3.3 实现 config resolver：CE deployment global；EE tenant override > deployment global；Cloud Slack ISV / DingTalk tenant self-built；deployment global 可来自 config/secret manager，不强制落 DB。
 - [ ] 3.4 实现 Slack ISV install/uninstall/token refresh 数据路径和接口边界；只有需要生命周期管理的 install/config 才落 DB。
 - [x] 3.5 实现 self-built app credential 配置读取与校验，供飞书 demo 和钉钉企业自建复用。
-- [ ] 3.6 添加 app config tests，覆盖版本分支、缺失 credentials、token refresh/rotation 和 uninstall。
+- [x] 3.6 添加 app config tests，覆盖版本分支、缺失 credentials、token refresh/rotation 和 uninstall。
 
 ## 4. Provider-Neutral IM Core
 

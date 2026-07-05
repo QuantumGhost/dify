@@ -172,16 +172,20 @@ callback 授权不能只看 Account membership，必须确认 callback provider 
 - `scope_type`：`deployment` 或 `tenant`
 - `scope_id`：`deployment` 或具体 `tenant_id`
 - `provider_workspace_id`
-- `credential_source`：例如 deployment config、tenant DB config、ISV install DB row
-- provider credentials / token fields
+- provider credentials / token fields（仅保留运行时真正需要的部分）
 - token refresh state
 - install status
 
 配置来源不要求统一落库：
 
 - deployment global self-built app 可以来自 `dify_config`、env 或 secret manager。
-- tenant override self-built app 后续可来自 DB。
-- ISV install 因为有 install/uninstall/token refresh 生命周期，通常需要 DB 存储。
+- tenant override self-built app 可来自独立的 tenant self-built config 存储。
+- ISV install 因为有 install/uninstall/token refresh 生命周期，通常需要独立的 installation 存储。
+
+这里需要额外固定两个边界，避免 demo 期间为了赶进度把模型揉在一起：
+
+- tenant self-built override 和 lifecycle-managed install 不共用同一张 provider-neutral 配置表；前者持有 self-built credential / callback material，后者持有 install status 与 token lifecycle。这样 future Slack ISV、钉钉企业自建和飞书企业自建不会把 nullable provider-specific 字段继续堆到同一张“万能表”里。
+- resolver 必须显式区分 `found`、`not_found` 和 `store_unavailable`。只有明确的临时兼容场景（例如当前进程没有绑定 Flask app context，或新表尚未迁移完成）才允许 fallback 到 deployment-global config；真实的持久化错误不能静默吞掉再伪装成“没有 tenant override”。
 
 运行时解析：
 

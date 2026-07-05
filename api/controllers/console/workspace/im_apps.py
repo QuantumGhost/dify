@@ -11,7 +11,7 @@ from controllers.console.wraps import (
 )
 from libs.helper import dump_response
 from libs.login import login_required
-from services.human_input_im.app_config_service import IMAppContext, IMProvider, resolve_im_app_context
+from services.human_input_im.app_config_service import IMProvider, resolve_im_app_context
 
 
 class IMAppContextResponse(BaseModel):
@@ -21,6 +21,7 @@ class IMAppContextResponse(BaseModel):
     scope_id: str
     status: str
     token_status: str
+    install_status: str
     event_mode: str | None = None
     app_id_configured: bool
     app_secret_configured: bool
@@ -52,6 +53,7 @@ class WorkspaceIMAppApi(Resource):
                 "scope_id": context.scope_id,
                 "status": context.status.value,
                 "token_status": context.token_status.value,
+                "install_status": context.install_status.value,
                 "event_mode": context.event_mode.value if context.event_mode else None,
                 "app_id_configured": bool(context.app_id),
                 "app_secret_configured": context.app_secret_configured,

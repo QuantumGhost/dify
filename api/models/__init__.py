@@ -37,19 +37,9 @@ from .comment import (
     WorkflowCommentMention,
     WorkflowCommentReply,
 )
+from .contact import Contact, ContactSource, ContactStatus, ContactType
 from .credential_permission import CredentialPermission
 from .credential_permission import CredentialType as CredentialPermissionType
-from .contact import Contact, ContactSource, ContactStatus, ContactType
-from .im_integration import (
-    IMBinding,
-    IMBindingSession,
-    IMBindingSessionStatus,
-    IMBindingStatus,
-    IMInstallMode,
-    IMProvider,
-    IMScopeType,
-)
-from .im_delivery import IMMessageCardStatus, IMMessageCorrelation, IMMessageDeliveryStatus, IMProcessedCallbackEvent
 from .dataset import (
     AppDatasetJoin,
     Dataset,
@@ -77,6 +67,20 @@ from .enums import (
 )
 from .execution_extra_content import ExecutionExtraContent, HumanInputContent
 from .human_input import HumanInputForm, HumanInputFormUploadFile, HumanInputFormUploadToken
+from .im_delivery import IMMessageCardStatus, IMMessageCorrelation, IMMessageDeliveryStatus, IMProcessedCallbackEvent
+from .im_integration import (
+    IMAppInstallation,
+    IMAppTenantConfig,
+    IMBinding,
+    IMBindingSession,
+    IMBindingSessionStatus,
+    IMBindingStatus,
+    IMInstallMode,
+    IMInstallStatus,
+    IMProvider,
+    IMScopeType,
+    IMSelfBuiltTenantConfig,
+)
 from .model import (
     AccountTrialAppRecord,
     ApiRequest,
@@ -200,12 +204,12 @@ __all__ = [
     "BuiltinToolProvider",
     "CeleryTask",
     "CeleryTaskSet",
-    "Conversation",
-    "ConversationVariable",
     "Contact",
     "ContactSource",
     "ContactStatus",
     "ContactType",
+    "Conversation",
+    "ConversationVariable",
     "CreatorUserRole",
     "CredentialPermission",
     "CredentialPermissionType",
@@ -235,17 +239,21 @@ __all__ = [
     "HumanInputForm",
     "HumanInputFormUploadFile",
     "HumanInputFormUploadToken",
+    "IMAppInstallation",
+    "IMAppTenantConfig",
     "IMBinding",
     "IMBindingSession",
     "IMBindingSessionStatus",
     "IMBindingStatus",
     "IMInstallMode",
+    "IMInstallStatus",
     "IMMessageCardStatus",
     "IMMessageCorrelation",
     "IMMessageDeliveryStatus",
     "IMProcessedCallbackEvent",
     "IMProvider",
     "IMScopeType",
+    "IMSelfBuiltTenantConfig",
     "IconType",
     "InstalledApp",
     "InvitationCode",

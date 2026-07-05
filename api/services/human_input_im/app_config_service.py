@@ -1,21 +1,34 @@
 """IM app config resolution for phase-1 HITL foundations.
 
-This module resolves runtime app context from deployment configuration without
-requiring a persisted installation row. The current production slice only ships
-the Feishu self-built demo path, but the internal self-built config seam keeps
-credential loading and provider-specific validation separate so later providers
-can reuse the same resolver shape without parallel code paths.
+The current Feishu demo still defaults to deployment-global self-built config.
+EE tenant overrides are stored separately from future install lifecycle rows so
+runtime resolution does not couple self-built callback secrets to ISV token
+refresh state.
 """
 
 from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
+from flask import current_app, has_app_context
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from configs import dify_config
-from models.im_integration import IMInstallMode, IMProvider, IMScopeType
+from core.helper import encrypter
+from extensions.ext_database import db
+from libs.datetime_utils import naive_utc_now
+from models.im_integration import (
+    IMAppInstallation,
+    IMInstallMode,
+    IMInstallStatus,
+    IMProvider,
+    IMScopeType,
+    IMSelfBuiltTenantConfig,
+)
 
 
 class IMAppConfigStatus(enum.StrEnum):
@@ -28,6 +41,10 @@ class IMAppConfigStatus(enum.StrEnum):
 class IMTokenStatus(enum.StrEnum):
     NOT_APPLICABLE = "not_applicable"
     UNKNOWN = "unknown"
+    VALID = "valid"
+    EXPIRING = "expiring"
+    EXPIRED = "expired"
+    REFRESH_FAILED = "refresh_failed"
 
 
 class IMEventMode(enum.StrEnum):
@@ -48,6 +65,7 @@ class IMAppContext(BaseModel):
     scope_id: str
     status: IMAppConfigStatus
     token_status: IMTokenStatus
+    install_status: IMInstallStatus = IMInstallStatus.NOT_APPLICABLE
     event_mode: IMEventMode | None = None
     app_id: str | None = None
     app_secret: str | None = None
@@ -55,6 +73,8 @@ class IMAppContext(BaseModel):
     verification_token: str | None = None
     encrypt_key: str | None = None
     provider_workspace_id: str | None = None
+    access_token_expires_at: datetime | None = None
+    token_refreshed_at: datetime | None = None
     errors: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(frozen=True)
@@ -83,39 +103,99 @@ class _SelfBuiltProviderValidation:
     errors: list[str]
 
 
-def resolve_im_app_context(*, provider: IMProvider, tenant_id: str) -> IMAppContext:
-    """Resolve the runtime IM app context for one provider and workspace."""
+class _TenantConfigLookupStatus(enum.StrEnum):
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    STORE_UNAVAILABLE = "store_unavailable"
 
-    _ = tenant_id
+
+@dataclass(frozen=True)
+class _TenantSelfBuiltLookupResult:
+    status: _TenantConfigLookupStatus
+    config: IMSelfBuiltTenantConfig | None = None
+    unavailable_reason: str | None = None
+
+
+def resolve_im_app_context(*, provider: IMProvider, tenant_id: str) -> IMAppContext:
+    """Resolve the runtime IM app context for one provider and workspace.
+
+    Resolution order is intentionally edition-aware:
+
+    - CE: deployment-global config only;
+    - EE: tenant override row first, then deployment-global fallback;
+    - Cloud: return the provider/mode scope reserved for later lifecycle-backed
+      implementations instead of pretending every provider is deployment-global.
+    """
+
     runtime_edition = _resolve_runtime_edition()
 
-    if runtime_edition == _IMRuntimeEdition.CLOUD:
-        return _build_unsupported_context(
-            provider=provider,
-            errors=[f"provider {provider.value} is not supported for cloud edition in phase-1 resolver"],
+    if provider == IMProvider.FEISHU:
+        if runtime_edition == _IMRuntimeEdition.EE:
+            tenant_override_context = _resolve_feishu_tenant_override_app_context(tenant_id=tenant_id)
+            if tenant_override_context is not None:
+                return tenant_override_context
+
+        if runtime_edition == _IMRuntimeEdition.CLOUD:
+            return _build_unsupported_context(
+                provider=provider,
+                install_mode=IMInstallMode.SELF_BUILT,
+                scope_type=IMScopeType.DEPLOYMENT,
+                scope_id="deployment",
+                errors=["provider feishu is not supported for cloud edition in phase-1 resolver"],
+            )
+
+        app_config = _resolve_feishu_self_built_app_config()
+        return IMAppContext(
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            status=_resolve_app_config_status(app_config.errors),
+            token_status=IMTokenStatus.NOT_APPLICABLE,
+            install_status=IMInstallStatus.NOT_APPLICABLE,
+            event_mode=app_config.event_mode,
+            app_id=app_config.app_id,
+            app_secret=app_config.app_secret,
+            app_secret_configured=app_config.app_secret_configured,
+            verification_token=app_config.verification_token,
+            encrypt_key=app_config.encrypt_key,
+            errors=app_config.errors,
         )
 
-    if provider != IMProvider.FEISHU:
+    if provider == IMProvider.SLACK:
         return _build_unsupported_context(
             provider=provider,
-            errors=[f"provider {provider.value} is not supported in phase-1 resolver"],
+            install_mode=IMInstallMode.ISV,
+            scope_type=IMScopeType.TENANT,
+            scope_id=tenant_id,
+            errors=[
+                (
+                    "provider slack reserves cloud tenant-scoped isv lifecycle in the phase-1 resolver, "
+                    "but the implementation is not wired yet"
+                )
+            ],
         )
 
-    app_config = _resolve_feishu_self_built_app_config()
-    return IMAppContext(
-        provider=IMProvider.FEISHU,
+    if provider == IMProvider.DINGTALK:
+        return _build_unsupported_context(
+            provider=provider,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.TENANT,
+            scope_id=tenant_id,
+            errors=[
+                (
+                    "provider dingtalk reserves cloud tenant-scoped self-built lifecycle in the phase-1 resolver, "
+                    "but the implementation is not wired yet"
+                )
+            ],
+        )
+
+    return _build_unsupported_context(
+        provider=provider,
         install_mode=IMInstallMode.SELF_BUILT,
         scope_type=IMScopeType.DEPLOYMENT,
         scope_id="deployment",
-        status=_resolve_app_config_status(app_config.errors),
-        token_status=IMTokenStatus.NOT_APPLICABLE,
-        event_mode=app_config.event_mode,
-        app_id=app_config.app_id,
-        app_secret=app_config.app_secret,
-        app_secret_configured=app_config.app_secret_configured,
-        verification_token=app_config.verification_token,
-        encrypt_key=app_config.encrypt_key,
-        errors=app_config.errors,
+        errors=[f"provider {provider.value} is not supported in phase-1 resolver"],
     )
 
 
@@ -127,14 +207,75 @@ def _resolve_runtime_edition() -> _IMRuntimeEdition:
     return _IMRuntimeEdition.CE
 
 
-def _build_unsupported_context(*, provider: IMProvider, errors: list[str]) -> IMAppContext:
+def _build_unsupported_context(
+    *,
+    provider: IMProvider,
+    install_mode: IMInstallMode,
+    scope_type: IMScopeType,
+    scope_id: str,
+    errors: list[str],
+) -> IMAppContext:
     return IMAppContext(
         provider=provider,
-        install_mode=IMInstallMode.SELF_BUILT,
-        scope_type=IMScopeType.DEPLOYMENT,
-        scope_id="deployment",
+        install_mode=install_mode,
+        scope_type=scope_type,
+        scope_id=scope_id,
         status=IMAppConfigStatus.UNSUPPORTED,
         token_status=IMTokenStatus.NOT_APPLICABLE,
+        install_status=IMInstallStatus.NOT_APPLICABLE,
+        errors=errors,
+    )
+
+
+def _resolve_feishu_tenant_override_app_context(*, tenant_id: str) -> IMAppContext | None:
+    lookup = _lookup_tenant_self_built_config(
+        tenant_id=tenant_id,
+        provider=IMProvider.FEISHU,
+    )
+    if lookup.status == _TenantConfigLookupStatus.NOT_FOUND:
+        return None
+    if lookup.status == _TenantConfigLookupStatus.STORE_UNAVAILABLE:
+        return None
+
+    config = lookup.config
+    if config is None:
+        return None
+
+    app_id = _normalize_config_value(config.app_id)
+    app_secret = _decrypt_optional_secret(tenant_id=tenant_id, value=config.encrypted_app_secret)
+    verification_token = _decrypt_optional_secret(tenant_id=tenant_id, value=config.encrypted_verification_token)
+    encrypt_key = _decrypt_optional_secret(tenant_id=tenant_id, value=config.encrypted_encrypt_key)
+    raw_event_mode = _normalize_config_value(config.event_mode)
+    validation = _validate_feishu_self_built_config(raw_event_mode=raw_event_mode)
+    snapshot = _resolve_self_built_app_config(
+        app_id=app_id,
+        app_secret=app_secret,
+        verification_token=verification_token,
+        encrypt_key=encrypt_key,
+        fields=(
+            _SelfBuiltCredentialField(config_key="tenant app_id", value=app_id),
+            _SelfBuiltCredentialField(config_key="tenant app_secret", value=app_secret),
+            _SelfBuiltCredentialField(config_key="tenant event_mode", value=raw_event_mode),
+        ),
+        validation=validation,
+    )
+    errors = list(snapshot.errors)
+
+    return IMAppContext(
+        provider=IMProvider.FEISHU,
+        install_mode=IMInstallMode.SELF_BUILT,
+        scope_type=IMScopeType.TENANT,
+        scope_id=tenant_id,
+        status=_resolve_app_config_status(errors),
+        token_status=IMTokenStatus.NOT_APPLICABLE,
+        install_status=IMInstallStatus.NOT_APPLICABLE,
+        event_mode=snapshot.event_mode,
+        app_id=snapshot.app_id,
+        app_secret=snapshot.app_secret,
+        app_secret_configured=snapshot.app_secret_configured,
+        verification_token=snapshot.verification_token,
+        encrypt_key=snapshot.encrypt_key,
+        provider_workspace_id=config.provider_workspace_id,
         errors=errors,
     )
 
@@ -186,6 +327,46 @@ def _resolve_self_built_app_config(
     )
 
 
+def _lookup_tenant_self_built_config(
+    *,
+    tenant_id: str,
+    provider: IMProvider,
+) -> _TenantSelfBuiltLookupResult:
+    if not has_app_context():
+        return _TenantSelfBuiltLookupResult(
+            status=_TenantConfigLookupStatus.STORE_UNAVAILABLE,
+            unavailable_reason="flask_app_context_unavailable",
+        )
+
+    app = current_app._get_current_object()
+    if app not in db._app_engines:
+        return _TenantSelfBuiltLookupResult(
+            status=_TenantConfigLookupStatus.STORE_UNAVAILABLE,
+            unavailable_reason="sqlalchemy_extension_unbound",
+        )
+
+    with Session(db.engine, expire_on_commit=False) as session:
+        stmt = (
+            select(IMSelfBuiltTenantConfig)
+            .where(
+                IMSelfBuiltTenantConfig.tenant_id == tenant_id,
+                IMSelfBuiltTenantConfig.provider == provider,
+            )
+            .limit(1)
+        )
+        config = session.execute(stmt).scalar_one_or_none()
+
+    if config is None:
+        return _TenantSelfBuiltLookupResult(status=_TenantConfigLookupStatus.NOT_FOUND)
+    return _TenantSelfBuiltLookupResult(status=_TenantConfigLookupStatus.FOUND, config=config)
+
+
+def _decrypt_optional_secret(*, tenant_id: str, value: str | None) -> str | None:
+    if value is None:
+        return None
+    return _normalize_config_value(encrypter.decrypt_token(tenant_id, value))
+
+
 def _validate_feishu_self_built_config(*, raw_event_mode: str | None) -> _SelfBuiltProviderValidation:
     if raw_event_mode is None:
         return _SelfBuiltProviderValidation(event_mode=None, errors=[])
@@ -220,6 +401,26 @@ def _normalize_config_value(value: str | None) -> str | None:
         return None
 
     return normalized
+
+
+def resolve_token_status_for_install(config: IMAppInstallation) -> IMTokenStatus:
+    """Expose lifecycle token state for install-backed providers without sending secrets."""
+
+    if config.install_mode == IMInstallMode.SELF_BUILT:
+        return IMTokenStatus.NOT_APPLICABLE
+    if config.install_status != IMInstallStatus.INSTALLED:
+        return IMTokenStatus.UNKNOWN
+    if config.token_refresh_error:
+        return IMTokenStatus.REFRESH_FAILED
+    if not config.encrypted_access_token or config.access_token_expires_at is None:
+        return IMTokenStatus.UNKNOWN
+
+    now = naive_utc_now()
+    if config.access_token_expires_at <= now:
+        return IMTokenStatus.EXPIRED
+    if config.access_token_expires_at <= now + timedelta(minutes=10):
+        return IMTokenStatus.EXPIRING
+    return IMTokenStatus.VALID
 
 
 def _resolve_app_config_status(errors: list[str]) -> IMAppConfigStatus:

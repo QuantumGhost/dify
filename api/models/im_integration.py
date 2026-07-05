@@ -1,4 +1,10 @@
-"""IM integration persistence models for phase-1 HITL foundations."""
+"""IM integration persistence models for phase-1 HITL foundations.
+
+This module keeps account-facing bindings separate from app-config persistence.
+Tenant self-built overrides and future install lifecycle rows intentionally live
+in different tables so provider-neutral ownership is not mixed with
+provider-specific callback secrets or refresh-token state.
+"""
 
 from __future__ import annotations
 
@@ -8,14 +14,16 @@ from datetime import datetime
 
 import sqlalchemy as sa
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapper, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
 from .base import TypeBase, gen_uuidv7_string
-from .types import EnumText, StringUUID
+from .types import EnumText, LongText, StringUUID
 
 
 class IMProvider(enum.StrEnum):
     FEISHU = "feishu"
+    SLACK = "slack"
+    DINGTALK = "dingtalk"
 
 
 class IMInstallMode(enum.StrEnum):
@@ -26,6 +34,13 @@ class IMInstallMode(enum.StrEnum):
 class IMScopeType(enum.StrEnum):
     DEPLOYMENT = "deployment"
     TENANT = "tenant"
+
+
+class IMInstallStatus(enum.StrEnum):
+    NOT_APPLICABLE = "not_applicable"
+    PENDING = "pending"
+    INSTALLED = "installed"
+    UNINSTALLED = "uninstalled"
 
 
 class IMBindingStatus(enum.StrEnum):
@@ -42,6 +57,124 @@ class IMBindingSessionStatus(enum.StrEnum):
 
 def _generate_binding_session_token() -> str:
     return "imbs_" + secrets.token_urlsafe(18)
+
+
+class IMSelfBuiltTenantConfig(TypeBase):
+    """Tenant-scoped self-built override credentials.
+
+    This row only owns self-built transport credentials and callback material.
+    It does not track install / uninstall / token refresh lifecycle.
+    """
+
+    __tablename__ = "im_self_built_tenant_configs"
+    __table_args__ = (
+        sa.PrimaryKeyConstraint("id", name="im_self_built_tenant_configs_pkey"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "provider",
+            name="im_self_built_tenant_configs_tenant_provider_key",
+        ),
+        sa.Index(
+            "im_self_built_tenant_configs_tenant_provider_idx",
+            "tenant_id",
+            "provider",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        StringUUID,
+        insert_default=gen_uuidv7_string,
+        default_factory=gen_uuidv7_string,
+        init=False,
+    )
+    tenant_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
+    provider: Mapped[IMProvider] = mapped_column(EnumText(IMProvider, length=20), nullable=False)
+    provider_workspace_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    app_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    encrypted_app_secret: Mapped[str | None] = mapped_column(LongText, nullable=True, default=None)
+    encrypted_verification_token: Mapped[str | None] = mapped_column(LongText, nullable=True, default=None)
+    encrypted_encrypt_key: Mapped[str | None] = mapped_column(LongText, nullable=True, default=None)
+    event_mode: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        nullable=False,
+        init=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        nullable=False,
+        init=False,
+        onupdate=func.current_timestamp(),
+    )
+
+
+class IMAppInstallation(TypeBase):
+    """Tenant-scoped install lifecycle row for providers that rotate tokens.
+
+    Lifecycle-managed installs own token refresh state and install status only.
+    Self-built callback secrets stay in ``IMSelfBuiltTenantConfig`` instead of
+    being mixed into this generic install row.
+    """
+
+    __tablename__ = "im_app_installations"
+    __table_args__ = (
+        sa.PrimaryKeyConstraint("id", name="im_app_installations_pkey"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "provider",
+            "install_mode",
+            name="im_app_installations_tenant_provider_install_mode_key",
+        ),
+        sa.Index(
+            "im_app_installations_tenant_provider_status_idx",
+            "tenant_id",
+            "provider",
+            "install_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        StringUUID,
+        insert_default=gen_uuidv7_string,
+        default_factory=gen_uuidv7_string,
+        init=False,
+    )
+    tenant_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
+    provider: Mapped[IMProvider] = mapped_column(EnumText(IMProvider, length=20), nullable=False)
+    install_mode: Mapped[IMInstallMode] = mapped_column(EnumText(IMInstallMode, length=20), nullable=False)
+    install_status: Mapped[IMInstallStatus] = mapped_column(
+        EnumText(IMInstallStatus, length=20),
+        nullable=False,
+        server_default=sa.text("'pending'"),
+        default=IMInstallStatus.PENDING,
+    )
+    provider_workspace_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    encrypted_access_token: Mapped[str | None] = mapped_column(LongText, nullable=True, default=None)
+    encrypted_refresh_token: Mapped[str | None] = mapped_column(LongText, nullable=True, default=None)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    token_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    token_refresh_error: Mapped[str | None] = mapped_column(String(1024), nullable=True, default=None)
+    installed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    uninstalled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        nullable=False,
+        init=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        nullable=False,
+        init=False,
+        onupdate=func.current_timestamp(),
+    )
+
+
+# Backward-compatible import alias for the pre-refactor tenant override name.
+IMAppTenantConfig = IMSelfBuiltTenantConfig
 
 
 class IMBinding(TypeBase):
