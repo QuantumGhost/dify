@@ -95,6 +95,16 @@ def complete_binding_session(
         binding_session.status = IMBindingSessionStatus.EXPIRED
         raise IMBindingValidationError("binding session expired")
 
+    identity_binding = session.scalar(
+        select(IMBinding).where(
+            IMBinding.provider == binding_session.provider,
+            IMBinding.install_mode == binding_session.install_mode,
+            IMBinding.scope_type == binding_session.scope_type,
+            IMBinding.scope_id == binding_session.scope_id,
+            IMBinding.provider_workspace_id == provider_workspace_id,
+            IMBinding.provider_user_id == provider_user_id,
+        )
+    )
     existing_binding = _get_active_binding_model(session=session, account_id=binding_session.account_id)
     if existing_binding is not None and (
         existing_binding.provider != binding_session.provider
@@ -106,25 +116,32 @@ def complete_binding_session(
     ):
         raise IMBindingValidationError("phase-1 supports at most one active IM binding per account")
 
-    if existing_binding is None:
-        existing_binding = IMBinding(
-            account_id=binding_session.account_id,
-            provider=binding_session.provider,
-            install_mode=binding_session.install_mode,
-            scope_type=binding_session.scope_type,
-            scope_id=binding_session.scope_id,
-            provider_workspace_id=provider_workspace_id,
-            provider_user_id=provider_user_id,
-            provider_union_id=provider_union_id,
-            provider_user_display_name=provider_user_display_name,
-            provider_user_avatar_url=provider_user_avatar_url,
-            status=IMBindingStatus.ACTIVE,
-        )
-        session.add(existing_binding)
+    if identity_binding is not None:
+        existing_binding = identity_binding
     else:
-        existing_binding.provider_union_id = provider_union_id
-        existing_binding.provider_user_display_name = provider_user_display_name
-        existing_binding.provider_user_avatar_url = provider_user_avatar_url
+        if existing_binding is None:
+            existing_binding = IMBinding(
+                account_id=binding_session.account_id,
+                provider=binding_session.provider,
+                install_mode=binding_session.install_mode,
+                scope_type=binding_session.scope_type,
+                scope_id=binding_session.scope_id,
+                provider_workspace_id=provider_workspace_id,
+                provider_user_id=provider_user_id,
+                provider_union_id=provider_union_id,
+                provider_user_display_name=provider_user_display_name,
+                provider_user_avatar_url=provider_user_avatar_url,
+                status=IMBindingStatus.ACTIVE,
+            )
+            session.add(existing_binding)
+
+    existing_binding.account_id = binding_session.account_id
+    existing_binding.status = IMBindingStatus.ACTIVE
+    existing_binding.provider_workspace_id = provider_workspace_id
+    existing_binding.provider_user_id = provider_user_id
+    existing_binding.provider_union_id = provider_union_id
+    existing_binding.provider_user_display_name = provider_user_display_name
+    existing_binding.provider_user_avatar_url = provider_user_avatar_url
 
     binding_session.status = IMBindingSessionStatus.CONSUMED
     session.flush([binding_session, existing_binding])

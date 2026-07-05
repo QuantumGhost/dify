@@ -40,8 +40,9 @@ class HumanInputIMCallbackService:
         *,
         session: Session,
         event: IMBindingCompletionEvent,
-    ) -> IMBindingRecord:
-        self._orchestration_service.get_provider_or_raise(event.provider)
+    ) -> IMBindingRecord | None:
+        if not self.record_event_once(session=session, provider=event.provider, event_id=event.event_id):
+            return None
         return self._orchestration_service.complete_binding_session(
             session=session,
             token=event.binding_session_token,

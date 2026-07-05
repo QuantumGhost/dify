@@ -45,3 +45,16 @@ def test_handle_im_binding_completion_success():
 def test_handle_im_binding_completion_rejects_invalid_provider():
     with pytest.raises(BadRequest):
         module.handle_im_binding_completion("unknown")
+
+
+def test_handle_im_binding_completion_acknowledges_duplicate_event():
+    with (
+        patch("controllers.trigger.human_input_im.HumanInputIMCallbackService.complete_binding", return_value=None),
+        patch("controllers.trigger.human_input_im.db.session.commit") as commit_mock,
+    ):
+        response, status = module.handle_im_binding_completion("feishu")
+
+    assert status == 200
+    assert response["result"] == "accepted"
+    assert response["event_id"] == "event-1"
+    commit_mock.assert_called_once()

@@ -56,4 +56,6 @@ def handle_im_binding_completion(provider: str):
         raise BadRequest(str(exc))
 
     db.session.commit()
+    if binding is None:
+        return jsonify(service.acknowledge_event(event_id=event.event_id)), 200
     return jsonify({"result": "accepted", "binding_id": binding.id}), 202

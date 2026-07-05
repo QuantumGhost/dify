@@ -46,6 +46,11 @@ def test_upgrade_adds_im_binding_tables() -> None:
 
     binding_indexes = {index["name"]: tuple(index["column_names"]) for index in inspector.get_indexes("im_bindings")}
     assert binding_indexes["im_bindings_account_id_status_idx"] == ("account_id", "status")
+    constraints = {
+        constraint["name"]: tuple(constraint["column_names"])
+        for constraint in inspector.get_unique_constraints("im_bindings")
+    }
+    assert constraints["im_bindings_active_account_id_key"] == ("active_account_id",)
 
     bindings = sa.Table("im_bindings", sa.MetaData(), autoload_with=engine)
     with engine.begin() as connection:
@@ -59,6 +64,7 @@ def test_upgrade_adds_im_binding_tables() -> None:
                 scope_id="deployment",
                 provider_workspace_id="ws-1",
                 provider_user_id="user-1",
+                active_account_id="account-1",
                 provider_union_id=None,
                 provider_user_display_name="User 1",
                 provider_user_avatar_url=None,
@@ -76,6 +82,7 @@ def test_upgrade_adds_im_binding_tables() -> None:
                     scope_id="deployment",
                     provider_workspace_id="ws-1",
                     provider_user_id="user-1",
+                    active_account_id="account-2",
                     provider_union_id=None,
                     provider_user_display_name="User 1 duplicate",
                     provider_user_avatar_url=None,
@@ -86,6 +93,28 @@ def test_upgrade_adds_im_binding_tables() -> None:
             pass
         else:
             raise AssertionError("expected duplicate provider identity to violate unique constraint")
+        try:
+            connection.execute(
+                bindings.insert().values(
+                    id="binding-3",
+                    account_id="account-1",
+                    provider="feishu",
+                    install_mode="self_built",
+                    scope_type="deployment",
+                    scope_id="deployment",
+                    provider_workspace_id="ws-2",
+                    provider_user_id="user-2",
+                    active_account_id="account-1",
+                    provider_union_id=None,
+                    provider_user_display_name="User 2",
+                    provider_user_avatar_url=None,
+                    status="active",
+                )
+            )
+        except sa.exc.IntegrityError:
+            pass
+        else:
+            raise AssertionError("expected active account uniqueness to reject a second active binding")
 
     session_indexes = {
         index["name"]: tuple(index["column_names"])

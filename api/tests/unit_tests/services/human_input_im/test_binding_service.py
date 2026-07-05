@@ -184,3 +184,62 @@ def test_complete_binding_session_creates_active_binding_and_consumes_session() 
     assert binding.account_id == "account-1"
     assert binding.status == IMBindingStatus.ACTIVE
     assert binding.provider_user_display_name == "User 1"
+
+
+def test_complete_binding_session_reuses_revoked_binding_identity() -> None:
+    engine = sa.create_engine("sqlite:///:memory:")
+    im_binding_session_table = __import__("models.im_integration", fromlist=["IMBindingSession"]).IMBindingSession.__table__
+    TypeBase.metadata.create_all(engine, tables=[IMBinding.__table__, im_binding_session_table])
+
+    context = IMAppContext(
+        provider=IMProvider.FEISHU,
+        install_mode=IMInstallMode.SELF_BUILT,
+        scope_type=IMScopeType.DEPLOYMENT,
+        scope_id="deployment",
+        status=IMAppConfigStatus.CONFIGURED,
+        token_status=IMTokenStatus.NOT_APPLICABLE,
+        event_mode=IMEventMode.LONG_CONNECTION,
+        app_id="cli_a",
+        app_secret_configured=True,
+        errors=[],
+    )
+
+    with Session(engine) as session:
+        revoked_binding = IMBinding(
+            account_id="account-1",
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+            active_account_id=None,
+            provider_union_id=None,
+            provider_user_display_name="Old User",
+            provider_user_avatar_url=None,
+            status=IMBindingStatus.REVOKED,
+        )
+        session.add(revoked_binding)
+        session.commit()
+        revoked_binding_id = revoked_binding.id
+
+        binding_session = create_binding_session(
+            session=session,
+            account_id="account-1",
+            app_context=context,
+            expires_in=timedelta(minutes=5),
+        )
+        binding = complete_binding_session(
+            session=session,
+            token=binding_session.token,
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+            provider_union_id="union-1",
+            provider_user_display_name="New User",
+            provider_user_avatar_url=None,
+        )
+        session.commit()
+
+    assert binding.id == revoked_binding_id
+    assert binding.status == IMBindingStatus.ACTIVE
+    assert binding.provider_user_display_name == "New User"

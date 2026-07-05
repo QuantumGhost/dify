@@ -20,16 +20,16 @@ def test_callback_service_delegates_binding_completion() -> None:
         provider_user_display_name="User 1",
         provider_user_avatar_url=None,
     )
-    session = object()
+    session = MagicMock()
     binding = object()
     orchestration_service = MagicMock()
     orchestration_service.complete_binding_session.return_value = binding
 
     service = HumanInputIMCallbackService(orchestration_service=orchestration_service)
+    service.record_event_once = lambda **_: True
     result = service.complete_binding(session=session, event=event)
 
     assert result is binding
-    orchestration_service.get_provider_or_raise.assert_called_once_with(IMProvider.FEISHU)
     orchestration_service.complete_binding_session.assert_called_once_with(
         session=session,
         token="imbs_token",
@@ -62,3 +62,20 @@ def test_callback_service_records_duplicate_event_ids_as_already_processed() -> 
 
     assert first_result is True
     assert second_result is False
+
+
+def test_callback_service_returns_none_for_duplicate_binding_event() -> None:
+    event = IMBindingCompletionEvent(
+        provider=IMProvider.FEISHU,
+        event_id="event-1",
+        binding_session_token="imbs_token",
+        provider_workspace_id="ws-1",
+        provider_user_id="user-1",
+    )
+    session = object()
+    service = HumanInputIMCallbackService(orchestration_service=MagicMock())
+
+    service.record_event_once = lambda **_: False
+    result = service.complete_binding(session=session, event=event)
+
+    assert result is None
