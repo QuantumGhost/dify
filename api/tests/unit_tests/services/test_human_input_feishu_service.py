@@ -1,6 +1,9 @@
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTrigger  # type: ignore[import-untyped]
 
 from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
@@ -11,7 +14,6 @@ from core.workflow.nodes.human_input.entities import (
     UserActionConfig,
 )
 from core.workflow.nodes.human_input.enums import FormInputType, ValueSourceType
-from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTrigger
 from models.human_input import EmailMemberRecipientPayload
 from models.human_input_feishu import HumanInputFeishuDeliveryStatus
 from services.human_input_feishu_service import HumanInputFeishuService
@@ -45,7 +47,7 @@ class _FakeRecipientQuery:
 
 
 def _build_definition(*, with_file: bool = False) -> FormDefinition:
-    inputs = [
+    inputs: list[ParagraphInputConfig | SelectInputConfig | FileInputConfig] = [
         ParagraphInputConfig(type=FormInputType.PARAGRAPH, output_variable_name="reason"),
         SelectInputConfig(
             type=FormInputType.SELECT,
@@ -59,7 +61,7 @@ def _build_definition(*, with_file: bool = False) -> FormDefinition:
     return FormDefinition(
         form_content="Please approve",
         rendered_content="Please approve",
-        expiration_time="2026-07-05T00:00:00Z",
+        expiration_time=datetime(2026, 7, 5, tzinfo=UTC),
         inputs=inputs,
         user_actions=[
             UserActionConfig(id="approve", title="Approve"),
@@ -118,7 +120,10 @@ def test_handle_card_action_submits_form_and_returns_result_card():
     repository.get_by_token.side_effect = [initial_record, submitted_record]
     human_input_service = MagicMock()
     human_input_service._form_repository = repository
-    session_factory = lambda: _FakeSession(delivery, recipient)
+
+    def session_factory() -> _FakeSession:
+        return _FakeSession(delivery, recipient)
+
     service = HumanInputFeishuService(session_factory=session_factory, human_input_service=human_input_service)
     payload = P2CardActionTrigger(
         {
@@ -149,7 +154,10 @@ def test_handle_card_action_rejects_identity_mismatch():
     repository = MagicMock()
     human_input_service = MagicMock()
     human_input_service._form_repository = repository
-    session_factory = lambda: _FakeSession(None, None)
+
+    def session_factory() -> _FakeSession:
+        return _FakeSession(None, None)
+
     service = HumanInputFeishuService(session_factory=session_factory, human_input_service=human_input_service)
     payload = P2CardActionTrigger(
         {

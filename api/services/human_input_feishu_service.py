@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import lark_oapi as lark
-from lark_oapi.api.authen.v1.model.get_user_info_request import GetUserInfoRequest
-from lark_oapi.api.im.v1.model.create_message_request import CreateMessageRequest
-from lark_oapi.api.im.v1.model.create_message_request_body import CreateMessageRequestBody
-from lark_oapi.core.model import RequestOption
-from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTrigger, P2CardActionTriggerResponse
-from sqlalchemy import and_, select
+import lark_oapi as lark  # type: ignore[import-untyped]
+from lark_oapi.api.authen.v1.model.get_user_info_request import GetUserInfoRequest  # type: ignore[import-untyped]
+from lark_oapi.api.im.v1.model.create_message_request import CreateMessageRequest  # type: ignore[import-untyped]
+from lark_oapi.api.im.v1.model.create_message_request_body import (  # type: ignore[import-untyped]
+    CreateMessageRequestBody,
+)
+from lark_oapi.core.model import RequestOption  # type: ignore[import-untyped]
+from lark_oapi.event.callback.model.p2_card_action_trigger import (  # type: ignore[import-untyped]
+    P2CardActionTrigger,
+    P2CardActionTriggerResponse,
+)
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from configs import dify_config
@@ -32,6 +36,9 @@ from models.human_input_feishu import (
     HumanInputFeishuDeliveryStatus,
 )
 from services.member_contact_service import MemberContactService
+
+if TYPE_CHECKING:
+    from services.human_input_service import HumanInputService
 
 
 @dataclass(frozen=True)
@@ -103,7 +110,11 @@ class HumanInputFeishuService:
             return self._toast_response("error", "Invalid card payload.")
 
         operator_open_id = event.operator.open_id or ""
-        with self._session_factory() as session:
+        session_factory = self._session_factory
+        if session_factory is None:
+            raise RuntimeError("session_factory is required for callback handling")
+
+        with session_factory() as session:
             from services.human_input_service import FormExpiredError, FormSubmittedError, InvalidFormDataError
 
             delivery = session.scalar(
@@ -151,7 +162,10 @@ class HumanInputFeishuService:
 
     def get_user_info(self, user_access_token: str):
         client = self._require_client()
-        response = client.authen.v1.user_info.get(
+        authen_api = client.authen
+        assert authen_api is not None
+
+        response = authen_api.v1.user_info.get(
             GetUserInfoRequest.builder().build(),
             RequestOption.builder().user_access_token(user_access_token).build(),
         )
@@ -229,7 +243,11 @@ class HumanInputFeishuService:
         delivery.failure_reason = None
 
         try:
-            response = self._require_client().im.v1.message.create(
+            client = self._require_client()
+            im_api = client.im
+            assert im_api is not None
+
+            response = im_api.v1.message.create(
                 CreateMessageRequest.builder()
                 .receive_id_type("open_id")
                 .request_body(
@@ -333,7 +351,13 @@ class HumanInputFeishuService:
         definition: FormDefinition,
     ) -> dict[str, Any]:
         form_elements = [self._build_input_element(form_input) for form_input in definition.inputs]
-        form_elements.append(self._build_action_buttons(form_id=form_id, recipient_id=recipient_id, definition=definition))
+        form_elements.append(
+            self._build_action_buttons(
+                form_id=form_id,
+                recipient_id=recipient_id,
+                definition=definition,
+            )
+        )
 
         return {
             "schema": "2.0",

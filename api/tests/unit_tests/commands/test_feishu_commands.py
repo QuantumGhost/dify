@@ -1,6 +1,7 @@
-from click.testing import CliRunner
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+from click.testing import CliRunner
 
 from services.member_contact_service import MemberContactImportResult
 
@@ -24,8 +25,8 @@ class FakeSessionContext:
 
 
 def test_import_member_contacts_command(monkeypatch):
-    from commands.feishu import import_member_contacts
     from commands import feishu as feishu_module
+    from commands.feishu import import_member_contacts
 
     session = object()
     session_context = FakeSessionContext(session)
@@ -52,8 +53,8 @@ def test_import_member_contacts_command(monkeypatch):
 
 
 def test_run_feishu_hitl_listener_command(monkeypatch):
-    from commands.feishu import run_feishu_hitl_listener
     from commands import feishu as feishu_module
+    from commands.feishu import run_feishu_hitl_listener
 
     handler_builder = MagicMock()
     handler_builder.register_p2_card_action_trigger.return_value = handler_builder

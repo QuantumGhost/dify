@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
@@ -17,6 +17,32 @@ class MemberContactImportResult:
 
 
 class MemberContactService:
+    @staticmethod
+    def _row_to_binding(row: Sequence[str | None], *, tenant_id: str) -> MemberContactBinding:
+        if len(row) == 5:
+            account_id, name, email, contact_id, open_id = row
+            return MemberContactBinding(
+                contact_id=contact_id,
+                tenant_id=tenant_id,
+                account_id=account_id or "",
+                name=name or "",
+                email=email or "",
+                feishu_open_id=open_id,
+            )
+
+        if len(row) == 2:
+            account_id, email = row
+            return MemberContactBinding(
+                contact_id=None,
+                tenant_id=tenant_id,
+                account_id=account_id or "",
+                name="",
+                email=email or "",
+                feishu_open_id=None,
+            )
+
+        raise ValueError(f"unexpected workspace member binding row shape: {len(row)}")
+
     def import_workspace_members(self, session: Session, tenant_id: str) -> MemberContactImportResult:
         member_rows = session.execute(
             select(Account.id, Account.name, Account.email)
@@ -96,17 +122,7 @@ class MemberContactService:
             stmt = stmt.where(Account.id.in_(unique_account_ids))
 
         rows = session.execute(stmt).all()
-        return [
-            MemberContactBinding(
-                contact_id=contact_id,
-                tenant_id=tenant_id,
-                account_id=account_id,
-                name=name or "",
-                email=email or "",
-                feishu_open_id=open_id,
-            )
-            for account_id, name, email, contact_id, open_id in rows
-        ]
+        return [self._row_to_binding(row, tenant_id=tenant_id) for row in rows]
 
     def resolve_workspace_member_binding(
         self,

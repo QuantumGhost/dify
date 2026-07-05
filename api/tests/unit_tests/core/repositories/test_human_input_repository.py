@@ -319,9 +319,9 @@ def test_query_workspace_members_by_ids_maps_rows() -> None:
     session = _FakeSession(execute_rows=[("u1", "a@example.com"), ("u2", "b@example.com")])
     repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
     rows = repo._query_workspace_members_by_ids(session=session, restrict_to_user_ids=["u1", "u2"])
-    assert rows == [
-        _WorkspaceMemberInfo(user_id="u1", email="a@example.com"),
-        _WorkspaceMemberInfo(user_id="u2", email="b@example.com"),
+    assert [(row.account_id, row.email, row.contact_id, row.feishu_open_id) for row in rows] == [
+        ("u1", "a@example.com", None, None),
+        ("u2", "b@example.com", None, None),
     ]
 
 
@@ -329,7 +329,9 @@ def test_query_all_workspace_members_maps_rows() -> None:
     session = _FakeSession(execute_rows=[("u1", "a@example.com")])
     repo = HumanInputFormRepositoryImpl(tenant_id="tenant")
     rows = repo._query_all_workspace_members(session=session)
-    assert rows == [_WorkspaceMemberInfo(user_id="u1", email="a@example.com")]
+    assert [(row.account_id, row.email, row.contact_id, row.feishu_open_id) for row in rows] == [
+        ("u1", "a@example.com", None, None),
+    ]
 
 
 def test_repository_init_sets_tenant_id() -> None:

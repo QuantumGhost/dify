@@ -74,6 +74,39 @@ fi
 run_pyrefly "${pyrefly_command[@]}" || status=$?
 
 if (( ${#target_paths[@]} == 0 )); then
+  test_container_targets=()
+  while IFS= read -r target; do
+    [[ -z "$target" ]] && continue
+    test_container_targets+=("$target")
+  done < <(
+    python3 - <<'PY'
+from pathlib import Path
+
+root = Path("api/tests/test_containers_integration_tests")
+config = root / "pyrefly.toml"
+excludes: list[str] = []
+inside = False
+for line in config.read_text().splitlines():
+    stripped = line.strip()
+    if stripped.startswith("project-excludes = ["):
+        inside = True
+        continue
+    if inside and stripped == "]":
+        break
+    if inside:
+        exclude = stripped.rstrip(",").strip().strip('"')
+        if exclude:
+            excludes.append(exclude)
+
+exclude_set = set(excludes)
+for path in sorted(root.rglob("*.py")):
+    relative = path.relative_to(root).as_posix()
+    if relative in exclude_set:
+        continue
+    print(path.relative_to(Path("api")).as_posix())
+PY
+  )
+
   test_containers_args=(
     "--summary=none"
     "--use-ignore-files=false"
@@ -82,10 +115,13 @@ if (( ${#target_paths[@]} == 0 )); then
   if [[ "${PYREFLY_OUTPUT_FORMAT:-}" == "github" ]]; then
     test_containers_args+=("--output-format=github")
   fi
-  run_pyrefly \
-    uv run --directory api --dev pyrefly check \
-    "${test_containers_args[@]}" \
-    || status=$?
+  if (( ${#test_container_targets[@]} > 0 )); then
+    run_pyrefly \
+      uv run --directory api --dev pyrefly check \
+      "${test_containers_args[@]}" \
+      "${test_container_targets[@]}" \
+      || status=$?
+  fi
 fi
 
 exit "$status"

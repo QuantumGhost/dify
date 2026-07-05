@@ -27,9 +27,9 @@ from models import Account, AccountStatus
 from services.account_service import AccountService, RegisterService, TenantService
 from services.billing_service import BillingService
 from services.errors.account import AccountNotFoundError, AccountRegisterError
-from services.feishu_binding_state_service import get_feishu_binding_state_service
 from services.errors.workspace import WorkSpaceNotAllowedCreateError, WorkSpaceNotFoundError
 from services.feature_service import FeatureService
+from services.feishu_binding_state_service import get_feishu_binding_state_service
 
 from .. import console_ns
 from ..wraps import account_initialization_required, setup_required, with_current_user

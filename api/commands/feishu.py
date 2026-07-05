@@ -1,10 +1,10 @@
 import click
-import lark_oapi as lark
+import lark_oapi as lark  # type: ignore[import-untyped]
 from sqlalchemy.orm import sessionmaker
 
 from configs import dify_config
-from extensions.ext_database import db
 from core.db.session_factory import session_factory
+from extensions.ext_database import db
 from services.human_input_feishu_service import HumanInputFeishuService
 from services.member_contact_service import MemberContactService
 

@@ -45,6 +45,35 @@ class _DeliveryAndRecipients:
     recipients: Sequence[HumanInputFormRecipient]
 
 
+@dataclasses.dataclass(frozen=True)
+class _WorkspaceMemberInfo:
+    """Backward-compatible member projection kept for existing unit tests.
+
+    The runtime path now uses ``MemberContactBinding`` so recipients can carry
+    contact metadata, but older tests still exercise helper methods by
+    constructing the previous ``_WorkspaceMemberInfo`` shape directly.
+    """
+
+    user_id: str
+    email: str
+
+    @property
+    def account_id(self) -> str:
+        return self.user_id
+
+    @property
+    def contact_id(self) -> str | None:
+        return None
+
+    @property
+    def name(self) -> str:
+        return ""
+
+    @property
+    def feishu_open_id(self) -> str | None:
+        return None
+
+
 class FormNotFoundError(Exception):
     pass
 
@@ -619,12 +648,12 @@ class HumanInputFormSubmissionRepository:
             form_model.completed_by_recipient_id = recipient_id
 
             if recipient_id is not None:
-                feishu_delivery = session.scalar(
+                feishu_delivery = session.scalars(
                     select(HumanInputFeishuDelivery).where(
                         HumanInputFeishuDelivery.form_id == form_id,
                         HumanInputFeishuDelivery.recipient_id == recipient_id,
                     )
-                )
+                ).first()
                 if feishu_delivery is not None:
                     feishu_delivery.status = HumanInputFeishuDeliveryStatus.COMPLETED
                     feishu_delivery.completed_at = form_model.submitted_at
