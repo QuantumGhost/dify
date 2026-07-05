@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from lark_oapi.api.im.v1 import CreateMessageResponse, PatchMessageResponse
 from lark_oapi.core.const import (
     LARK_REQUEST_NONCE,
     LARK_REQUEST_SIGNATURE,
@@ -61,6 +62,9 @@ class _FakeResponse:
         return self._troubleshooter
 
 
+_TransportResponse = _FakeResponse | CreateMessageResponse | PatchMessageResponse
+
+
 class _FakeClientFactory:
     def __init__(self, client: object | None = None) -> None:
         self.client = client or object()
@@ -75,15 +79,15 @@ class _FakeTransport:
     def __init__(
         self,
         *,
-        create_response: _FakeResponse | Exception | None = None,
-        patch_response: _FakeResponse | Exception | None = None,
+        create_response: _TransportResponse | Exception | None = None,
+        patch_response: _TransportResponse | Exception | None = None,
     ) -> None:
         self.create_response = create_response
         self.patch_response = patch_response
         self.create_calls: list[tuple[object, Any]] = []
         self.patch_calls: list[tuple[object, Any]] = []
 
-    def create_message(self, client: object, request: Any) -> _FakeResponse:
+    def create_message(self, client: object, request: Any) -> _TransportResponse:
         self.create_calls.append((client, request))
         if isinstance(self.create_response, Exception):
             raise self.create_response
@@ -91,7 +95,7 @@ class _FakeTransport:
             raise AssertionError("create_response was not configured for this test")
         return self.create_response
 
-    def patch_message(self, client: object, request: Any) -> _FakeResponse:
+    def patch_message(self, client: object, request: Any) -> _TransportResponse:
         self.patch_calls.append((client, request))
         if isinstance(self.patch_response, Exception):
             raise self.patch_response
@@ -315,6 +319,45 @@ def test_feishu_provider_includes_troubleshooter_in_send_rejection_mapping(
     assert "recipient_open_id=open-id-1" in caplog.text
     assert "form_id=form-1" in caplog.text
     assert "troubleshooter=https://docs.example.com/feishu/send" in caplog.text
+
+
+def test_feishu_provider_maps_dict_shaped_sdk_error_payload_into_send_rejection() -> None:
+    transport = _FakeTransport(
+        create_response=CreateMessageResponse(
+            {
+                "error": {
+                    "code": 429,
+                    "message": "rate limited",
+                    "log_id": "log-send-1",
+                    "troubleshooter": "https://docs.example.com/feishu/send",
+                }
+            }
+        )
+    )
+    provider = FeishuHumanInputIMProvider(client_factory=_FakeClientFactory(), transport=transport)
+
+    result = provider.send_form(
+        IMSendCommand(
+            provider=IMProvider.FEISHU,
+            app_context=_build_app_context(),
+            recipient_id="open-id-1",
+            form_id="form-1",
+            title="Need approval",
+            content="Please approve",
+            metadata={"correlation_id": "correlation-1"},
+            interaction_payload=_build_interaction_payload(),
+        )
+    )
+
+    assert result == IMSendResult(
+        provider=IMProvider.FEISHU,
+        accepted=False,
+        provider_message_id=None,
+        error=(
+            "feishu send message failed, code=429, msg=rate limited, "
+            "log_id=log-send-1, troubleshooter=https://docs.example.com/feishu/send"
+        ),
+    )
 
 
 def test_feishu_provider_rejects_invalid_signature() -> None:

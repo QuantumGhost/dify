@@ -563,17 +563,49 @@ class FeishuHumanInputIMProvider:
     @staticmethod
     def _format_response_error(response: CreateMessageResponse | PatchMessageResponse, prefix: str) -> str:
         details: list[str] = [prefix]
-        if response.code is not None:
-            details.append(f"code={response.code}")
-        if response.msg:
-            details.append(f"msg={response.msg}")
-        log_id = response.get_log_id()
+        error = FeishuHumanInputIMProvider._extract_response_error_mapping(response)
+        error_code = response.code if response.code is not None else error.get("code")
+        if error_code is not None:
+            details.append(f"code={error_code}")
+        error_msg = FeishuHumanInputIMProvider._first_non_empty_string(response.msg, error.get("message"), error.get("msg"))
+        if error_msg:
+            details.append(f"msg={error_msg}")
+        log_id = FeishuHumanInputIMProvider._first_non_empty_string(response.get_log_id(), error.get("log_id"))
         if log_id:
             details.append(f"log_id={log_id}")
-        troubleshooter = response.get_troubleshooter()
+        troubleshooter = FeishuHumanInputIMProvider._extract_response_troubleshooter(response)
         if troubleshooter:
             details.append(f"troubleshooter={troubleshooter}")
         return ", ".join(details)
+
+    @staticmethod
+    def _extract_response_troubleshooter(response: CreateMessageResponse | PatchMessageResponse) -> str | None:
+        """Tolerate SDK responses whose ``error`` payload is a raw mapping."""
+
+        error = FeishuHumanInputIMProvider._extract_response_error_mapping(response)
+        if error:
+            return FeishuHumanInputIMProvider._as_non_empty_string(error.get("troubleshooter"))
+
+        raw_error = getattr(response, "error", None)
+        troubleshooter = FeishuHumanInputIMProvider._as_non_empty_string(getattr(raw_error, "troubleshooter", None))
+        if troubleshooter is not None:
+            return troubleshooter
+
+        get_troubleshooter = getattr(response, "get_troubleshooter", None)
+        if not callable(get_troubleshooter):
+            return None
+
+        try:
+            return FeishuHumanInputIMProvider._as_non_empty_string(get_troubleshooter())
+        except AttributeError:
+            return None
+
+    @staticmethod
+    def _extract_response_error_mapping(response: CreateMessageResponse | PatchMessageResponse) -> Mapping[str, Any]:
+        error = getattr(response, "error", None)
+        if isinstance(error, Mapping):
+            return error
+        return {}
 
     @staticmethod
     def _as_mapping(value: Any) -> Mapping[str, Any]:
