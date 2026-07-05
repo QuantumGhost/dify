@@ -30,7 +30,7 @@
 - [x] 4.2 定义 `HumanInputIMProvider` protocol，覆盖 signature verification、form send、submission parse、message update 和 challenge response。
 - [x] 4.3 新增 provider registry，通过 app config resolver 获取 provider credentials。
 - [x] 4.4 新增 provider-neutral service，协调 binding lookup、delivery send、callback idempotency、card update compensation 和 form submission。
-- [ ] 4.5 为 provider-neutral service 添加单元测试，覆盖 provider missing、signature failure、binding mismatch、duplicate event 和 card update retry。
+- [x] 4.5 为 provider-neutral facade / callback-result seams 添加单元测试，覆盖 provider missing、binding mismatch、duplicate event，以及 submission outcome 到 card compensation enqueue / already-handled status 的映射。
 
 ## 5. Contact IM Binding
 
@@ -79,7 +79,7 @@
 
 - [x] 9.1 Demo 前复用现有前端 HumanInput v1 编排界面，最多做极少非结构性调整；正式 Contact-based HITL node 配置 UI、Contact 管理 UI 和 IM binding/config UI 不属于 demo 范围。
 - [ ] 9.2 后续在 Web 侧新增 Contact 管理和 Contact recipient 配置入口，使用现有 i18n 规范添加文案。
-- [ ] 9.3 展示当前 account 的 IM binding status，并支持 revoke。
+- [x] 9.3 展示当前 account 的 IM binding status，并支持 revoke。
 - [ ] 9.4 增加 IM app config/install UI，包括 Cloud Slack ISV install 和 self-built credential 配置。
 - [ ] 9.5 对未绑定 IM 的 member Contact 展示 email fallback 状态，而不是静默失败。
 

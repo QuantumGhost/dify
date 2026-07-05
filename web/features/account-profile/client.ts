@@ -2,7 +2,7 @@ import type { GetAccountProfileResponse } from '@dify/contracts/api/console/acco
 import { queryOptions } from '@tanstack/react-query'
 import { IS_DEV } from '@/config'
 // eslint-disable-next-line no-restricted-imports
-import { get } from '@/service/base'
+import { del, get } from '@/service/base'
 import { consoleQuery } from '@/service/client'
 
 export type UserProfileWithMeta = {
@@ -11,6 +11,21 @@ export type UserProfileWithMeta = {
     currentVersion: string | null
     currentEnv: string | null
   }
+}
+
+export type CurrentIMBinding = {
+  id: string
+  provider: string
+  scope_type: string
+  scope_id: string
+  provider_workspace_id: string
+  provider_user_id: string
+  provider_user_display_name: string | null
+  status: string
+}
+
+type CurrentIMBindingResponse = {
+  data: CurrentIMBinding | null
 }
 
 export const isLegacyBase401 = (err: unknown): boolean =>
@@ -37,3 +52,16 @@ export const userProfileQueryOptions = () =>
     },
     retry: (failureCount, error) => !isLegacyBase401(error) && failureCount < 3,
   })
+
+export const currentIMBindingQueryOptions = () =>
+  queryOptions<CurrentIMBinding | null>({
+    queryKey: ['account', 'im-binding'],
+    queryFn: async () => {
+      const response = await get<CurrentIMBindingResponse>('/account/im-bindings', {}, { silent: true })
+      return response.data
+    },
+  })
+
+export const revokeCurrentIMBinding = async () => {
+  return del('/account/im-bindings')
+}

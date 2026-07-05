@@ -217,6 +217,11 @@ callback controller 推荐放在 `api/controllers/trigger/human_input_im.py` 或
 6. 调用 `HumanInputService.submit_form_by_token(...)`，写入 `submission_user_id` 或 `submission_end_user_id`。
 7. 更新 IM message status；如果 provider card update 失败，写入补偿任务。
 
+这里再明确一条测试边界，避免后续把 adapter 责任错误塞回 provider-neutral core：
+
+- signature / timestamp / challenge verification 归 provider adapter 或 transport seam 所有，不作为 provider-neutral facade 的职责；
+- provider-neutral core 从“已验证、已解析的 provider event”开始工作，负责 binding/context 校验、duplicate event 幂等、submission outcome 映射，以及 card compensation enqueue。
+
 发送 IM message/card 时必须持久化 interaction mapping snapshot。该 snapshot 是 callback 翻译的唯一可信来源，用于把 provider-local component/action id 映射到 Dify form 语义：
 
 ```json

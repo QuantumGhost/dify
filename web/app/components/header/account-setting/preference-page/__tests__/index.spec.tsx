@@ -1,5 +1,6 @@
 import type { GetAccountProfileResponse } from '@dify/contracts/api/console/account/types.gen'
 import { ToastHost } from '@langgenius/dify-ui/toast'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { languages } from '@/i18n-config/language'
 import { updateUserProfile } from '@/service/common'
@@ -8,6 +9,13 @@ import PreferencePage from '../index'
 
 const mockRefresh = vi.fn()
 const mockMutateUserProfile = vi.fn()
+const {
+  mockGetIMBindingRequest,
+  mockRevokeIMBindingRequest,
+} = vi.hoisted(() => ({
+  mockGetIMBindingRequest: vi.fn(),
+  mockRevokeIMBindingRequest: vi.fn(),
+}))
 let mockLocale: string | undefined = 'en-US'
 let mockUserProfile: GetAccountProfileResponse
 
@@ -83,6 +91,11 @@ vi.mock('@/service/common', () => ({
   updateUserProfile: vi.fn(),
 }))
 
+vi.mock('@/service/base', () => ({
+  get: mockGetIMBindingRequest,
+  del: mockRevokeIMBindingRequest,
+}))
+
 vi.mock('@/i18n-config', () => ({
   setLocaleOnClient: vi.fn(),
 }))
@@ -102,11 +115,22 @@ const createUserProfile = (overrides: Partial<GetAccountProfileResponse> = {}): 
 })
 
 const renderPage = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  })
+
   render(
-    <>
+    <QueryClientProvider client={queryClient}>
       <PreferencePage />
       <ToastHost />
-    </>,
+    </QueryClientProvider>,
   )
 }
 
@@ -146,6 +170,8 @@ beforeEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
   mockLocale = 'en-US'
+  mockGetIMBindingRequest.mockResolvedValue({ data: null })
+  mockRevokeIMBindingRequest.mockResolvedValue({ result: 'success' })
   mockUserProfile = createUserProfile()
 })
 
@@ -264,5 +290,58 @@ describe('PreferencePage - Interactions', () => {
     })
 
     expect(updateUserProfileMock).not.toHaveBeenCalled()
+  })
+})
+
+// IM binding status
+describe('PreferencePage - IM Binding', () => {
+  it('should render the active IM binding status and removal action when the account is bound', async () => {
+    mockGetIMBindingRequest.mockResolvedValue({
+      data: {
+        provider: 'feishu',
+        scope_type: 'deployment',
+        scope_id: 'deployment',
+        provider_workspace_id: 'ws-1',
+        provider_user_id: 'user-1',
+        provider_user_display_name: 'Approver One',
+        status: 'active',
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('common.account.imBinding.status.bound')).toBeInTheDocument()
+    expect(screen.getAllByText('Feishu')).toHaveLength(2)
+    expect(screen.getAllByText('Approver One')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'common.account.imBinding.revokeAction' })).toBeInTheDocument()
+  })
+
+  it('should revoke the active IM binding and show a success toast', async () => {
+    mockGetIMBindingRequest
+      .mockResolvedValueOnce({
+        data: {
+          provider: 'feishu',
+          scope_type: 'deployment',
+          scope_id: 'deployment',
+          provider_workspace_id: 'ws-1',
+          provider_user_id: 'user-1',
+          provider_user_display_name: 'Approver One',
+          status: 'active',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: null,
+      })
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'common.account.imBinding.revokeAction' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'common.operation.confirm' }))
+
+    await waitFor(() => {
+      expect(mockRevokeIMBindingRequest).toHaveBeenCalledWith('/account/im-bindings')
+    })
+    expect(await screen.findByText('common.actionMsg.modifiedSuccessfully')).toBeInTheDocument()
+    expect(await screen.findAllByText('common.account.imBinding.status.unbound')).toHaveLength(2)
   })
 })
