@@ -63,6 +63,17 @@ def test_resolve_im_app_context_reports_invalid_unsupported_event_mode(monkeypat
     assert context.errors == ["invalid LARK_EVENT_MODE: socket_mode"]
 
 
+def test_resolve_im_app_context_reports_unsupported_cloud_edition(monkeypatch) -> None:
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "CLOUD")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", False)
+
+    context = resolve_im_app_context(provider=IMProvider.FEISHU, tenant_id="tenant-1")
+
+    assert context.status == IMAppConfigStatus.UNSUPPORTED
+    assert context.event_mode is None
+    assert context.errors == ["provider feishu is not supported for cloud edition in phase-1 resolver"]
+
+
 def test_resolve_im_app_context_returns_configured_self_built_feishu(monkeypatch) -> None:
     monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_APP_ID", "cli_a")
     monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.LARK_APP_SECRET", "secret")

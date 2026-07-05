@@ -89,7 +89,7 @@
 - [x] 10.2 在 logs/status 中包含 tenant、app、workflow run/conversation、form、contact snapshot、provider、message 和 event identifiers。
 - [x] 10.3 增加 provider config 校验，启动或首次调用时能发现缺失 credentials。
 - [x] 10.4 定义 operator 排障路径，包含 Contact missing、delivery fallback/skip、callback rejected、form expired、card update failed 和 resume enqueue failed。
-- [ ] 10.5 确认 rollback 行为：关闭新 HITL/IM provider config 后不影响旧 HITL、Web/Email submission 和现有 workflow resume。
+- [x] 10.5 确认 rollback 行为：关闭新 HITL/IM provider config 后不影响旧 HITL、Web/Email submission 和现有 workflow resume。
 
 ## 11. Verification
 

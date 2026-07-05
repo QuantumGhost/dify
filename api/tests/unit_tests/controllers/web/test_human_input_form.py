@@ -570,13 +570,27 @@ def test_get_form_raises_forbidden_when_site_missing(monkeypatch: pytest.MonkeyP
     limiter_mock.increment_rate_limit.assert_called_once_with("203.0.113.10")
 
 
-def test_submit_form_accepts_backstage_token(monkeypatch: pytest.MonkeyPatch, app: Flask):
-    """POST forwards backstage submissions to the service."""
+@pytest.mark.parametrize(
+    "recipient_type",
+    [
+        RecipientType.STANDALONE_WEB_APP,
+        RecipientType.BACKSTAGE,
+        RecipientType.EMAIL_MEMBER,
+        RecipientType.EMAIL_EXTERNAL,
+    ],
+)
+def test_submit_form_accepts_legacy_web_and_email_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+    app: Flask,
+    recipient_type: RecipientType,
+):
+    """POST forwards legacy web and email submission tokens to the service."""
 
     class _FakeForm:
-        recipient_type = RecipientType.BACKSTAGE
+        def __init__(self, recipient_type: RecipientType):
+            self.recipient_type = recipient_type
 
-    form = _FakeForm()
+    form = _FakeForm(recipient_type)
     limiter_mock = MagicMock()
     limiter_mock.is_rate_limited.return_value = False
     monkeypatch.setattr(human_input_module, "_FORM_SUBMIT_RATE_LIMITER", limiter_mock)
@@ -596,7 +610,7 @@ def test_submit_form_accepts_backstage_token(monkeypatch: pytest.MonkeyPatch, ap
     assert status == 200
     assert response == {}
     service_mock.submit_form_by_token.assert_called_once_with(
-        recipient_type=RecipientType.BACKSTAGE,
+        recipient_type=recipient_type,
         form_token="token-1",
         selected_action_id="approve",
         form_data={"content": "ok"},
