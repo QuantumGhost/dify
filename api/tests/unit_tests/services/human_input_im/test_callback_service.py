@@ -163,6 +163,46 @@ def test_callback_service_rejects_submission_for_unknown_interaction_mapping() -
         )
 
 
+def test_callback_service_rejects_submission_for_unknown_action_id() -> None:
+    service = HumanInputIMCallbackService(orchestration_service=MagicMock())
+
+    with pytest.raises(IMBindingValidationError, match="unknown IM callback action id"):
+        service.build_submission_command(
+            event=IMSubmissionEvent(
+                provider=IMProvider.FEISHU,
+                event_id="event-1",
+                provider_workspace_id="ws-1",
+                provider_user_id="user-1",
+                interaction_id="interaction-1",
+            ),
+            context=_build_submission_context(),
+            parsed_payload=IMParsedSubmissionPayload(
+                provider_action_id="provider_action_unknown",
+                provider_inputs={"provider_component_reason": "looks good"},
+            ),
+        )
+
+
+def test_callback_service_rejects_submission_for_unknown_input_component_id() -> None:
+    service = HumanInputIMCallbackService(orchestration_service=MagicMock())
+
+    with pytest.raises(IMBindingValidationError, match="unknown IM callback input component id"):
+        service.build_submission_command(
+            event=IMSubmissionEvent(
+                provider=IMProvider.FEISHU,
+                event_id="event-1",
+                provider_workspace_id="ws-1",
+                provider_user_id="user-1",
+                interaction_id="interaction-1",
+            ),
+            context=_build_submission_context(),
+            parsed_payload=IMParsedSubmissionPayload(
+                provider_action_id="provider_action_approve",
+                provider_inputs={"provider_component_unknown": "looks good"},
+            ),
+        )
+
+
 def test_callback_service_maps_submission_payload_to_human_input_submit_arguments() -> None:
     service = HumanInputIMCallbackService(orchestration_service=MagicMock())
 
@@ -188,6 +228,37 @@ def test_callback_service_maps_submission_payload_to_human_input_submit_argument
         form_data={"reason": "looks good"},
         submission_user_id="account-1",
         submission_end_user_id=None,
+    )
+
+
+def test_callback_service_maps_submission_payload_to_end_user_actor() -> None:
+    service = HumanInputIMCallbackService(orchestration_service=MagicMock())
+
+    result = service.build_submission_command(
+        event=IMSubmissionEvent(
+            provider=IMProvider.FEISHU,
+            event_id="event-1",
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+            interaction_id="interaction-1",
+        ),
+        context=_build_submission_context(
+            submission_user_id=None,
+            submission_end_user_id="end-user-1",
+        ),
+        parsed_payload=IMParsedSubmissionPayload(
+            provider_action_id="provider_action_approve",
+            provider_inputs={"provider_component_reason": "looks good"},
+        ),
+    )
+
+    assert result == HumanInputIMSubmissionCommand(
+        recipient_type=RecipientType.STANDALONE_WEB_APP,
+        form_token="form-token",
+        selected_action_id="approve",
+        form_data={"reason": "looks good"},
+        submission_user_id=None,
+        submission_end_user_id="end-user-1",
     )
 
 
@@ -436,6 +507,8 @@ def _build_submission_context(
     *,
     correlation_id: str = "correlation-1",
     binding_provider_user_id: str = "user-1",
+    submission_user_id: str | None = "account-1",
+    submission_end_user_id: str | None = None,
 ) -> IMSubmissionCallbackContext:
     return IMSubmissionCallbackContext(
         correlation_id=correlation_id,
@@ -460,7 +533,8 @@ def _build_submission_context(
                 )
             },
         ),
-        submission_user_id="account-1",
+        submission_user_id=submission_user_id,
+        submission_end_user_id=submission_end_user_id,
     )
 
 

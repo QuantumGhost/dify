@@ -1,3 +1,4 @@
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from models.im_integration import (
     IMScopeType,
 )
 from services.human_input_im.binding_repository import (
+    get_active_binding_model,
     get_binding_by_provider_identity,
     get_pending_binding_session,
 )
@@ -72,3 +74,83 @@ def test_repository_only_returns_pending_binding_sessions() -> None:
         found_binding_session = get_pending_binding_session(session=session, token="imbs_consumed")
 
     assert found_binding_session is None
+
+
+def test_repository_rejects_multiple_active_bindings_for_one_account() -> None:
+    bindings = [
+        IMBinding(
+            account_id="account-1",
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+            status=IMBindingStatus.ACTIVE,
+        ),
+        IMBinding(
+            account_id="account-1",
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.ISV,
+            scope_type=IMScopeType.TENANT,
+            scope_id="tenant-1",
+            provider_workspace_id="ws-2",
+            provider_user_id="user-2",
+            status=IMBindingStatus.ACTIVE,
+        ),
+    ]
+
+    class _ScalarResult:
+        def all(self):
+            return list(bindings)
+
+    class _Session:
+        def scalars(self, _stmt):
+            return _ScalarResult()
+
+    with pytest.raises(Exception, match="at most one active IM binding per account"):
+        get_active_binding_model(session=_Session(), account_id="account-1")  # type: ignore[arg-type]
+
+
+def test_repository_rejects_duplicate_provider_identity_scope_rows() -> None:
+    bindings = [
+        IMBinding(
+            account_id="account-1",
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+            status=IMBindingStatus.REVOKED,
+        ),
+        IMBinding(
+            account_id="account-2",
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+            status=IMBindingStatus.REVOKED,
+        ),
+    ]
+
+    class _ScalarResult:
+        def all(self):
+            return list(bindings)
+
+    class _Session:
+        def scalars(self, _stmt):
+            return _ScalarResult()
+
+    with pytest.raises(Exception, match="at most one IM binding per provider identity scope"):
+        get_binding_by_provider_identity(
+            session=_Session(),  # type: ignore[arg-type]
+            provider=IMProvider.FEISHU,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.DEPLOYMENT,
+            scope_id="deployment",
+            provider_workspace_id="ws-1",
+            provider_user_id="user-1",
+        )

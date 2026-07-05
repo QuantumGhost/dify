@@ -350,3 +350,58 @@ def test_delivery_service_external_contact_uses_email_only(monkeypatch):
     assert len(mail.sent) == 1
     assert mail.sent[0]["to"] == "external@example.com"
     assert recorded_statuses[0]["status"] == "external_email"
+
+
+def test_delivery_service_dedupes_duplicate_member_contact_im_sends(monkeypatch):
+    form = _build_form()
+    recipient_one = _build_member_recipient(email="member@example.com", snapshot_email="member@example.com")
+    recipient_two = SimpleNamespace(
+        id="recipient-dup",
+        recipient_type=RecipientType.EMAIL_MEMBER,
+        contact_snapshot=recipient_one.contact_snapshot,
+        recipient_payload=recipient_one.recipient_payload,
+        access_token="token-dup",
+    )
+    runtime = delivery_module._EmailDeliveryRuntime(
+        delivery=SimpleNamespace(id="delivery-1"),
+        config=EmailDeliveryMethod(
+            config=EmailDeliveryConfig(
+                recipients=EmailRecipients(include_bound_group=False, items=[]),
+                subject="Subject",
+                body="Body",
+            )
+        ),
+        recipients=[recipient_one, recipient_two],
+    )
+    session = _FakeSession()
+    im_service = MagicMock()
+    im_service.inspect_active_binding.return_value = _build_binding()
+    im_service.send_form.return_value = IMSendResult(
+        provider=IMProvider.FEISHU,
+        accepted=False,
+        provider_message_id=None,
+        error="phase-1 provider transport adapter not implemented",
+    )
+
+    monkeypatch.setattr(
+        delivery_module.ContactV2HumanInputDeliveryService,
+        "_load_email_delivery_runtimes",
+        staticmethod(lambda **_: [runtime]),
+    )
+    monkeypatch.setattr(
+        delivery_module.ContactV2HumanInputDeliveryService,
+        "_append_process_data_status",
+        staticmethod(lambda **_kwargs: None),
+    )
+    monkeypatch.setattr(delivery_module, "load_human_input_variable_pool", lambda _workflow_run_id: None)
+    monkeypatch.setattr(delivery_module, "mail", _DummyMail())
+    monkeypatch.setattr(
+        delivery_module.FeatureService,
+        "get_features",
+        lambda _tenant_id, **_kwargs: SimpleNamespace(human_input_email_delivery_enabled=True),
+    )
+
+    service = delivery_module.ContactV2HumanInputDeliveryService(im_service=im_service)
+    service.deliver_form(session=session, form=form, node_title="Review")
+
+    im_service.send_form.assert_called_once()

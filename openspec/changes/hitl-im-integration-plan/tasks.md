@@ -40,7 +40,7 @@
 - [x] 5.4 实现创建 time-limited binding session 的 service。
 - [x] 5.5 实现 provider-authenticated binding callback，完成 Account 与 IM identity 的 active binding。
 - [x] 5.6 实现 binding inspect/revoke API，用于当前 account 查看和撤销绑定。
-- [ ] 5.7 添加 binding tests，覆盖重复绑定、多 provider 预留、过期 session、revoke 后不可投递和 MySQL-compatible 约束。
+- [x] 5.7 添加 binding tests，覆盖重复绑定、多 provider 预留、过期 session、revoke 后不可投递和 MySQL-compatible 约束。
 
 ## 6. New HITL Runtime And Delivery
 
