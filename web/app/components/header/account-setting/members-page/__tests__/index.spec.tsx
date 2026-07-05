@@ -196,7 +196,7 @@ describe('MembersPage', () => {
       refetch: mockRefetch,
     } as unknown as ReturnType<typeof useMembers>)
     vi.mocked(useContacts).mockReturnValue({
-      data: { data: [] },
+      data: [],
       isPending: false,
     } as unknown as ReturnType<typeof useContacts>)
     vi.mocked(useCreateExternalContact).mockReturnValue({
@@ -252,34 +252,32 @@ describe('MembersPage', () => {
 
   it('should render workspace contacts with delivery status badges', () => {
     vi.mocked(useContacts).mockReturnValue({
-      data: {
-        data: [
-          {
-            id: 'contact-1',
-            tenant_id: 'tenant-1',
-            type: 'member',
-            status: 'active',
-            source: 'workspace_member',
-            account_id: 'account-1',
-            name: 'Approver One',
-            email: 'approver@example.com',
-            delivery_status: 'im',
-            delivery_provider: 'feishu',
-          },
-          {
-            id: 'contact-2',
-            tenant_id: 'tenant-1',
-            type: 'member',
-            status: 'active',
-            source: 'workspace_member',
-            account_id: 'account-2',
-            name: 'Reviewer Two',
-            email: 'reviewer@example.com',
-            delivery_status: 'email',
-            delivery_provider: null,
-          },
-        ],
-      },
+      data: [
+        {
+          id: 'contact-1',
+          tenant_id: 'tenant-1',
+          type: 'member',
+          status: 'active',
+          source: 'workspace_member',
+          account_id: 'account-1',
+          name: 'Approver One',
+          email: 'approver@example.com',
+          delivery_status: 'im',
+          delivery_provider: 'feishu',
+        },
+        {
+          id: 'contact-2',
+          tenant_id: 'tenant-1',
+          type: 'member',
+          status: 'active',
+          source: 'workspace_member',
+          account_id: 'account-2',
+          name: 'Reviewer Two',
+          email: 'reviewer@example.com',
+          delivery_status: 'email',
+          delivery_provider: null,
+        },
+      ],
       isPending: false,
     } as unknown as ReturnType<typeof useContacts>)
 

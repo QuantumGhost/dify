@@ -27,7 +27,7 @@ export default function ContactsSection() {
   const [email, setEmail] = useState('')
   const createExternalContactMutation = useCreateExternalContact()
 
-  const contacts = data?.data ?? []
+  const contacts = data ?? []
 
   const resetForm = () => {
     setName('')

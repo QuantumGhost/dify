@@ -19,6 +19,7 @@ import { useMembers } from '@/service/use-common'
 import { hasPermission } from '@/utils/permission'
 import ContactsSection from './contacts-section'
 import EditWorkspaceModal from './edit-workspace-modal'
+import IMAppsSection from './im-apps-section'
 import InviteButton from './invite-button'
 import InviteModal from './invite-modal'
 import InvitedModal from './invited-modal'
@@ -174,6 +175,7 @@ const MembersPage = () => {
           </div>
         </div>
         <ContactsSection />
+        <IMAppsSection canEdit={canManageMembers} />
       </div>
       {
         inviteModalVisible && (

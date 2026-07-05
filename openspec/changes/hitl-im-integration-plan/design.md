@@ -20,6 +20,7 @@
 为了避免 demo 期间完全没有用户可见的 Contact / binding 反馈，本期允许增加极小的辅助 UI：
 
 - workspace settings 中可以增加一个最小 Contacts 管理 surface，用于查看当前 Contact 列表、external Contact 创建入口，以及 member Contact 的当前 delivery status；
+- workspace settings 中可以增加一个最小 IM app config/install surface，用于 workspace admin 查看当前 effective provider status，并管理 self-built config 与 install lifecycle；
 - account preferences 中可以增加当前 account 的 IM binding status / revoke surface；
 - workflow 编排侧可以增加通往上述管理 surface 的入口，但不新增正式的 Contact recipient 配置 schema。
 
