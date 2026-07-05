@@ -35,7 +35,7 @@
 ## 5. Contact IM Binding
 
 - [x] 5.1 新增 IM binding model，绑定 `account_id`、credential scope 与 provider identity，不强制依赖统一 `app_installation_id` 外键。
-- [ ] 5.2 实现 binding repository，普通唯一键保护同一 credential scope + provider workspace user 不重复绑定。
+- [x] 5.2 实现 binding repository，普通唯一键保护同一 credential scope + provider workspace user 不重复绑定。
 - [x] 5.3 在 service 层事务校验第一期每个 member Contact/Account 只有一种 active IM。
 - [x] 5.4 实现创建 time-limited binding session 的 service。
 - [ ] 5.5 实现 provider-authenticated binding callback，完成 Account 与 IM identity 的 active binding。
