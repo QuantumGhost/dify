@@ -22,6 +22,10 @@
 - **WHEN** provider adapter 请求缺失必要 credential 的 self-built app config
 - **THEN** 系统 SHALL 拒绝发送或 callback 处理，并记录可排障错误
 
+#### Scenario: Feishu demo requires long connection mode
+- **WHEN** phase-1 demo 使用飞书企业自建应用
+- **THEN** 系统 SHALL 要求配置为 long connection 模式，而 SHALL NOT 把 webhook 模式视为 demo-ready configuration
+
 ### Requirement: ISV install lifecycle is tracked
 系统 SHALL 跟踪 ISV install、uninstall、token refresh 和 token rotation 状态。
 

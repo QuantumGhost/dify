@@ -13,7 +13,7 @@
 - CE：只支持 deployment global 的企业自建 IM app。
 - EE：首期可只支持 deployment global 的企业自建 IM app；模型预留 tenant override，解析顺序为 tenant override > deployment global。
 - Cloud：首期需要支持 Slack ISV install 和钉钉企业自建应用；两种模式不要求同一个 tenant 同时启用。模型需要预留后续 provider 同时支持 ISV 和企业自建的空间。
-- demo provider：飞书企业自建应用。
+- demo provider：飞书企业自建应用，事件模式使用 long connection。
 
 当前 demo 的所有前端编排仍必须在现有前端代码中完成，或只做极少非结构性调整。新的 Contact recipient 配置 UI、Contact 管理 UI、IM binding/config UI 和 HumanInput v2 前端配置面不属于 demo 范围。为此需要一个 transitional compatibility layer：前端仍使用现有 HumanInput v1 编排界面并提交 v1 node config；后端/runtime 在执行前将 v1 config 映射为 HumanInput v2 runtime model，并使用新的 v2 runtime 执行。该 compatibility layer 不能成为正式 v2 schema 的长期边界。
 
@@ -55,7 +55,7 @@ demo 阶段必须增加 transitional compatibility layer：现有前端继续提
 
 替代方案是在旧 HITL 上新增 `DeliveryMethodType.IM`。该方案会把新产品模型继续绑定到旧 delivery channel 配置，不符合“节点配置 Contact 接收者”的目标。
 
-### 2. 引入 Workspace-scoped Contact，并保留 runtime snapshot
+### 2. 引入 authoritative Workspace-scoped Contact，并保留 runtime snapshot
 
 Contact 模型建议包含：
 
@@ -69,7 +69,7 @@ Contact 模型建议包含：
 - `created_at`
 - `updated_at`
 
-不做一次性全量迁移。demo 阶段提供一个从现有 Workspace members 创建 member Contact 的脚本，用于测试和演示数据准备。Contact 自动同步、lazy materialization、projection fallback 以及正式迁移/投影策略不属于 demo 范围，后续单独设计。
+`Contact` 是 authoritative workspace recipient row，而不是运行时按 membership 临时 materialize 的投影。对于 member Contact，`tenant_id + account_id` 对应唯一 authoritative row，`status` 在该 row 上流转，而不是通过追加历史 member rows 表达状态变化。member Contact 的 profile 读路径以 `Account` 为准；`Contact.name/email` 只作为 bootstrap/fallback cache，用于 bootstrap 阶段和缺失 `Account` 资料时的降级读取，不构成 member profile 的 source of truth。external Contact 的 profile 由 `Contact` 自身持有。demo 阶段不做一次性全量迁移，而是提供一个从现有 Workspace members 创建缺失 member Contact 的 bootstrap 脚本，用于测试和演示数据准备。该脚本只负责补齐缺失 Contact，不承担自动同步、lazy materialization、projection fallback、重新激活或持续 reconciliation 的职责；这些策略后续单独设计。
 
 HITL runtime 必须保存 Contact snapshot，至少包含 `contact_id`、`type`、`account_id`、`name`、`email`、`source` 和当时的 provider/binding 信息。这样 Contact 后续删除、失效或资料变化不会破坏历史表单、审计和排障。
 
@@ -122,7 +122,7 @@ callback 授权不能只看 Account membership，必须确认 callback provider 
 - CE：deployment global self-built。
 - EE：tenant override self-built > deployment global self-built；第一期可以只实现 deployment global，但 schema/service 预留 override。
 - Cloud：Slack 使用 ISV install；钉钉使用 tenant self-built。两者无需同一 tenant 同时启用。
-- Demo：飞书使用 self-built app config。
+- Demo：飞书使用 self-built app config，且 phase-1 demo 要求 long connection 模式，不走 webhook 模式。
 
 ### 5. HITL delivery 以 Contact recipient 为中心
 

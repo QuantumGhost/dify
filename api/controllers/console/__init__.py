@@ -133,6 +133,9 @@ from .tag import tags
 # Import workspace controllers
 from .workspace import (
     account,
+    contacts,
+    im_apps,
+    im_bindings,
     agent_providers,
     endpoint,
     load_balancing_config,
@@ -172,6 +175,9 @@ __all__ = [
     "bp",
     "completion",
     "compliance",
+    "contacts",
+    "im_apps",
+    "im_bindings",
     "console_ns",
     "conversation",
     "conversation_variables",

@@ -143,3 +143,4 @@ def create_tenant(email: str, language: str | None = None, name: str | None = No
             fg="green",
         )
     )
+

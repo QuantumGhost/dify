@@ -36,6 +36,7 @@ def init_app(app: DifyApp):
         reset_email,
         reset_encrypt_key_pair,
         reset_password,
+        seed_workspace_contacts,
         restore_workflow_runs,
         setup_datasource_oauth_client,
         setup_system_tool_oauth_client,
@@ -48,6 +49,7 @@ def init_app(app: DifyApp):
     cmds_to_register = [
         reset_password,
         reset_email,
+        seed_workspace_contacts,
         reset_encrypt_key_pair,
         vdb_migrate,
         convert_to_agent_apps,

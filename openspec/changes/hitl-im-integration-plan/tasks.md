@@ -7,39 +7,39 @@
 
 ## 2. Contact Model And Sync
 
-- [ ] 2.1 新增 `Contact` model，支持 member/external、account reference、name、email、status、source、tenant scope。
-- [ ] 2.2 新增 Contact repository/service，所有读写按 workspace scope 过滤。
-- [ ] 2.3 新增 demo/test seed script，从指定 Workspace 的现有 members 创建缺失的 member Contacts。
-- [ ] 2.4 明确 Contact 自动同步、lazy materialization、正式迁移/投影策略不属于 demo 范围，并保留后续设计入口。
-- [ ] 2.5 为 external Contact 实现最小管理能力：一个 name、一个 email、无 IM identity。
+- [x] 2.1 新增 `Contact` model，支持 member/external、account reference、name、email、status、source、tenant scope。
+- [x] 2.2 新增 Contact repository/service，所有读写按 workspace scope 过滤。
+- [x] 2.3 新增 demo/test seed script，从指定 Workspace 的现有 members 创建缺失的 member Contacts。
+- [x] 2.4 明确 Contact 自动同步、lazy materialization、正式迁移/投影策略不属于 demo 范围，并保留后续设计入口。
+- [x] 2.5 为 external Contact 实现最小管理能力：一个 name、一个 email、无 IM identity。
 - [ ] 2.6 在 HITL form recipient / delivery / submission 中保存 Contact snapshot。
 - [ ] 2.7 添加 Contact tests，覆盖 seed script 幂等创建、external contact 和 snapshot 保留。
 
 ## 3. IM App Configuration
 
-- [ ] 3.1 新增 provider、install mode、install status、token status 等 enum/domain constants。
-- [ ] 3.2 新增 IM app config resolver 和 `IMAppContext` value object，支持 `self_built` 和 `isv`，并预留 deployment global 与 tenant override。
+- [x] 3.1 新增 provider、install mode、install status、token status 等 enum/domain constants。
+- [x] 3.2 新增 IM app config resolver 和 `IMAppContext` value object，支持 `self_built` 和 `isv`，并预留 deployment global 与 tenant override。
 - [ ] 3.3 实现 config resolver：CE deployment global；EE tenant override > deployment global；Cloud Slack ISV / DingTalk tenant self-built；deployment global 可来自 config/secret manager，不强制落 DB。
 - [ ] 3.4 实现 Slack ISV install/uninstall/token refresh 数据路径和接口边界；只有需要生命周期管理的 install/config 才落 DB。
-- [ ] 3.5 实现 self-built app credential 配置读取与校验，供飞书 demo 和钉钉企业自建复用。
+- [x] 3.5 实现 self-built app credential 配置读取与校验，供飞书 demo 和钉钉企业自建复用。
 - [ ] 3.6 添加 app config tests，覆盖版本分支、缺失 credentials、token refresh/rotation 和 uninstall。
 
 ## 4. Provider-Neutral IM Core
 
-- [ ] 4.1 新增 provider-neutral DTOs，用于 binding callback、send command、send result、submission callback 和 card update command。
-- [ ] 4.2 定义 `HumanInputIMProvider` protocol，覆盖 signature verification、form send、submission parse、message update 和 challenge response。
-- [ ] 4.3 新增 provider registry，通过 app config resolver 获取 provider credentials。
+- [x] 4.1 新增 provider-neutral DTOs，用于 binding callback、send command、send result、submission callback 和 card update command。
+- [x] 4.2 定义 `HumanInputIMProvider` protocol，覆盖 signature verification、form send、submission parse、message update 和 challenge response。
+- [x] 4.3 新增 provider registry，通过 app config resolver 获取 provider credentials。
 - [ ] 4.4 新增 provider-neutral service，协调 binding lookup、delivery send、callback idempotency、card update compensation 和 form submission。
 - [ ] 4.5 为 provider-neutral service 添加单元测试，覆盖 provider missing、signature failure、binding mismatch、duplicate event 和 card update retry。
 
 ## 5. Contact IM Binding
 
-- [ ] 5.1 新增 IM binding model，绑定 `account_id`、credential scope 与 provider identity，不强制依赖统一 `app_installation_id` 外键。
+- [x] 5.1 新增 IM binding model，绑定 `account_id`、credential scope 与 provider identity，不强制依赖统一 `app_installation_id` 外键。
 - [ ] 5.2 实现 binding repository，普通唯一键保护同一 credential scope + provider workspace user 不重复绑定。
-- [ ] 5.3 在 service 层事务校验第一期每个 member Contact/Account 只有一种 active IM。
-- [ ] 5.4 实现创建 time-limited binding session 的 service。
+- [x] 5.3 在 service 层事务校验第一期每个 member Contact/Account 只有一种 active IM。
+- [x] 5.4 实现创建 time-limited binding session 的 service。
 - [ ] 5.5 实现 provider-authenticated binding callback，完成 Account 与 IM identity 的 active binding。
-- [ ] 5.6 实现 binding inspect/revoke API，用于当前 account 查看和撤销绑定。
+- [x] 5.6 实现 binding inspect/revoke API，用于当前 account 查看和撤销绑定。
 - [ ] 5.7 添加 binding tests，覆盖重复绑定、多 provider 预留、过期 session、revoke 后不可投递和 MySQL-compatible 约束。
 
 ## 6. New HITL Runtime And Delivery
@@ -52,8 +52,8 @@
 - [ ] 6.6 实现 member Contact 投递：有 IM binding 发 IM，无 IM binding fallback email，无 email skip 并写入 `process_data`。
 - [ ] 6.7 实现 external Contact 投递：只发 email。
 - [ ] 6.8 实现 provider adapter 的 form/card rendering，支持 paragraph、select、actions，并为 file/file-list 加 Web form fallback。
-- [ ] 6.9 持久化 IM message correlation，记录 send success/failure、provider message id 和 target card status。
-- [ ] 6.10 持久化 interaction mapping snapshot，记录 provider input component id 到 Dify `output_variable_name`、provider action id 到 Dify `user_actions[].id` 的映射。
+- [x] 6.9 持久化 IM message correlation，记录 send success/failure、provider message id 和 target card status。
+- [x] 6.10 持久化 interaction mapping snapshot，记录 provider input component id 到 Dify `output_variable_name`、provider action id 到 Dify `user_actions[].id` 的映射。
 - [ ] 6.11 添加 runtime/delivery tests，覆盖 v1 frontend-submitted config 走 v2 runtime、bound recipient、missing binding email fallback、skip、external contact、initiator approval、provider send failure、interaction mapping snapshot 和 retry idempotency。
 
 ## 7. Feishu Self-Built Demo Adapter
@@ -67,7 +67,7 @@
 ## 8. IM Callback And Workflow Resume
 
 - [ ] 8.1 新增外部 webhook controller，例如 `api/controllers/trigger/human_input_im.py`。
-- [ ] 8.2 在 callback service 中验证 provider event id 幂等，重复事件返回成功 ACK。
+- [x] 8.2 在 callback service 中验证 provider event id 幂等，重复事件返回成功 ACK。
 - [ ] 8.3 校验 callback provider user 与 active binding、Contact snapshot、original recipient、provider workspace 一致。
 - [ ] 8.4 使用 interaction mapping snapshot 将 provider submission 映射为 `HumanInputService.submit_form_by_token` 参数，并按 actor 类型写入 `submission_user_id` 或 `submission_end_user_id`。
 - [ ] 8.5 加固 `HumanInputFormSubmissionRepository.mark_submitted` 的单次提交语义，避免并发 callback 重复 resume。

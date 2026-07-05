@@ -39,6 +39,17 @@ from .comment import (
 )
 from .credential_permission import CredentialPermission
 from .credential_permission import CredentialType as CredentialPermissionType
+from .contact import Contact, ContactSource, ContactStatus, ContactType
+from .im_integration import (
+    IMBinding,
+    IMBindingSession,
+    IMBindingSessionStatus,
+    IMBindingStatus,
+    IMInstallMode,
+    IMProvider,
+    IMScopeType,
+)
+from .im_delivery import IMMessageCardStatus, IMMessageCorrelation, IMMessageDeliveryStatus, IMProcessedCallbackEvent
 from .dataset import (
     AppDatasetJoin,
     Dataset,
@@ -191,6 +202,10 @@ __all__ = [
     "CeleryTaskSet",
     "Conversation",
     "ConversationVariable",
+    "Contact",
+    "ContactSource",
+    "ContactStatus",
+    "ContactType",
     "CreatorUserRole",
     "CredentialPermission",
     "CredentialPermissionType",
@@ -220,6 +235,17 @@ __all__ = [
     "HumanInputForm",
     "HumanInputFormUploadFile",
     "HumanInputFormUploadToken",
+    "IMBinding",
+    "IMBindingSession",
+    "IMBindingSessionStatus",
+    "IMBindingStatus",
+    "IMInstallMode",
+    "IMMessageCardStatus",
+    "IMMessageCorrelation",
+    "IMMessageDeliveryStatus",
+    "IMProcessedCallbackEvent",
+    "IMProvider",
+    "IMScopeType",
     "IconType",
     "InstalledApp",
     "InvitationCode",

@@ -3,6 +3,7 @@ CLI command modules extracted from `commands.py`.
 """
 
 from .account import create_tenant, reset_email, reset_password
+from .contact import seed_workspace_contacts
 from .data_migrate import data_migrate, legacy_model_types
 from .data_migration import (
     export_migration_data,
@@ -86,6 +87,7 @@ __all__ = [
     "reset_email",
     "reset_encrypt_key_pair",
     "reset_password",
+    "seed_workspace_contacts",
     "restore_workflow_runs",
     "setup_datasource_oauth_client",
     "setup_system_tool_oauth_client",
