@@ -43,6 +43,8 @@
   "account.editName": "नाम संपादित करें",
   "account.editWorkspaceInfo": "कार्यक्षेत्र की जानकारी संपादित करें",
   "account.email": "ईमेल",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "हमें बताएँ कि आपने अपना खाता क्यों हटाया?",
   "account.feedbackPlaceholder": "वैकल्पिक",
   "account.feedbackTitle": "प्रतिपुष्टि",

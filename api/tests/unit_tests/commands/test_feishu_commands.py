@@ -52,6 +52,31 @@ def test_import_member_contacts_command(monkeypatch):
     assert session_context.exited
 
 
+def test_import_member_contacts_command_without_tenant_id(monkeypatch):
+    from commands import feishu as feishu_module
+    from commands.feishu import import_member_contacts
+
+    session = object()
+    session_context = FakeSessionContext(session)
+    captured: dict[str, object] = {}
+
+    class FakeMemberContactService:
+        def import_all_workspace_members(self, import_session) -> MemberContactImportResult:
+            captured["session"] = import_session
+            return MemberContactImportResult(created_count=3, updated_count=2)
+
+    monkeypatch.setattr(feishu_module.session_factory, "create_session", lambda: session_context)
+    monkeypatch.setattr(feishu_module, "MemberContactService", FakeMemberContactService)
+
+    result = CliRunner().invoke(import_member_contacts, [])
+
+    assert result.exit_code == 0
+    assert captured["session"] is session
+    assert "Imported member contacts for all tenant-account joins" in result.output
+    assert "Created: 3" in result.output
+    assert "Updated: 2" in result.output
+
+
 def test_run_feishu_hitl_listener_command(monkeypatch):
     from commands import feishu as feishu_module
     from commands.feishu import run_feishu_hitl_listener

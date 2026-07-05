@@ -43,6 +43,8 @@
   "account.editName": "Editează Nume",
   "account.editWorkspaceInfo": "Editează informațiile spațiului de lucru",
   "account.email": "Email",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Spuneți-ne de ce v-ați șters contul?",
   "account.feedbackPlaceholder": "Facultativ",
   "account.feedbackTitle": "Feedback",

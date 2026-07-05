@@ -43,6 +43,8 @@
   "account.editName": "名前を編集",
   "account.editWorkspaceInfo": "ワークスペース情報を編集",
   "account.email": "メール",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "アカウントを削除した理由を教えてください。",
   "account.feedbackPlaceholder": "任意",
   "account.feedbackTitle": "フィードバック",

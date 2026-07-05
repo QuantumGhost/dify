@@ -43,6 +43,8 @@
   "account.editName": "Редагувати ім'я",
   "account.editWorkspaceInfo": "Редагувати інформацію про робочий простір",
   "account.email": "Електронна пошта",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Розкажіть, чому ви видалили свій обліковий запис?",
   "account.feedbackPlaceholder": "Необов'язково",
   "account.feedbackTitle": "Зворотний зв'язок",

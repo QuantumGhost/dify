@@ -198,6 +198,12 @@ def _serialize_account(account) -> dict[str, Any]:
     return AccountResponse.model_validate(account, from_attributes=True).model_dump(mode="json")
 
 
+def _build_feishu_bind_page_url() -> str | None:
+    if not getattr(dify_config, "FEISHU_APP_ID", None) or not getattr(dify_config, "FEISHU_APP_SECRET", None):
+        return None
+    return f"{dify_config.CONSOLE_WEB_URL.rstrip('/')}/account/feishu-im/bind"
+
+
 class AccountIntegrateResponse(ResponseModel):
     provider: str
     created_at: int | None = None
@@ -469,7 +475,6 @@ class AccountIntegrateApi(Resource):
 
         base_url = request.url_root.rstrip("/")
         oauth_base_path = "/console/api/oauth/login"
-        bind_base_path = "/console/api/oauth/feishu-im/bind"
         providers = ["github", "google", "feishu_im"]
 
         integrate_data = []
@@ -493,7 +498,7 @@ class AccountIntegrateApi(Resource):
                         "created_at": None,
                         "is_bound": False,
                         "link": (
-                            f"{base_url}{bind_base_path}"
+                            _build_feishu_bind_page_url()
                             if provider == "feishu_im"
                             else f"{base_url}{oauth_base_path}/{provider}"
                         ),

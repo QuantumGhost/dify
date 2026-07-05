@@ -43,6 +43,8 @@
   "account.editName": "แก้ไขชื่อ",
   "account.editWorkspaceInfo": "แก้ไขข้อมูลเวิร์กสเปซ",
   "account.email": "อีเมล",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "บอกเราว่าทําไมคุณถึงลบบัญชีของคุณ",
   "account.feedbackPlaceholder": "เสริม",
   "account.feedbackTitle": "การตอบสนอง",

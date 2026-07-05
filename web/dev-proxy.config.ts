@@ -1,4 +1,23 @@
-import type { CookieRewriteOptions, DevProxyConfig } from '@langgenius/dev-proxy'
+type CookieRewriteOptions = {
+  hostPrefixCookies: Array<string | RegExp>
+  localCookieScope: 'target-origin' | 'proxy-origin'
+  csrfHeader: {
+    cookieName: string
+    headerName: string
+  }
+}
+
+type DevProxyConfig = {
+  server: {
+    host: string
+    port: number
+  }
+  routes: Array<{
+    paths: string[]
+    target: string
+    cookieRewrite: CookieRewriteOptions
+  }>
+}
 
 const DIFY_CLOUD_TARGET = 'https://cloud.dify.ai'
 const DEV_PROXY_TARGET = process.env.DEV_PROXY_TARGET || DIFY_CLOUD_TARGET

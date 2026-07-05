@@ -49,8 +49,13 @@ class OAuthCallbackQuery(BaseModel):
     error: str | None = Field(default=None, description="OAuth error code")
 
 
+class FeishuOAuthBindResponse(BaseModel):
+    authorization_url: str
+
+
 register_schema_models(console_ns, OAuthLoginQuery, OAuthCallbackQuery)
 register_response_schema_model(console_ns, RedirectResponse)
+register_response_schema_model(console_ns, FeishuOAuthBindResponse)
 
 
 def get_oauth_providers():
@@ -257,6 +262,7 @@ class FeishuOAuthBindApi(Resource):
     @login_required
     @account_initialization_required
     @with_current_user
+    @console_ns.response(200, "Success", console_ns.models[FeishuOAuthBindResponse.__name__])
     def get(self, current_user: Account):
         oauth_provider = get_feishu_oauth_provider()
         if oauth_provider is None:
@@ -264,7 +270,9 @@ class FeishuOAuthBindApi(Resource):
 
         state_service = get_feishu_binding_state_service()
         state = state_service.create_context(account_id=current_user.id)
-        return redirect(oauth_provider.get_authorization_url(state=state))
+        return FeishuOAuthBindResponse(
+            authorization_url=oauth_provider.get_authorization_url(state=state),
+        ).model_dump(mode="json"), 200
 
 
 @console_ns.route("/oauth/feishu-im/callback")

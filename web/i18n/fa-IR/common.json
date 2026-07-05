@@ -43,6 +43,8 @@
   "account.editName": "ویرایش نام",
   "account.editWorkspaceInfo": "ویرایش اطلاعات فضای کار",
   "account.email": "ایمیل",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "به ما بگویید چرا حساب خود را حذف کرده اید؟",
   "account.feedbackPlaceholder": "اختیاری",
   "account.feedbackTitle": "بازخورد",

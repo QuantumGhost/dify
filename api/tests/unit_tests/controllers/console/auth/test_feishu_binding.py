@@ -21,13 +21,11 @@ def _make_account(account_id: str = "acc-1") -> MagicMock:
     return account
 
 
-@patch("controllers.console.auth.oauth.redirect")
 @patch("controllers.console.auth.oauth.get_feishu_binding_state_service")
 @patch("controllers.console.auth.oauth.get_feishu_oauth_provider")
 def test_bind_api_redirects_to_feishu(
     mock_get_provider,
     mock_get_state_service,
-    mock_redirect,
     app: Flask,
 ):
     api = FeishuOAuthBindApi()
@@ -41,11 +39,12 @@ def test_bind_api_redirects_to_feishu(
     account = _make_account()
 
     with app.test_request_context("/oauth/feishu-im/bind"):
-        method(api, account)
+        response, status_code = method(api, account)
 
     state_service.create_context.assert_called_once_with(account_id="acc-1")
     provider.get_authorization_url.assert_called_once_with(state="binding-state")
-    mock_redirect.assert_called_once_with("https://accounts.feishu.cn/open-apis/authen/v1/authorize?state=x")
+    assert status_code == 200
+    assert response == {"authorization_url": "https://accounts.feishu.cn/open-apis/authen/v1/authorize?state=x"}
 
 
 @patch("controllers.console.auth.oauth.get_feishu_oauth_provider", return_value=None)

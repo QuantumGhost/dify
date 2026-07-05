@@ -43,6 +43,8 @@
   "account.editName": "编辑名字",
   "account.editWorkspaceInfo": "编辑工作空间信息",
   "account.email": "邮箱",
+  "account.feishuBinding": "飞书账户",
+  "account.feishuBindingTip": "绑定飞书账户后，你可以直接接收 HITL 卡片和通知。",
   "account.feedbackLabel": "请告诉我们您为什么删除账户？",
   "account.feedbackPlaceholder": "选填",
   "account.feedbackTitle": "反馈",

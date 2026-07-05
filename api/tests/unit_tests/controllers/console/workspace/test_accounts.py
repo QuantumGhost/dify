@@ -287,6 +287,25 @@ class TestAccountIntegrateApi:
         assert "data" in result
         assert len(result["data"]) == 3
 
+    def test_get_integrates_uses_direct_feishu_authorization_url(self, app: Flask):
+        api = AccountIntegrateApi()
+        method = inspect.unwrap(api.get)
+        account = make_account("acc1")
+
+        with (
+            app.test_request_context("/"),
+            patch("controllers.console.workspace.account.db.session.scalars") as scalars_mock,
+            patch(
+                "controllers.console.workspace.account._build_feishu_bind_page_url",
+                return_value="https://console.example.com/account/feishu-im/bind",
+            ),
+        ):
+            scalars_mock.return_value.all.return_value = []
+            result = method(api, account)
+
+        feishu_integrate = next(item for item in result["data"] if item["provider"] == "feishu_im")
+        assert feishu_integrate["link"] == "https://console.example.com/account/feishu-im/bind"
+
 
 class TestAccountDeleteApi:
     def test_delete_verify_success(self, app: Flask):

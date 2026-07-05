@@ -43,6 +43,8 @@
   "account.editName": "İsmi Düzenle",
   "account.editWorkspaceInfo": "Çalışma Alanı Bilgilerini Düzenle",
   "account.email": "E-posta",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Hesabınızı neden sildiğinizi bize bildirin?",
   "account.feedbackPlaceholder": "Opsiyonel",
   "account.feedbackTitle": "Geri besleme",

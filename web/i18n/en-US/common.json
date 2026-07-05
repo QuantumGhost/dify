@@ -43,6 +43,8 @@
   "account.editName": "Edit Name",
   "account.editWorkspaceInfo": "Edit Workspace Info",
   "account.email": "Email",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Tell us why you deleted your account?",
   "account.feedbackPlaceholder": "Optional",
   "account.feedbackTitle": "Feedback",

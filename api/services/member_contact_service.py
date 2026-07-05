@@ -82,6 +82,20 @@ class MemberContactService:
         session.commit()
         return MemberContactImportResult(created_count=created_count, updated_count=updated_count)
 
+    def import_all_workspace_members(self, session: Session) -> MemberContactImportResult:
+        tenant_rows = session.execute(select(TenantAccountJoin.tenant_id).distinct()).all()
+        created_count = 0
+        updated_count = 0
+
+        for (tenant_id,) in tenant_rows:
+            if not tenant_id:
+                continue
+            result = self.import_workspace_members(session, tenant_id)
+            created_count += result.created_count
+            updated_count += result.updated_count
+
+        return MemberContactImportResult(created_count=created_count, updated_count=updated_count)
+
     def list_workspace_member_bindings(
         self,
         session: Session,

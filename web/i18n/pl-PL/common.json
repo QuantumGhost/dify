@@ -43,6 +43,8 @@
   "account.editName": "Edytuj nazwę",
   "account.editWorkspaceInfo": "Edytuj informacje o przestrzeni roboczej",
   "account.email": "Email",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Powiedz nam, dlaczego usunąłeś swoje konto?",
   "account.feedbackPlaceholder": "Fakultatywny",
   "account.feedbackTitle": "Sprzężenie zwrotne",

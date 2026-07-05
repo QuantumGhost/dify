@@ -1,23 +1,22 @@
 'use client'
+import type { GetAccountIntegratesResponse } from '@dify/contracts/api/console/account/types.gen'
 import type { IItem } from '@/app/components/header/account-setting/collapse'
 import type { App } from '@/types/app'
 import { Button } from '@langgenius/dify-ui/button'
 import { Dialog, DialogContent } from '@langgenius/dify-ui/dialog'
+import { Input } from '@langgenius/dify-ui/input'
 import { toast } from '@langgenius/dify-ui/toast'
-import {
-  RiGraduationCapFill,
-} from '@remixicon/react'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppIcon from '@/app/components/base/app-icon'
-import Input from '@/app/components/base/input'
 import PremiumBadge from '@/app/components/base/premium-badge'
 import Collapse from '@/app/components/header/account-setting/collapse'
 import { IS_CE_EDITION, validPassword } from '@/config'
 import { useProviderContext } from '@/context/provider-context'
 import { userProfileQueryOptions } from '@/features/account-profile/client'
 import { systemFeaturesQueryOptions } from '@/features/system-features/client'
+import { usePathname, useRouter, useSearchParams } from '@/next/navigation'
 import { consoleQuery } from '@/service/client'
 import { updateUserProfile } from '@/service/common'
 import { normalizeAppPagination } from '@/service/use-apps'
@@ -25,6 +24,7 @@ import DeleteAccount from '../delete-account'
 
 import AvatarWithEdit from './AvatarWithEdit'
 import EmailChangeModal from './email-change-modal'
+import FeishuBindingCard from './feishu-binding-card'
 
 const titleClassName = `
   system-sm-semibold text-text-secondary
@@ -35,6 +35,9 @@ const descriptionClassName = `
 
 export default function AccountPage() {
   const { t } = useTranslation()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { data: systemFeatures } = useSuspenseQuery(systemFeaturesQueryOptions())
   const { data: appList } = useQuery(consoleQuery.apps.get.queryOptions({
     input: {
@@ -48,10 +51,18 @@ export default function AccountPage() {
   }))
   const apps = appList?.data || []
   const queryClient = useQueryClient()
+  const { data: accountIntegratesResp } = useQuery(consoleQuery.account.integrates.get.queryOptions())
   // Cache is warmed by AppContextProvider's useSuspenseQuery; this hits cache synchronously.
   const { data: userProfileResp } = useSuspenseQuery(userProfileQueryOptions())
   const userProfile = userProfileResp.profile
   const mutateUserProfile = () => queryClient.invalidateQueries({ queryKey: userProfileQueryOptions().queryKey })
+  const feishuIntegrate = useMemo(
+    () => {
+      const response = accountIntegratesResp as GetAccountIntegratesResponse | undefined
+      return response?.data.find(item => item.provider === 'feishu_im') ?? null
+    },
+    [accountIntegratesResp],
+  )
   const { isEducationAccount } = useProviderContext()
   const [editNameModalVisible, setEditNameModalVisible] = useState(false)
   const [editName, setEditName] = useState('')
@@ -65,6 +76,26 @@ export default function AccountPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showUpdateEmail, setShowUpdateEmail] = useState(false)
+
+  useEffect(() => {
+    const bindingResult = searchParams.get('feishu_im_bound')
+    const bindingError = searchParams.get('feishu_im_error')
+    if (!bindingResult && !bindingError)
+      return
+
+    if (bindingResult === 'true')
+      toast.success(t('actionMsg.modifiedSuccessfully', { ns: 'common' }))
+    else
+      toast.error(t('actionMsg.modifiedUnsuccessfully', { ns: 'common' }))
+
+    void queryClient.invalidateQueries({ queryKey: consoleQuery.account.integrates.get.queryKey() })
+
+    const nextSearchParams = new URLSearchParams(searchParams.toString())
+    nextSearchParams.delete('feishu_im_bound')
+    nextSearchParams.delete('feishu_im_error')
+    const nextQuery = nextSearchParams.toString()
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname)
+  }, [pathname, queryClient, router, searchParams, t])
 
   if (!userProfile)
     return null
@@ -138,6 +169,12 @@ export default function AccountPage() {
     }
   }
 
+  const handleBindFeishu = () => {
+    if (!feishuIntegrate?.link)
+      return
+    window.location.assign(feishuIntegrate.link)
+  }
+
   const renderAppItem = (item: IItem) => {
     const { icon, icon_background, icon_type, icon_url } = item as IItem & Pick<App, 'icon' | 'icon_background' | 'icon_type' | 'icon_url'>
     return (
@@ -168,7 +205,7 @@ export default function AccountPage() {
             {userProfile.name}
             {isEducationAccount && (
               <PremiumBadge size="s" color="blue" className="ml-1 px-2!">
-                <RiGraduationCapFill aria-hidden="true" className="mr-1 size-3" />
+                <span aria-hidden="true" className="mr-1 i-ri-graduation-cap-fill size-3" />
                 <span className="system-2xs-medium">EDU</span>
               </PremiumBadge>
             )}
@@ -182,9 +219,9 @@ export default function AccountPage() {
           <div className="flex-1 rounded-lg bg-components-input-bg-normal p-2 system-sm-regular text-components-input-text-filled">
             <span className="pl-1">{userProfile.name}</span>
           </div>
-          <div className="cursor-pointer rounded-lg bg-components-button-tertiary-bg px-3 py-2 system-sm-medium text-components-button-tertiary-text" onClick={handleEditName}>
+          <Button variant="secondary" onClick={handleEditName}>
             {t('operation.edit', { ns: 'common' })}
-          </div>
+          </Button>
         </div>
       </div>
       <div className="mb-8">
@@ -194,9 +231,9 @@ export default function AccountPage() {
             <span className="pl-1">{userProfile.email}</span>
           </div>
           {systemFeatures.enable_change_email && (
-            <div className="cursor-pointer rounded-lg bg-components-button-tertiary-bg px-3 py-2 system-sm-medium text-components-button-tertiary-text" onClick={() => setShowUpdateEmail(true)}>
+            <Button variant="secondary" onClick={() => setShowUpdateEmail(true)}>
               {t('operation.change', { ns: 'common' })}
-            </div>
+            </Button>
           )}
         </div>
       </div>
@@ -211,6 +248,7 @@ export default function AccountPage() {
           </div>
         )
       }
+      <FeishuBindingCard integrate={feishuIntegrate} onBind={handleBindFeishu} />
       <div className="mb-6 border border-divider-subtle" />
       <div className="mb-8">
         <div className={titleClassName}>{t('account.langGeniusAccount', { ns: 'common' })}</div>

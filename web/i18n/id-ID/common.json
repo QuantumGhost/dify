@@ -43,6 +43,8 @@
   "account.editName": "Edit Nama",
   "account.editWorkspaceInfo": "Edit Info Ruang Kerja",
   "account.email": "Email",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Beri tahu kami mengapa Anda menghapus akun Anda?",
   "account.feedbackPlaceholder": "Fakultatif",
   "account.feedbackTitle": "Umpan balik",

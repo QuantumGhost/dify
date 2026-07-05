@@ -10,12 +10,16 @@ from services.member_contact_service import MemberContactService
 
 
 @click.command("import-member-contacts", help="Import current workspace members as demo-scope member contacts.")
-@click.option("--tenant-id", required=True, help="Workspace tenant ID to import member contacts from.")
-def import_member_contacts(tenant_id: str) -> None:
+@click.option("--tenant-id", required=False, help="Workspace tenant ID to import member contacts from.")
+def import_member_contacts(tenant_id: str | None) -> None:
     with session_factory.create_session() as session:
-        result = MemberContactService().import_workspace_members(session, tenant_id)
+        if tenant_id:
+            result = MemberContactService().import_workspace_members(session, tenant_id)
+        else:
+            result = MemberContactService().import_all_workspace_members(session)
 
-    click.echo(click.style(f"Imported member contacts for tenant {tenant_id}", fg="green"))
+    scope = f"tenant {tenant_id}" if tenant_id else "all tenant-account joins"
+    click.echo(click.style(f"Imported member contacts for {scope}", fg="green"))
     click.echo(f"Created: {result.created_count}")
     click.echo(f"Updated: {result.updated_count}")
 

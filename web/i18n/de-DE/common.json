@@ -43,6 +43,8 @@
   "account.editName": "Namen bearbeiten",
   "account.editWorkspaceInfo": "Arbeitsbereichsinformationen bearbeiten",
   "account.email": "E-Mail",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Sagen Sie uns, warum Sie Ihr Konto gelöscht haben?",
   "account.feedbackPlaceholder": "Wahlfrei",
   "account.feedbackTitle": "Feedback",

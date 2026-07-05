@@ -43,6 +43,8 @@
   "account.editName": "Uredi ime",
   "account.editWorkspaceInfo": "Uredi informacije o delovnem prostoru",
   "account.email": "E-pošta",
+  "account.feishuBinding": "Feishu account",
+  "account.feishuBindingTip": "Bind your Feishu account to receive HITL cards and notifications.",
   "account.feedbackLabel": "Povejte nam, zakaj ste izbrisali račun?",
   "account.feedbackPlaceholder": "Neobvezno",
   "account.feedbackTitle": "Povratne informacije",
