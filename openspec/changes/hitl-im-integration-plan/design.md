@@ -53,6 +53,72 @@ demo 阶段必须增加 transitional compatibility layer：现有前端继续提
 - mapping 只作为 demo 和迁移过渡路径存在，不作为正式 v2 schema 的持久设计。
 - v2 runtime 是唯一执行目标，不能因为 demo 复用 v1 config 而回退到 v1 runtime。
 
+#### Demo transitional path for this planning slice
+
+为避免 demo 期间前后端边界继续漂移，本期将过渡路径固定为下面 5 步：
+
+1. workflow author 继续只使用现有 HumanInput v1 前端编排界面，配置 form content、inputs、actions、timeout 和当前 v1 支持的 member recipients。
+2. workflow draft / publish 继续持久化 v1 node config；demo 不新增新的前端存储 schema，也不要求前端回写 Contact/IM-specific config。
+3. workflow runtime 在 pause 创建 form 之前，先把 v1 node config 映射成 v2 runtime model：补齐 Contact recipient lookup、recipient snapshot、initiator approval snapshot，以及 IM inline fields 和 Web fallback fields 的分流结果。
+4. delivery 只消费 v2 runtime model：paragraph/select/actions 走 IM inline rendering；file/file-list 保留在同一个 form token 下，通过 Web form link 完成 fallback。
+5. callback 和 Web fallback submit 最终都只调用 `HumanInputService.submit_form_by_token(...)`；demo 不新增第二条 resume 通道，也不允许 v1 runtime 与 v2 runtime 并存执行同一个 form。
+
+这个过渡路径的收敛条件也需要提前写清楚：一旦正式 v2 Contact recipient 配置 UI 和新 node schema 可用，就应移除 v1-to-v2 compatibility mapping，而不是继续把 v1 config shape 当作长期输入契约。
+
+#### Concrete demo form sample
+
+为了让 1.3 的 demo 验证范围可执行，本期固定使用下面这类混合表单作为样例：
+
+```json
+{
+  "title": "Review customer escalation package",
+  "description": "Validate the escalation details before the workflow continues.",
+  "inputs": [
+    {
+      "type": "paragraph",
+      "variable": "review_summary",
+      "label": "Review summary",
+      "required": true
+    },
+    {
+      "type": "select",
+      "variable": "risk_level",
+      "label": "Risk level",
+      "required": true,
+      "options": [
+        { "label": "Low", "value": "low" },
+        { "label": "Medium", "value": "medium" },
+        { "label": "High", "value": "high" }
+      ]
+    },
+    {
+      "type": "file",
+      "variable": "signed_approval",
+      "label": "Signed approval screenshot",
+      "required": false
+    },
+    {
+      "type": "file-list",
+      "variable": "supporting_files",
+      "label": "Supporting evidence",
+      "required": false
+    }
+  ],
+  "actions": [
+    { "id": "approve", "label": "Approve" },
+    { "id": "request_changes", "label": "Request changes" }
+  ],
+  "timeout_minutes": 1440
+}
+```
+
+这个样例在 demo 中的预期行为如下：
+
+- IM card 内联渲染 `paragraph`、`select` 和 `actions`，用于验证 IM 内可直接填写和提交的最小闭环。
+- card 同时展示 Web form entry，用于补齐 `file` 和 `file-list`；两条路径共用同一个 form token 和同一套 snapshot / authorization 语义。
+- 如果要验证“IM 可直接提交”的 happy path，就保持 `signed_approval` 和 `supporting_files` 为 optional。
+- 如果要验证“必须走 Web fallback”的路径，就把 `signed_approval.required` 改为 `true`；此时 IM card 仍可展示上下文和可内联填写字段，但不能把缺失 upload 的 IM-only 输入视为最终有效提交。
+
 替代方案是在旧 HITL 上新增 `DeliveryMethodType.IM`。该方案会把新产品模型继续绑定到旧 delivery channel 配置，不符合“节点配置 Contact 接收者”的目标。
 
 ### 2. 引入 authoritative Workspace-scoped Contact，并保留 runtime snapshot
@@ -227,6 +293,8 @@ Provider callback 层按 provider event id 去重。Form submission 层保证 fo
 
 ## Open Questions
 
+- 截至 2026-07-05，当前 workspace/context 内没有可直接复核的外部飞书 wiki PRD 或 Figma HITL node artifact；本次 planning/doc slice 只能依据仓库内 OpenSpec 文档和当前分支已有实现上下文推进。
+- 上述外部产物一旦可访问，需要重点复核 3 个点：demo 表单文案与字段顺序、HITL node 交互稿是否假设了新的 recipient/config UI、file/file-list 的 Web fallback 文案和入口是否与本设计一致。
 - EE 跨 Workspace Contact 的最终授权和失效策略仍需确认，详见 `ee-cross-workspace-contact-question.md`。
 - 飞书互动卡片对 file/file-list 的最终体验是否只走 Web fallback，还是需要后续原生支持。
 - `process_data` 是否是 fallback/skip 状态的长期存储位置，还是只作为第一期暂存。
