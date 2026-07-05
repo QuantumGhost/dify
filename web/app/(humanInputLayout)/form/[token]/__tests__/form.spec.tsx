@@ -53,9 +53,21 @@ vi.mock('@/hooks/use-document-title', () => ({
 
 vi.mock('@/app/components/base/chat/chat/answer/human-input-content/content-item', () => ({
   __esModule: true,
-  default: ({ content, onInputChange }: { content: string, onInputChange: (name: string, value: unknown) => void }) => {
-    const isSummaryField = content.includes('summary')
-    const isAttachmentField = content.includes('attachments')
+  default: ({
+    content,
+    formInputFields,
+    onInputChange,
+  }: {
+    content: string
+    formInputFields: FormData['inputs']
+    onInputChange: (name: string, value: unknown) => void
+  }) => {
+    const fieldName = content.match(/\{\{#\$output\.([^#]+)#\}\}/)?.[1]
+    const formInputField = formInputFields.find(field => field.output_variable_name === fieldName)
+    const isSummaryField = fieldName === 'summary'
+    const isAttachmentField = fieldName === 'attachments'
+    const isParagraphField = formInputField?.type === InputVarType.paragraph
+    const isInputField = !!fieldName
 
     if (isAttachmentField && !mockContentItemState.staleAttachmentInputChange)
       mockContentItemState.staleAttachmentInputChange = onInputChange
@@ -63,6 +75,7 @@ vi.mock('@/app/components/base/chat/chat/answer/human-input-content/content-item
     return (
       <div data-testid="share-form-content-item">
         {content}
+        {isInputField && <div>{`field:${fieldName}`}</div>}
         {isSummaryField && (
           <>
             <button type="button" onClick={() => onInputChange('summary', '')}>
@@ -86,6 +99,16 @@ vi.mock('@/app/components/base/chat/chat/answer/human-input-content/content-item
               onClick={() => mockContentItemState.staleAttachmentInputChange?.('attachments', [mockContentItemState.uploadedFile])}
             >
               share-update-attachments
+            </button>
+          </>
+        )}
+        {isParagraphField && !isSummaryField && (
+          <>
+            <button type="button" onClick={() => onInputChange(fieldName!, '')}>
+              {`share-clear-${fieldName}`}
+            </button>
+            <button type="button" onClick={() => onInputChange(fieldName!, `updated ${fieldName}`)}>
+              {`share-update-${fieldName}`}
             </button>
           </>
         )}
@@ -353,6 +376,134 @@ describe('Human input share form', () => {
 
     await user.click(screen.getByRole('button', { name: 'share-update-summary' }))
     expect(approveButton).toBeEnabled()
+  })
+
+  it('should append required inputs omitted from form content and block submit until they are filled', async () => {
+    const user = userEvent.setup()
+    mockUseGetHumanInputForm.mockReturnValue({
+      data: {
+        ...formData,
+        form_content: '{{#$output.summary#}}',
+        inputs: [
+          formData.inputs[0]!,
+          {
+            ...formData.inputs[0]!,
+            output_variable_name: 'required_follow_up',
+            default: {
+              type: 'constant',
+              value: '',
+              selector: [],
+            },
+            required: true,
+          },
+        ],
+      } as FormData,
+      isLoading: false,
+      error: null,
+    })
+
+    render(<FormContent />)
+
+    const approveButton = screen.getByRole('button', { name: 'Approve' })
+    expect(screen.getByText('field:required_follow_up')).toBeInTheDocument()
+    expect(approveButton).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'share-update-required_follow_up' }))
+    expect(approveButton).toBeEnabled()
+  })
+
+  it('should preserve inline placeholder order and append unreferenced required inputs after all inline content', () => {
+    mockUseGetHumanInputForm.mockReturnValue({
+      data: {
+        ...formData,
+        form_content: 'Intro {{#$output.summary#}} middle {{#$output.attachments#}} outro',
+        inputs: [
+          {
+            ...formData.inputs[0]!,
+            output_variable_name: 'required_follow_up',
+            default: {
+              type: 'constant',
+              value: '',
+              selector: [],
+            },
+            required: true,
+          },
+          formData.inputs[1]!,
+          formData.inputs[0]!,
+        ],
+      } as FormData,
+      isLoading: false,
+      error: null,
+    })
+
+    render(<FormContent />)
+
+    expect(screen.getAllByTestId('share-form-content-item').map(item => item.textContent)).toEqual([
+      'Intro ',
+      '{{#$output.summary#}}field:summaryshare-clear-summaryshare-update-summary',
+      ' middle ',
+      '{{#$output.attachments#}}field:attachmentsshare-uploading-attachmentsshare-update-attachments',
+      ' outro',
+      '{{#$output.required_follow_up#}}field:required_follow_upshare-clear-required_follow_upshare-update-required_follow_up',
+    ])
+  })
+
+  it('should not append optional inputs omitted from form content or let them block submit', async () => {
+    mockUseGetHumanInputForm.mockReturnValue({
+      data: {
+        ...formData,
+        form_content: '{{#$output.summary#}}',
+        inputs: [
+          formData.inputs[0]!,
+          {
+            ...formData.inputs[0]!,
+            output_variable_name: 'optional_follow_up',
+            default: {
+              type: 'constant',
+              value: '',
+              selector: [],
+            },
+            required: false,
+          },
+        ],
+      } as FormData,
+      isLoading: false,
+      error: null,
+    })
+
+    render(<FormContent />)
+
+    expect(screen.queryByText('field:optional_follow_up')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+  })
+
+  it('should not block submit for optional inputs rendered in form content when they are empty', () => {
+    mockUseGetHumanInputForm.mockReturnValue({
+      data: {
+        ...formData,
+        form_content: '{{#$output.summary#}} {{#$output.optional_follow_up#}}',
+        inputs: [
+          formData.inputs[0]!,
+          {
+            ...formData.inputs[0]!,
+            output_variable_name: 'optional_follow_up',
+            default: {
+              type: 'constant',
+              value: '',
+              selector: [],
+            },
+            required: false,
+          },
+        ],
+      } as FormData,
+      isLoading: false,
+      error: null,
+    })
+
+    render(<FormContent />)
+
+    expect(screen.getByText('field:optional_follow_up')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
   })
 
   it('should hide branding when remove_webapp_brand is enabled', () => {

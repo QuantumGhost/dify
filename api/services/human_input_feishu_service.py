@@ -25,7 +25,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from configs import dify_config
 from core.workflow.human_input_policy import resolve_variable_select_input_options
-from core.workflow.nodes.human_input.callback import DifyHITLCallback
 from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
     FileListInputConfig,
@@ -49,6 +48,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 OUTPUT_PLACEHOLDER_PATTERN = re.compile(r"{{#\$output\.([^#{}]+)#}}")
 TEMPLATE_VARIABLE_PATTERN = re.compile(r"{{#([^#{}]+)#}}")
+FILE_PLACEHOLDER_PROMPT = "[file]"
+FILE_LIST_PLACEHOLDER_PROMPT = "[files]"
 
 
 @dataclass(frozen=True)
@@ -707,6 +708,7 @@ class HumanInputFeishuService:
         }
 
     def _build_link_fallback_card(self, *, form_link: str, definition: FormDefinition) -> dict[str, Any]:
+        content = self._render_form_content_with_placeholder_prompts(definition)
         return {
             "schema": "2.0",
             "header": {
@@ -720,7 +722,7 @@ class HumanInputFeishuService:
                 "elements": [
                     {
                         "tag": "markdown",
-                        "content": definition.rendered_content or definition.form_content,
+                        "content": content,
                     },
                     {
                         "tag": "button",
@@ -743,6 +745,19 @@ class HumanInputFeishuService:
             },
         }
 
+    @classmethod
+    def _render_form_content_with_placeholder_prompts(cls, definition: FormDefinition) -> str:
+        rendered_content = definition.rendered_content or definition.form_content
+        for form_input in definition.inputs:
+            prompt = cls._get_output_placeholder_prompt(form_input)
+            if prompt is None:
+                continue
+
+            placeholder = "{{#$output." + form_input.output_variable_name + "#}}"
+            rendered_content = rendered_content.replace(placeholder, prompt)
+
+        return rendered_content
+
     def _result_response(self, record) -> P2CardActionTriggerResponse:
         card_data = self._build_result_card_data(record)
         return P2CardActionTriggerResponse(
@@ -760,11 +775,9 @@ class HumanInputFeishuService:
 
     def _build_result_card_data(self, record) -> dict[str, Any]:
         definition = record.definition
-        rendered_content = DifyHITLCallback.render_form_content_with_outputs(
-            definition.rendered_content or definition.form_content,
-            record.submitted_data or {},
-            list((record.submitted_data or {}).keys()),
-            definition.inputs,
+        rendered_content = self._render_result_form_content_with_outputs(
+            definition=definition,
+            submitted_data=record.submitted_data or {},
         )
         elements: list[dict[str, Any]] = [
             {
@@ -785,7 +798,13 @@ class HumanInputFeishuService:
             )
 
         for key, value in (record.submitted_data or {}).items():
-            rendered_value = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+            rendered_value = self._render_result_output_value(
+                value=value,
+                form_input=next(
+                    (form_input for form_input in definition.inputs if form_input.output_variable_name == key),
+                    None,
+                ),
+            )
             elements.append(
                 {
                     "tag": "markdown",
@@ -806,6 +825,50 @@ class HumanInputFeishuService:
                 "elements": elements,
             },
         }
+
+    def _render_result_form_content_with_outputs(
+        self,
+        *,
+        definition: FormDefinition,
+        submitted_data: Mapping[str, Any],
+    ) -> str:
+        rendered_content = definition.rendered_content or definition.form_content
+        for form_input in definition.inputs:
+            field_name = form_input.output_variable_name
+            placeholder = "{{#$output." + field_name + "#}}"
+            replacement = self._render_result_output_value(
+                value=submitted_data.get(field_name),
+                form_input=form_input,
+            )
+            rendered_content = rendered_content.replace(placeholder, replacement)
+        return rendered_content
+
+    @staticmethod
+    def _get_output_placeholder_prompt(form_input: FormInputConfig | None) -> str | None:
+        if isinstance(form_input, FileInputConfig):
+            return FILE_PLACEHOLDER_PROMPT
+
+        if isinstance(form_input, FileListInputConfig):
+            return FILE_LIST_PLACEHOLDER_PROMPT
+
+        return None
+
+    @classmethod
+    def _render_result_output_value(cls, *, value: Any, form_input: FormInputConfig | None) -> str:
+        if value is None:
+            return ""
+
+        prompt = cls._get_output_placeholder_prompt(form_input)
+        if prompt is not None:
+            return prompt
+
+        if isinstance(form_input, ParagraphInputConfig | SelectInputConfig):
+            return str(value)
+
+        if isinstance(value, dict | list):
+            return json.dumps(value, ensure_ascii=False)
+
+        return str(value)
 
     def _sync_completed_delivery_cards(
         self,

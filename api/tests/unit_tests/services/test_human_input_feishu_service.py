@@ -9,6 +9,7 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTr
 
 from core.workflow.nodes.human_input.entities import (
     FileInputConfig,
+    FileListInputConfig,
     FormDefinition,
     ParagraphInputConfig,
     SelectInputConfig,
@@ -318,6 +319,50 @@ def test_render_form_card_falls_back_to_link_mode_for_unsupported_inputs():
     assert result.content["body"]["elements"][1]["tag"] == "button"
 
 
+def test_render_form_card_replaces_file_list_output_placeholders_with_fixed_prompt_in_link_mode():
+    service = HumanInputFeishuService()
+    definition = FormDefinition(
+        form_content="Documents: {{#$output.documents#}}",
+        rendered_content="Documents: {{#$output.documents#}}",
+        expiration_time=datetime(2026, 7, 5, tzinfo=UTC),
+        inputs=[FileListInputConfig(output_variable_name="documents", number_limits=2)],
+        user_actions=[UserActionConfig(id="approve", title="Approve")],
+        node_title="Approval",
+    )
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=definition,
+    )
+
+    assert result.mode.value == "link_fallback"
+    assert result.content["body"]["elements"][0]["content"] == "Documents: [files]"
+
+
+def test_render_form_card_replaces_file_output_placeholders_with_fixed_prompt_in_link_mode():
+    service = HumanInputFeishuService()
+    definition = FormDefinition(
+        form_content="Document: {{#$output.document#}}",
+        rendered_content="Document: {{#$output.document#}}",
+        expiration_time=datetime(2026, 7, 5, tzinfo=UTC),
+        inputs=[FileInputConfig(output_variable_name="document")],
+        user_actions=[UserActionConfig(id="approve", title="Approve")],
+        node_title="Approval",
+    )
+
+    result = service.render_form_card(
+        form_id="form-1",
+        recipient_id="recipient-1",
+        form_link="https://example.com/form/token",
+        definition=definition,
+    )
+
+    assert result.mode.value == "link_fallback"
+    assert result.content["body"]["elements"][0]["content"] == "Document: [file]"
+
+
 def test_handle_card_action_submits_form_and_returns_result_card():
     delivery = SimpleNamespace(
         recipient_id="recipient-1",
@@ -417,6 +462,126 @@ def test_handle_card_action_replaces_output_placeholders_with_submitted_values_i
     assert response.card is not None
     assert response.card.type == "raw"
     assert response.card.data["body"]["elements"][0]["content"] == "Review: Ship it\nPriority: P0"
+
+
+def test_handle_card_action_replaces_file_list_output_placeholders_with_fixed_prompt_in_result_card():
+    delivery = SimpleNamespace(
+        recipient_id="recipient-1",
+        account_id="account-1",
+        status=HumanInputFeishuDeliveryStatus.SENT,
+    )
+    recipient = SimpleNamespace(access_token="token-1")
+    definition = FormDefinition(
+        form_content="Documents: {{#$output.documents#}}",
+        rendered_content="Documents: {{#$output.documents#}}",
+        expiration_time=datetime(2026, 7, 5, tzinfo=UTC),
+        inputs=[FileListInputConfig(output_variable_name="documents", number_limits=2)],
+        user_actions=[UserActionConfig(id="approve", title="Approve")],
+        node_title="Approval",
+    )
+    initial_record = SimpleNamespace(
+        definition=definition,
+        submitted=False,
+    )
+    submitted_record = SimpleNamespace(
+        definition=definition,
+        submitted=True,
+        selected_action_id="approve",
+        submitted_data={
+            "documents": [
+                {"filename": "a.pdf", "type": "document"},
+                {"filename": "b.pdf", "type": "document"},
+            ],
+        },
+    )
+    repository = MagicMock()
+    repository.get_by_token.side_effect = [initial_record, submitted_record]
+    human_input_service = MagicMock()
+    human_input_service._form_repository = repository
+
+    def session_factory() -> _FakeSession:
+        return _FakeSession(delivery, recipient)
+
+    service = HumanInputFeishuService(session_factory=session_factory, human_input_service=human_input_service)
+    payload = P2CardActionTrigger(
+        {
+            "event": {
+                "operator": {"open_id": "ou_123"},
+                "action": {
+                    "value": {"form_id": "form-1", "action_id": "approve"},
+                    "form_value": {
+                        "documents": [
+                            {"filename": "a.pdf", "type": "document"},
+                            {"filename": "b.pdf", "type": "document"},
+                        ],
+                    },
+                },
+            }
+        }
+    )
+
+    response = service.handle_card_action(payload)
+
+    assert response.card is not None
+    assert response.card.type == "raw"
+    assert response.card.data["body"]["elements"][0]["content"] == "Documents: [files]"
+
+
+def test_handle_card_action_replaces_file_output_placeholders_with_fixed_prompt_in_result_card():
+    delivery = SimpleNamespace(
+        recipient_id="recipient-1",
+        account_id="account-1",
+        status=HumanInputFeishuDeliveryStatus.SENT,
+    )
+    recipient = SimpleNamespace(access_token="token-1")
+    definition = FormDefinition(
+        form_content="Document: {{#$output.document#}}",
+        rendered_content="Document: {{#$output.document#}}",
+        expiration_time=datetime(2026, 7, 5, tzinfo=UTC),
+        inputs=[FileInputConfig(output_variable_name="document")],
+        user_actions=[UserActionConfig(id="approve", title="Approve")],
+        node_title="Approval",
+    )
+    initial_record = SimpleNamespace(
+        definition=definition,
+        submitted=False,
+    )
+    submitted_record = SimpleNamespace(
+        definition=definition,
+        submitted=True,
+        selected_action_id="approve",
+        submitted_data={
+            "document": {"filename": "a.pdf", "type": "document"},
+        },
+    )
+    repository = MagicMock()
+    repository.get_by_token.side_effect = [initial_record, submitted_record]
+    human_input_service = MagicMock()
+    human_input_service._form_repository = repository
+
+    def session_factory() -> _FakeSession:
+        return _FakeSession(delivery, recipient)
+
+    service = HumanInputFeishuService(session_factory=session_factory, human_input_service=human_input_service)
+    payload = P2CardActionTrigger(
+        {
+            "event": {
+                "operator": {"open_id": "ou_123"},
+                "action": {
+                    "value": {"form_id": "form-1", "action_id": "approve"},
+                    "form_value": {
+                        "document": {"filename": "a.pdf", "type": "document"},
+                    },
+                },
+            }
+        }
+    )
+
+    response = service.handle_card_action(payload)
+
+    assert response.card is not None
+    assert response.card.type == "raw"
+    assert response.card.data["body"]["elements"][0]["content"] == "Document: [file]"
 
 
 def test_handle_card_action_updates_other_delivery_cards_and_marks_all_deliveries_completed():

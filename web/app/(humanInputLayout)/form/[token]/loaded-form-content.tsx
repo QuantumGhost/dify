@@ -20,6 +20,10 @@ type LoadedFormContentProps = {
   replaceWebappLogo?: string | null
 }
 
+type ShareFormInput = FormData['inputs'][number] & {
+  required?: boolean
+}
+
 const LoadedFormContent = ({
   formData,
   isSubmitting,
@@ -27,15 +31,25 @@ const LoadedFormContent = ({
   removeWebappBrand,
   replaceWebappLogo,
 }: LoadedFormContentProps) => {
-  const renderedFormInputs = getRenderedFormInputs(formData.inputs, formData.form_content)
+  const placeholderRenderedFormInputs = getRenderedFormInputs(formData.inputs, formData.form_content) as ShareFormInput[]
+  const renderedInputNames = new Set(placeholderRenderedFormInputs.map(input => input.output_variable_name))
+  const unreferencedRequiredInputs = (formData.inputs as ShareFormInput[]).filter(input => (
+    input.required === true && !renderedInputNames.has(input.output_variable_name)
+  ))
+  const renderedFormInputs = [...placeholderRenderedFormInputs, ...unreferencedRequiredInputs]
+  const requiredRenderedFormInputs = renderedFormInputs.filter(input => input.required !== false)
   const [inputs, setInputs] = useState<Record<string, HumanInputFieldValue>>(() =>
     initializeInputs(renderedFormInputs, formData.resolved_default_values),
   )
 
   const contentList = useMemo(() => {
     const contentCounts = new Map<string, number>()
+    const renderedContent = [
+      ...splitByOutputVar(formData.form_content),
+      ...unreferencedRequiredInputs.map(input => `{{#$output.${input.output_variable_name}#}}`),
+    ]
 
-    return splitByOutputVar(formData.form_content).map((content) => {
+    return renderedContent.map((content) => {
       const occurrence = (contentCounts.get(content) || 0) + 1
       contentCounts.set(content, occurrence)
 
@@ -44,7 +58,7 @@ const LoadedFormContent = ({
         content,
       }
     })
-  }, [formData.form_content])
+  }, [formData.form_content, unreferencedRequiredInputs])
 
   const handleInputsChange = (name: string, value: HumanInputFieldValue) => {
     setInputs(prevInputs => produce(prevInputs, (draft) => {
@@ -56,7 +70,7 @@ const LoadedFormContent = ({
     onSubmit(inputs, actionID, formData.inputs)
   }
 
-  const isActionDisabled = isSubmitting || hasInvalidRequiredHumanInput(renderedFormInputs, inputs)
+  const isActionDisabled = isSubmitting || hasInvalidRequiredHumanInput(requiredRenderedFormInputs, inputs)
   const site = formData.site.site
 
   return (
