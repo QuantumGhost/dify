@@ -174,6 +174,8 @@ class RecipientType(StrEnum):
 class EmailMemberRecipientPayload(BaseModel):
     TYPE: Literal[RecipientType.EMAIL_MEMBER] = RecipientType.EMAIL_MEMBER
     user_id: str
+    contact_id: str | None = None
+    name: str | None = None
 
     # The `email` field here is only used for mail sending.
     email: str

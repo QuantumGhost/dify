@@ -21,7 +21,6 @@ from core.workflow.nodes.human_input.entities import FormDefinition, HumanInputN
 from core.workflow.nodes.human_input.enums import HumanInputFormKind, HumanInputFormStatus
 from libs.datetime_utils import naive_utc_now
 from libs.uuid_utils import uuidv7
-from models.account import Account, TenantAccountJoin
 from models.human_input import (
     BackstageRecipientPayload,
     ConsoleDeliveryPayload,
@@ -35,18 +34,15 @@ from models.human_input import (
     RecipientType,
     StandaloneWebAppRecipientPayload,
 )
+from models.human_input_feishu import HumanInputFeishuDelivery, HumanInputFeishuDeliveryStatus
+from models.member_contact import MemberContactBinding
+from services.member_contact_service import MemberContactService
 
 
 @dataclasses.dataclass(frozen=True)
 class _DeliveryAndRecipients:
     delivery: HumanInputDelivery
     recipients: Sequence[HumanInputFormRecipient]
-
-
-@dataclasses.dataclass(frozen=True)
-class _WorkspaceMemberInfo:
-    user_id: str
-    email: str
 
 
 class FormNotFoundError(Exception):
@@ -356,7 +352,7 @@ class HumanInputFormRepositoryImpl:
         *,
         form_id: str,
         delivery_id: str,
-        members: Sequence[_WorkspaceMemberInfo],
+        members: Sequence[MemberContactBinding],
         external_emails: Sequence[str],
     ) -> list[HumanInputFormRecipient]:
         recipient_models: list[HumanInputFormRecipient] = []
@@ -368,7 +364,12 @@ class HumanInputFormRepositoryImpl:
             if member.email in seen_emails:
                 continue
             seen_emails.add(member.email)
-            payload = EmailMemberRecipientPayload(user_id=member.user_id, email=member.email)
+            payload = EmailMemberRecipientPayload(
+                user_id=member.account_id,
+                contact_id=member.contact_id,
+                name=member.name,
+                email=member.email,
+            )
             recipient_models.append(
                 HumanInputFormRecipient.new(
                     form_id=form_id,
@@ -396,33 +397,19 @@ class HumanInputFormRepositoryImpl:
     def _query_all_workspace_members(
         self,
         session: Session,
-    ) -> list[_WorkspaceMemberInfo]:
-        stmt = (
-            select(Account.id, Account.email)
-            .join(TenantAccountJoin, TenantAccountJoin.account_id == Account.id)
-            .where(TenantAccountJoin.tenant_id == self._tenant_id)
-        )
-        rows = session.execute(stmt).all()
-        return [_WorkspaceMemberInfo(user_id=account_id, email=email) for account_id, email in rows]
+    ) -> list[MemberContactBinding]:
+        return MemberContactService().list_workspace_member_bindings(session, tenant_id=self._tenant_id)
 
     def _query_workspace_members_by_ids(
         self,
         session: Session,
         restrict_to_user_ids: Sequence[str],
-    ) -> list[_WorkspaceMemberInfo]:
-        unique_ids = {user_id for user_id in restrict_to_user_ids if user_id}
-        if not unique_ids:
-            return []
-
-        stmt = (
-            select(Account.id, Account.email)
-            .join(TenantAccountJoin, TenantAccountJoin.account_id == Account.id)
-            .where(TenantAccountJoin.tenant_id == self._tenant_id)
+    ) -> list[MemberContactBinding]:
+        return MemberContactService().list_workspace_member_bindings(
+            session,
+            tenant_id=self._tenant_id,
+            account_ids=restrict_to_user_ids,
         )
-        stmt = stmt.where(Account.id.in_(unique_ids))
-
-        rows = session.execute(stmt).all()
-        return [_WorkspaceMemberInfo(user_id=account_id, email=email) for account_id, email in rows]
 
     def _should_create_console_recipient(
         self,
@@ -630,6 +617,17 @@ class HumanInputFormSubmissionRepository:
             form_model.submission_user_id = submission_user_id
             form_model.submission_end_user_id = submission_end_user_id
             form_model.completed_by_recipient_id = recipient_id
+
+            if recipient_id is not None:
+                feishu_delivery = session.scalar(
+                    select(HumanInputFeishuDelivery).where(
+                        HumanInputFeishuDelivery.form_id == form_id,
+                        HumanInputFeishuDelivery.recipient_id == recipient_id,
+                    )
+                )
+                if feishu_delivery is not None:
+                    feishu_delivery.status = HumanInputFeishuDeliveryStatus.COMPLETED
+                    feishu_delivery.completed_at = form_model.submitted_at
 
             session.add(form_model)
             session.flush()

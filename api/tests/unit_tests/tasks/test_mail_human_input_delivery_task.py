@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -121,6 +122,31 @@ def test_dispatch_human_input_email_task_replaces_body_variables(monkeypatch: py
     )
 
     assert mail.sent[0]["html"] == "<p>Body OK</p>"
+
+
+def test_dispatch_human_input_email_task_dispatches_feishu_notifications(monkeypatch: pytest.MonkeyPatch):
+    mail = _DummyMail()
+    form = SimpleNamespace(id="form-1", tenant_id="tenant-1", workflow_run_id=None)
+    feishu_service = MagicMock()
+
+    monkeypatch.setattr(task_module, "mail", mail)
+    monkeypatch.setattr(
+        task_module.FeatureService,
+        "get_features",
+        lambda _tenant_id, **_kwargs: SimpleNamespace(human_input_email_delivery_enabled=True),
+    )
+    monkeypatch.setattr(task_module, "_load_email_jobs", lambda _session, _form: [_build_job(recipient_count=1)])
+    monkeypatch.setattr(task_module, "_load_variable_pool", lambda _workflow_run_id: None)
+    monkeypatch.setattr(task_module, "HumanInputFeishuService", MagicMock(return_value=feishu_service))
+
+    task_module.dispatch_human_input_email_task(
+        form_id="form-1",
+        node_title="Approve",
+        session_factory=lambda: _DummySession(form),
+    )
+
+    assert len(mail.sent) == 1
+    feishu_service.dispatch_form_notifications.assert_called_once()
 
 
 @pytest.mark.parametrize("line_break", ["\r\n", "\r", "\n"])

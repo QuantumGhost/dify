@@ -24,6 +24,7 @@ from models.human_input import (
 )
 from repositories.factory import DifyAPIRepositoryFactory
 from services.feature_service import FeatureService
+from services.human_input_feishu_service import HumanInputFeishuService
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,15 @@ def dispatch_human_input_email_task(form_id: str, node_title: str | None = None,
                     to=recipient.email,
                     subject=subject,
                     html=body,
+                )
+
+        with _open_session(session_factory) as session:
+            form = session.get(HumanInputForm, form_id)
+            if form is not None:
+                HumanInputFeishuService().dispatch_form_notifications(
+                    session=session,
+                    form=form,
+                    variable_pool=variable_pool,
                 )
 
         end_at = time.perf_counter()
