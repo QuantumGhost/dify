@@ -1,6 +1,6 @@
 ## 1. Demo Scope And Provider Readiness
 
-- [ ] 1.1 准备飞书企业自建应用 credentials、signing/encrypt config、bot token、callback URL 和测试群/用户。
+- [x] 1.1 准备飞书企业自建应用 credentials、long connection bot identity 和测试群/用户；signing/encrypt config 与 callback URL 不作为 long connection demo 前置。
 - [x] 1.2 定义 demo transitional path：复用现有前端 HumanInput v1 编排界面，前端提交 v1 node config，后端/runtime 映射到 HumanInput v2 runtime model。
 - [x] 1.3 定义 demo 表单样例，覆盖 paragraph、select、file、file-list 和 actions；file/file-list 允许走 Web form fallback。
 - [x] 1.4 复核飞书 wiki PRD 和 Figma HITL 节点；如仍不可访问，记录缺失项并继续按当前 spec 实现。

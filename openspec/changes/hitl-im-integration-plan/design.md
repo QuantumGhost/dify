@@ -201,6 +201,7 @@ callback 授权不能只看 Account membership，必须确认 callback provider 
 - EE：tenant override self-built > deployment global self-built；第一期可以只实现 deployment global，但 schema/service 预留 override。
 - Cloud：Slack 使用 ISV install；钉钉使用 tenant self-built。两者无需同一 tenant 同时启用。
 - Demo：飞书使用 self-built app config，且 phase-1 demo 要求 long connection 模式，不走 webhook 模式。
+- 因为 demo 明确使用 long connection，而不是 webhook，所以 signing token / encrypt key / callback URL 不是 demo 闭环的必需前置；它们只在 webhook-compatible path 下才需要补齐。
 
 ### 5. HITL delivery 以 Contact recipient 为中心
 
