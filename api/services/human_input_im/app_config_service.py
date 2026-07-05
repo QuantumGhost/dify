@@ -116,6 +116,13 @@ class _TenantSelfBuiltLookupResult:
     unavailable_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class _AppInstallationLookupResult:
+    status: _TenantConfigLookupStatus
+    config: IMAppInstallation | None = None
+    unavailable_reason: str | None = None
+
+
 def resolve_im_app_context(*, provider: IMProvider, tenant_id: str) -> IMAppContext:
     """Resolve the runtime IM app context for one provider and workspace.
 
@@ -163,31 +170,25 @@ def resolve_im_app_context(*, provider: IMProvider, tenant_id: str) -> IMAppCont
         )
 
     if provider == IMProvider.SLACK:
+        if runtime_edition == _IMRuntimeEdition.CLOUD:
+            return _resolve_slack_installation_app_context(tenant_id=tenant_id)
         return _build_unsupported_context(
             provider=provider,
             install_mode=IMInstallMode.ISV,
             scope_type=IMScopeType.TENANT,
             scope_id=tenant_id,
-            errors=[
-                (
-                    "provider slack reserves cloud tenant-scoped isv lifecycle in the phase-1 resolver, "
-                    "but the implementation is not wired yet"
-                )
-            ],
+            errors=["provider slack is only supported for cloud tenant-scoped isv resolution in phase-1"],
         )
 
     if provider == IMProvider.DINGTALK:
+        if runtime_edition == _IMRuntimeEdition.CLOUD:
+            return _resolve_dingtalk_tenant_self_built_app_context(tenant_id=tenant_id)
         return _build_unsupported_context(
             provider=provider,
             install_mode=IMInstallMode.SELF_BUILT,
             scope_type=IMScopeType.TENANT,
             scope_id=tenant_id,
-            errors=[
-                (
-                    "provider dingtalk reserves cloud tenant-scoped self-built lifecycle in the phase-1 resolver, "
-                    "but the implementation is not wired yet"
-                )
-            ],
+            errors=["provider dingtalk is only supported for cloud tenant-scoped self-built resolution in phase-1"],
         )
 
     return _build_unsupported_context(
@@ -280,6 +281,89 @@ def _resolve_feishu_tenant_override_app_context(*, tenant_id: str) -> IMAppConte
     )
 
 
+def _resolve_dingtalk_tenant_self_built_app_context(*, tenant_id: str) -> IMAppContext:
+    lookup = _lookup_tenant_self_built_config(
+        tenant_id=tenant_id,
+        provider=IMProvider.DINGTALK,
+    )
+    if lookup.status != _TenantConfigLookupStatus.FOUND or lookup.config is None:
+        return IMAppContext(
+            provider=IMProvider.DINGTALK,
+            install_mode=IMInstallMode.SELF_BUILT,
+            scope_type=IMScopeType.TENANT,
+            scope_id=tenant_id,
+            status=IMAppConfigStatus.MISSING,
+            token_status=IMTokenStatus.NOT_APPLICABLE,
+            install_status=IMInstallStatus.NOT_APPLICABLE,
+            errors=[_describe_lookup_failure("tenant self-built config", lookup)],
+        )
+
+    config = lookup.config
+    snapshot = _resolve_self_built_app_config(
+        app_id=_normalize_config_value(config.app_id),
+        app_secret=_decrypt_optional_secret(tenant_id=tenant_id, value=config.encrypted_app_secret),
+        verification_token=None,
+        encrypt_key=None,
+        fields=(
+            _SelfBuiltCredentialField(config_key="tenant app_id", value=_normalize_config_value(config.app_id)),
+            _SelfBuiltCredentialField(
+                config_key="tenant app_secret",
+                value=_decrypt_optional_secret(tenant_id=tenant_id, value=config.encrypted_app_secret),
+            ),
+        ),
+        validation=_SelfBuiltProviderValidation(event_mode=None, errors=[]),
+    )
+    return IMAppContext(
+        provider=IMProvider.DINGTALK,
+        install_mode=IMInstallMode.SELF_BUILT,
+        scope_type=IMScopeType.TENANT,
+        scope_id=tenant_id,
+        status=_resolve_app_config_status(snapshot.errors),
+        token_status=IMTokenStatus.NOT_APPLICABLE,
+        install_status=IMInstallStatus.NOT_APPLICABLE,
+        app_id=snapshot.app_id,
+        app_secret=snapshot.app_secret,
+        app_secret_configured=snapshot.app_secret_configured,
+        provider_workspace_id=config.provider_workspace_id,
+        errors=snapshot.errors,
+    )
+
+
+def _resolve_slack_installation_app_context(*, tenant_id: str) -> IMAppContext:
+    lookup = _lookup_app_installation(
+        tenant_id=tenant_id,
+        provider=IMProvider.SLACK,
+        install_mode=IMInstallMode.ISV,
+    )
+    if lookup.status != _TenantConfigLookupStatus.FOUND or lookup.config is None:
+        return IMAppContext(
+            provider=IMProvider.SLACK,
+            install_mode=IMInstallMode.ISV,
+            scope_type=IMScopeType.TENANT,
+            scope_id=tenant_id,
+            status=IMAppConfigStatus.MISSING,
+            token_status=IMTokenStatus.UNKNOWN,
+            install_status=IMInstallStatus.PENDING,
+            errors=[_describe_lookup_failure("app installation", lookup)],
+        )
+
+    installation = lookup.config
+    token_status = resolve_token_status_for_install(installation)
+    return IMAppContext(
+        provider=IMProvider.SLACK,
+        install_mode=IMInstallMode.ISV,
+        scope_type=IMScopeType.TENANT,
+        scope_id=tenant_id,
+        status=_resolve_install_context_status(installation.install_status, token_status),
+        token_status=token_status,
+        install_status=installation.install_status,
+        provider_workspace_id=installation.provider_workspace_id,
+        access_token_expires_at=installation.access_token_expires_at,
+        token_refreshed_at=installation.token_refreshed_at,
+        errors=_build_install_context_errors(installation.install_status, token_status),
+    )
+
+
 def _resolve_feishu_self_built_app_config() -> _SelfBuiltAppConfigSnapshot:
     """Resolve deployment-global Feishu self-built credentials and demo constraints."""
 
@@ -361,6 +445,42 @@ def _lookup_tenant_self_built_config(
     return _TenantSelfBuiltLookupResult(status=_TenantConfigLookupStatus.FOUND, config=config)
 
 
+def _lookup_app_installation(
+    *,
+    tenant_id: str,
+    provider: IMProvider,
+    install_mode: IMInstallMode,
+) -> _AppInstallationLookupResult:
+    if not has_app_context():
+        return _AppInstallationLookupResult(
+            status=_TenantConfigLookupStatus.STORE_UNAVAILABLE,
+            unavailable_reason="flask_app_context_unavailable",
+        )
+
+    app = current_app._get_current_object()
+    if app not in db._app_engines:
+        return _AppInstallationLookupResult(
+            status=_TenantConfigLookupStatus.STORE_UNAVAILABLE,
+            unavailable_reason="sqlalchemy_extension_unbound",
+        )
+
+    with Session(db.engine, expire_on_commit=False) as session:
+        stmt = (
+            select(IMAppInstallation)
+            .where(
+                IMAppInstallation.tenant_id == tenant_id,
+                IMAppInstallation.provider == provider,
+                IMAppInstallation.install_mode == install_mode,
+            )
+            .limit(1)
+        )
+        config = session.execute(stmt).scalar_one_or_none()
+
+    if config is None:
+        return _AppInstallationLookupResult(status=_TenantConfigLookupStatus.NOT_FOUND)
+    return _AppInstallationLookupResult(status=_TenantConfigLookupStatus.FOUND, config=config)
+
+
 def _decrypt_optional_secret(*, tenant_id: str, value: str | None) -> str | None:
     if value is None:
         return None
@@ -421,6 +541,44 @@ def resolve_token_status_for_install(config: IMAppInstallation) -> IMTokenStatus
     if config.access_token_expires_at <= now + timedelta(minutes=10):
         return IMTokenStatus.EXPIRING
     return IMTokenStatus.VALID
+
+
+def _resolve_install_context_status(
+    install_status: IMInstallStatus,
+    token_status: IMTokenStatus,
+) -> IMAppConfigStatus:
+    if install_status != IMInstallStatus.INSTALLED:
+        return IMAppConfigStatus.MISSING
+    if token_status in {IMTokenStatus.REFRESH_FAILED, IMTokenStatus.EXPIRED}:
+        return IMAppConfigStatus.INVALID
+    if token_status == IMTokenStatus.UNKNOWN:
+        return IMAppConfigStatus.MISSING
+    return IMAppConfigStatus.CONFIGURED
+
+
+def _build_install_context_errors(
+    install_status: IMInstallStatus,
+    token_status: IMTokenStatus,
+) -> list[str]:
+    if install_status == IMInstallStatus.UNINSTALLED:
+        return ["app installation is uninstalled"]
+    if install_status == IMInstallStatus.PENDING:
+        return ["app installation is pending"]
+    if token_status == IMTokenStatus.REFRESH_FAILED:
+        return ["app installation token refresh failed"]
+    if token_status == IMTokenStatus.EXPIRED:
+        return ["app installation access token is expired"]
+    if token_status == IMTokenStatus.UNKNOWN:
+        return ["app installation is missing token state"]
+    return []
+
+
+def _describe_lookup_failure(label: str, lookup: _TenantSelfBuiltLookupResult | _AppInstallationLookupResult) -> str:
+    if lookup.status == _TenantConfigLookupStatus.NOT_FOUND:
+        return f"missing {label}"
+    if lookup.unavailable_reason:
+        return f"{label} store unavailable: {lookup.unavailable_reason}"
+    return f"{label} store unavailable"
 
 
 def _resolve_app_config_status(errors: list[str]) -> IMAppConfigStatus:

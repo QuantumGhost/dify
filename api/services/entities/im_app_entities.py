@@ -62,6 +62,57 @@ class UpsertIMSelfBuiltTenantConfig(BaseModel):
         )
 
 
+class UpsertIMAppInstallation(BaseModel):
+    """Normalized installation lifecycle payload used by management APIs."""
+
+    provider_workspace_id: str | None = Field(default=None, max_length=255)
+    install_status: IMInstallStatus | None = None
+    access_token: str | None = None
+    refresh_token: str | None = None
+    access_token_expires_at: datetime | None = None
+    token_refreshed_at: datetime | None = None
+    token_refresh_error: str | None = Field(default=None, max_length=1024)
+    installed_at: datetime | None = None
+    uninstalled_at: datetime | None = None
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @field_validator(
+        "provider_workspace_id",
+        "access_token",
+        "refresh_token",
+        "token_refresh_error",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_string(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+
+        normalized = value.strip()
+        if not normalized:
+            return None
+        return normalized
+
+    def has_any_value(self) -> bool:
+        return any(
+            value is not None
+            for value in (
+                self.provider_workspace_id,
+                self.install_status,
+                self.access_token,
+                self.refresh_token,
+                self.access_token_expires_at,
+                self.token_refreshed_at,
+                self.token_refresh_error,
+                self.installed_at,
+                self.uninstalled_at,
+            )
+        )
+
+
 class IMSelfBuiltTenantConfigRecord(BaseModel):
     """Redacted self-built config read model for tenant-scoped management APIs."""
 

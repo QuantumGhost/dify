@@ -25,6 +25,7 @@ from models.im_integration import IMInstallMode
 from services.entities.im_app_entities import (
     IMAppInstallationRecord,
     IMSelfBuiltTenantConfigRecord,
+    UpsertIMAppInstallation,
     UpsertIMSelfBuiltTenantConfig,
 )
 from services.errors.im_app_config import IMAppConfigValidationError
@@ -32,6 +33,8 @@ from services.human_input_im.app_config_management_service import (
     delete_tenant_self_built_config,
     get_app_installation,
     get_tenant_self_built_config,
+    uninstall_app_installation,
+    upsert_app_installation,
     upsert_tenant_self_built_config,
 )
 from services.human_input_im.app_config_service import IMProvider, resolve_im_app_context
@@ -57,6 +60,10 @@ class UpsertIMSelfBuiltTenantConfigPayload(UpsertIMSelfBuiltTenantConfig):
     pass
 
 
+class UpsertIMAppInstallationPayload(UpsertIMAppInstallation):
+    pass
+
+
 class IMSelfBuiltTenantConfigEnvelopeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,7 +76,7 @@ class IMAppInstallationEnvelopeResponse(BaseModel):
     data: IMAppInstallationRecord | None = None
 
 
-register_schema_models(console_ns, UpsertIMSelfBuiltTenantConfigPayload)
+register_schema_models(console_ns, UpsertIMSelfBuiltTenantConfigPayload, UpsertIMAppInstallationPayload)
 register_response_schema_models(
     console_ns,
     SimpleResultResponse,
@@ -190,3 +197,42 @@ class WorkspaceIMAppInstallationApi(Resource):
             install_mode=_parse_install_mode(install_mode),
         )
         return dump_response(IMAppInstallationEnvelopeResponse, {"data": installation}), 200
+
+    @console_ns.expect(console_ns.models[UpsertIMAppInstallationPayload.__name__])
+    @console_ns.response(200, "Success", console_ns.models[IMAppInstallationRecord.__name__])
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @edit_permission_required
+    @with_current_tenant_id
+    def put(self, tenant_id: str, provider: str, install_mode: str):
+        payload = UpsertIMAppInstallationPayload.model_validate(console_ns.payload or {})
+        try:
+            installation = upsert_app_installation(
+                session=db.session,
+                tenant_id=tenant_id,
+                provider=_parse_provider(provider),
+                install_mode=_parse_install_mode(install_mode),
+                request=payload,
+            )
+        except IMAppConfigValidationError as exc:
+            raise UnprocessableEntity(str(exc))
+
+        db.session.commit()
+        return dump_response(IMAppInstallationRecord, installation), 200
+
+    @console_ns.response(200, "Success", console_ns.models[SimpleResultResponse.__name__])
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @edit_permission_required
+    @with_current_tenant_id
+    def delete(self, tenant_id: str, provider: str, install_mode: str):
+        uninstall_app_installation(
+            session=db.session,
+            tenant_id=tenant_id,
+            provider=_parse_provider(provider),
+            install_mode=_parse_install_mode(install_mode),
+        )
+        db.session.commit()
+        return dump_response(SimpleResultResponse, {"result": "success"}), 200

@@ -386,3 +386,92 @@ class TestWorkspaceIMAppApi:
             provider=IMProvider.SLACK,
             install_mode=IMInstallMode.ISV,
         )
+
+    def test_put_installation_success(self, app: Flask):
+        api = module.WorkspaceIMAppInstallationApi()
+        method = unwrap(api.put)
+        payload = {
+            "provider_workspace_id": "team-1",
+            "install_status": "installed",
+            "access_token": "token",
+            "refresh_token": "refresh",
+        }
+        record = IMAppInstallationRecord(
+            id="inst-1",
+            tenant_id="tenant-1",
+            provider=IMProvider.SLACK,
+            install_mode=IMInstallMode.ISV,
+            scope_type=IMScopeType.TENANT,
+            scope_id="tenant-1",
+            install_status=IMInstallStatus.INSTALLED,
+            token_status=IMTokenStatus.UNKNOWN,
+            provider_workspace_id="team-1",
+            access_token_configured=True,
+            refresh_token_configured=True,
+            access_token_expires_at=None,
+            token_refreshed_at=None,
+            token_refresh_error=None,
+            installed_at=None,
+            uninstalled_at=None,
+            created_at="2026-01-01T00:00:00",
+            updated_at="2026-01-01T00:00:00",
+        )
+
+        from unittest.mock import PropertyMock, patch
+
+        with (
+            app.test_request_context("/", json=payload),
+            patch.object(type(module.console_ns), "payload", new_callable=PropertyMock, return_value=payload),
+            patch(
+                "controllers.console.workspace.im_apps.upsert_app_installation",
+                return_value=record,
+            ) as put_mock,
+            patch("controllers.console.workspace.im_apps.db.session.commit") as commit_mock,
+        ):
+            result, status = method(api, "tenant-1", "slack", "isv")
+
+        assert status == 200
+        assert result["id"] == "inst-1"
+        assert result["install_status"] == "installed"
+        assert result["access_token_configured"] is True
+        put_mock.assert_called_once()
+        commit_mock.assert_called_once()
+
+    def test_put_installation_rejects_blank_payload(self, app: Flask):
+        api = module.WorkspaceIMAppInstallationApi()
+        method = unwrap(api.put)
+        payload = {}
+
+        from unittest.mock import PropertyMock, patch
+
+        with (
+            app.test_request_context("/", json=payload),
+            patch.object(type(module.console_ns), "payload", new_callable=PropertyMock, return_value=payload),
+            patch("controllers.console.workspace.im_apps.db.session.commit") as commit_mock,
+        ):
+            with pytest.raises(UnprocessableEntity):
+                method(api, "tenant-1", "slack", "isv")
+
+        commit_mock.assert_not_called()
+
+    def test_delete_installation_success(self, app: Flask):
+        api = module.WorkspaceIMAppInstallationApi()
+        method = unwrap(api.delete)
+
+        from unittest.mock import patch
+
+        with (
+            patch("controllers.console.workspace.im_apps.uninstall_app_installation") as delete_mock,
+            patch("controllers.console.workspace.im_apps.db.session.commit") as commit_mock,
+        ):
+            result, status = method(api, "tenant-1", "slack", "isv")
+
+        assert status == 200
+        assert result["result"] == "success"
+        delete_mock.assert_called_once_with(
+            session=module.db.session,
+            tenant_id="tenant-1",
+            provider=IMProvider.SLACK,
+            install_mode=IMInstallMode.ISV,
+        )
+        commit_mock.assert_called_once()

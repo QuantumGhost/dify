@@ -349,18 +349,25 @@ def test_resolve_im_app_context_cloud_unsupported_precedes_valid_self_built_conf
 
 
 @pytest.mark.parametrize(
-    ("provider", "install_mode", "expected_scope_type", "expected_error_fragment"),
+    ("provider", "install_mode", "expected_scope_type", "expected_error_fragment", "expected_token_status"),
     [
-        (IMProvider.SLACK, IMInstallMode.ISV, IMScopeType.TENANT, "cloud tenant-scoped isv lifecycle"),
-        (IMProvider.DINGTALK, IMInstallMode.SELF_BUILT, IMScopeType.TENANT, "cloud tenant-scoped self-built lifecycle"),
+        (IMProvider.SLACK, IMInstallMode.ISV, IMScopeType.TENANT, "app installation", IMTokenStatus.UNKNOWN),
+        (
+            IMProvider.DINGTALK,
+            IMInstallMode.SELF_BUILT,
+            IMScopeType.TENANT,
+            "tenant self-built config",
+            IMTokenStatus.NOT_APPLICABLE,
+        ),
     ],
 )
-def test_resolve_im_app_context_returns_reserved_cloud_context_for_future_providers(
+def test_resolve_im_app_context_returns_missing_cloud_context_for_unconfigured_future_providers(
     monkeypatch,
     provider: IMProvider,
     install_mode: IMInstallMode,
     expected_scope_type: IMScopeType,
     expected_error_fragment: str,
+    expected_token_status: IMTokenStatus,
 ) -> None:
     monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "CLOUD")
     monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", False)
@@ -371,10 +378,80 @@ def test_resolve_im_app_context_returns_reserved_cloud_context_for_future_provid
     assert context.install_mode == install_mode
     assert context.scope_type == expected_scope_type
     assert context.scope_id == "tenant-1"
-    assert context.status == IMAppConfigStatus.UNSUPPORTED
+    assert context.status == IMAppConfigStatus.MISSING
+    assert context.install_status in (IMInstallStatus.NOT_APPLICABLE, IMInstallStatus.PENDING)
+    assert context.token_status == expected_token_status
+    assert expected_error_fragment in context.errors[0]
+
+
+def test_resolve_im_app_context_cloud_slack_uses_installation_context_when_available(monkeypatch) -> None:
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "CLOUD")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", False)
+    monkeypatch.setattr(
+        "services.human_input_im.app_config_service._lookup_app_installation",
+        lambda **_: SimpleNamespace(
+            status=_TenantConfigLookupStatus.FOUND,
+            config=IMAppInstallation(
+                tenant_id="tenant-1",
+                provider=IMProvider.SLACK,
+                install_mode=IMInstallMode.ISV,
+                install_status=IMInstallStatus.INSTALLED,
+                provider_workspace_id="team-1",
+                encrypted_access_token="token",
+                encrypted_refresh_token="refresh",
+                access_token_expires_at=naive_utc_now() + timedelta(minutes=30),
+            ),
+        ),
+        raising=False,
+    )
+
+    context = resolve_im_app_context(provider=IMProvider.SLACK, tenant_id="tenant-1")
+
+    assert context.provider == IMProvider.SLACK
+    assert context.install_mode == IMInstallMode.ISV
+    assert context.scope_type == IMScopeType.TENANT
+    assert context.scope_id == "tenant-1"
+    assert context.status == IMAppConfigStatus.CONFIGURED
+    assert context.install_status == IMInstallStatus.INSTALLED
+    assert context.token_status == IMTokenStatus.VALID
+    assert context.provider_workspace_id == "team-1"
+    assert context.errors == []
+
+
+def test_resolve_im_app_context_cloud_dingtalk_uses_tenant_self_built_context_when_available(monkeypatch) -> None:
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.EDITION", "CLOUD")
+    monkeypatch.setattr("services.human_input_im.app_config_service.dify_config.ENTERPRISE_ENABLED", False)
+    monkeypatch.setattr(
+        "services.human_input_im.app_config_service._lookup_tenant_self_built_config",
+        lambda **_: SimpleNamespace(
+            status=_TenantConfigLookupStatus.FOUND,
+            config=IMSelfBuiltTenantConfig(
+                tenant_id="tenant-1",
+                provider=IMProvider.DINGTALK,
+                provider_workspace_id="ding-workspace-1",
+                app_id="ding-app-id",
+                encrypted_app_secret="ding-secret",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "services.human_input_im.app_config_service._decrypt_optional_secret",
+        lambda *, tenant_id, value: {"ding-secret": "ding-secret-plain"}[value],
+    )
+
+    context = resolve_im_app_context(provider=IMProvider.DINGTALK, tenant_id="tenant-1")
+
+    assert context.provider == IMProvider.DINGTALK
+    assert context.install_mode == IMInstallMode.SELF_BUILT
+    assert context.scope_type == IMScopeType.TENANT
+    assert context.scope_id == "tenant-1"
+    assert context.status == IMAppConfigStatus.CONFIGURED
     assert context.install_status == IMInstallStatus.NOT_APPLICABLE
     assert context.token_status == IMTokenStatus.NOT_APPLICABLE
-    assert expected_error_fragment in context.errors[0]
+    assert context.app_id == "ding-app-id"
+    assert context.app_secret == "ding-secret-plain"
+    assert context.provider_workspace_id == "ding-workspace-1"
+    assert context.errors == []
 
 
 @pytest.mark.parametrize(
