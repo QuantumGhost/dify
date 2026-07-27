@@ -68,6 +68,8 @@ const toastMock = vi.hoisted(() => ({
   success: vi.fn(),
 }))
 
+const trackEventMock = vi.hoisted(() => vi.fn())
+
 const modelHooksState = vi.hoisted(() => ({
   defaultTextGenerationModel: {
     provider: {
@@ -78,7 +80,7 @@ const modelHooksState = vi.hoisted(() => ({
 }))
 
 const editionState = vi.hoisted(() => ({
-  isSelfHosted: false,
+  deploymentEdition: 'CLOUD' as 'CLOUD' | 'COMMUNITY' | 'ENTERPRISE',
   licenseStatus: 'none',
 }))
 
@@ -151,8 +153,9 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
       if (queryKey === 'system-features') {
         return {
           data: {
+            deployment_edition: editionState.deploymentEdition,
             license: {
-              status: editionState.licenseStatus,
+              status: 'none',
             },
           },
           isPending: false,
@@ -167,13 +170,25 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
         isSuccess: false,
       }
     }),
-    useSuspenseQuery: vi.fn(() => ({
-      data: {
-        license: {
-          status: editionState.licenseStatus,
-        },
+    useSuspenseQuery: vi.fn(
+      (options: {
+        select?: (data: {
+          deployment_edition: 'CLOUD' | 'COMMUNITY' | 'ENTERPRISE'
+          license: { status: string }
+        }) => unknown
+      }) => {
+        const data = {
+          deployment_edition: editionState.deploymentEdition,
+          license: {
+            status: editionState.licenseStatus,
+          },
+        }
+
+        return {
+          data: options.select ? options.select(data) : data,
+        }
       },
-    })),
+    ),
   }
 })
 
@@ -181,22 +196,16 @@ vi.mock('@langgenius/dify-ui/toast', () => ({
   toast: toastMock,
 }))
 
-vi.mock('@/config', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/config')>()
-
-  return {
-    ...actual,
-    get IS_CE_EDITION() {
-      return editionState.isSelfHosted
-    },
-  }
-})
+vi.mock('@/app/components/base/amplitude', () => ({
+  trackEvent: trackEventMock,
+}))
 
 vi.mock('@/service/client', () => ({
   consoleQuery: {
     systemFeatures: {
       get: {
         queryKey: () => ['system-features'],
+        queryOptions: () => ({ queryKey: ['system-features'] }),
       },
     },
     agent: {
@@ -370,6 +379,7 @@ vi.mock('../components/preview/build-chat', async () => {
       clearChatList?: boolean
       conversationId?: string | null
       controllerRef?: Ref<{ stop: () => void }>
+      disabled?: boolean
       onConversationComplete?: (conversationId: string) => void
       onConversationIdChange?: (conversationId: string) => void
       onBeforeSpeechToText?: () => Promise<unknown>
@@ -397,6 +407,7 @@ vi.mock('../components/preview/build-chat', async () => {
           </button>
           <button
             type="button"
+            disabled={props.disabled}
             onClick={() => {
               void props
                 .onSaveDraftBeforeRun?.()
@@ -521,7 +532,7 @@ describe('AgentConfigurePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.completeBuildConversation = undefined
-    editionState.isSelfHosted = false
+    editionState.deploymentEdition = 'CLOUD'
     editionState.licenseStatus = 'none'
     modelHooksState.defaultTextGenerationModel = {
       provider: {
@@ -753,6 +764,58 @@ describe('AgentConfigurePage', () => {
       urlUpdate = onUrlUpdate.mock.calls.at(-1)?.[0]
       expect(urlUpdate?.searchParams.has('mode')).toBe(false)
       expect(urlUpdate?.searchParams.get('source')).toBe('shared-link')
+    })
+
+    it('should show an editable composer and an empty Build chat while starting a fresh Build session', async () => {
+      const user = userEvent.setup()
+      const refreshBuildConversation = createDeferredPromise<{
+        debug_conversation_has_messages: boolean
+        debug_conversation_id: string
+        debug_conversation_message_count: number
+      }>()
+      mocks.refreshDebugConversation.mockReturnValueOnce(refreshBuildConversation.promise)
+      mocks.queryState.composer = {
+        data: {
+          agent_soul: {
+            prompt: {
+              system_prompt: 'draft prompt',
+            },
+          },
+        },
+        isFetching: false,
+        isError: false,
+        isPending: false,
+        isSuccess: true,
+        refetch: vi.fn(),
+      }
+
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AgentConfigureComposerScopeHarness />
+        </QueryClientProvider>,
+      )
+
+      await user.click(screen.getByRole('button', { name: 'build mode' }))
+
+      expect(screen.getByRole('region', { name: 'orchestrate-panel' })).toHaveTextContent(
+        'readonly:no',
+      )
+      expect(screen.getByRole('region', { name: 'orchestrate-panel' })).toHaveTextContent(
+        'publish:yes',
+      )
+      expect(screen.getByRole('region', { name: 'build-chat' })).toHaveTextContent('build:none')
+      expect(screen.queryByRole('status', { name: 'appApi.loading' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'send build message' })).toBeDisabled()
+
+      refreshBuildConversation.resolve({
+        debug_conversation_has_messages: false,
+        debug_conversation_id: 'debug-conversation-new',
+        debug_conversation_message_count: 0,
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'send build message' })).toBeEnabled()
+      })
     })
 
     it('should confirm before discarding an existing build draft and switching to preview', async () => {
@@ -1195,6 +1258,7 @@ describe('AgentConfigurePage', () => {
         'prompt:edited draft prompt',
       )
       expect(mocks.checkoutBuildDraft).not.toHaveBeenCalled()
+      expect(trackEventMock).not.toHaveBeenCalled()
     })
 
     it('should stay in Preview when resetting the Build conversation fails', async () => {
@@ -1317,6 +1381,7 @@ describe('AgentConfigurePage', () => {
       expect(screen.getByRole('region', { name: 'preview-chat' })).toHaveTextContent(
         'draftType:draft',
       )
+      expect(trackEventMock).not.toHaveBeenCalled()
       expect(screen.getByRole('region', { name: 'orchestrate-panel' })).toHaveTextContent(
         'readonly:no',
       )
@@ -1518,7 +1583,7 @@ describe('AgentConfigurePage', () => {
     })
 
     it('should keep preview disabled in community edition', () => {
-      editionState.isSelfHosted = true
+      editionState.deploymentEdition = 'COMMUNITY'
       mocks.queryState.composer = {
         data: {},
         isFetching: false,
@@ -1541,9 +1606,9 @@ describe('AgentConfigurePage', () => {
       )
     })
 
-    it('should enable preview for a self-hosted enterprise license', () => {
-      editionState.isSelfHosted = true
-      editionState.licenseStatus = 'active'
+    it('should enable preview in enterprise edition regardless of license status', () => {
+      editionState.deploymentEdition = 'ENTERPRISE'
+      editionState.licenseStatus = 'lost'
       mocks.queryState.composer = {
         data: {},
         isFetching: false,
@@ -1847,7 +1912,7 @@ describe('AgentConfigurePage', () => {
       expect(screen.getByRole('region', { name: 'build-draft-bar' })).toBeInTheDocument()
     })
 
-    it('should not checkout again when sending build chat from active build draft mode', async () => {
+    it('should track the run without checking out again in active build draft mode', async () => {
       const queryClient = new QueryClient()
       mocks.queryState.composer = {
         data: {
@@ -1898,6 +1963,7 @@ describe('AgentConfigurePage', () => {
         expect(screen.getByRole('region', { name: 'build-chat' })).toHaveTextContent('sent:yes')
       })
       expect(mocks.checkoutBuildDraft).not.toHaveBeenCalled()
+      expect(trackEventMock).toHaveBeenCalledWith('agent_build_mode_run')
     })
 
     it('should show the working directory action after the first build reply completes', async () => {
