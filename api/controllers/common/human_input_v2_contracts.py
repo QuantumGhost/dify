@@ -499,7 +499,10 @@ class IMSyncResultAdded(BaseModel):
 class IMSyncResultRemoved(BaseModel):
     type: Literal[IMSyncResultType.REMOVED] = IMSyncResultType.REMOVED
 
-    contact: HumanInputContactSummary = Field(description="The contact that associated with this sync result.")
+    contact: HumanInputContactSummary | None = Field(
+        default=None,
+        description="The removed binding's contact, or None when the removed identity had no binding.",
+    )
     last_known_identity: IMIdentitySnapshot = Field(
         description="Last known persistent IM identity state before its binding was removed."
     )
@@ -521,7 +524,10 @@ class IMSyncResultSkipped(BaseModel):
     entry: IMDirectoryEntry | None = Field(
         None, description="Provider directory entry observed before reconciliation was skipped, if available."
     )
-    contact: HumanInputContactSummary = Field(description="The contact that associated with this sync result.")
+    contact: HumanInputContactSummary | None = Field(
+        default=None,
+        description="The associated contact, or None when the existing identity has no binding.",
+    )
 
 
 class IMSyncResultNotMatched(BaseModel):
@@ -629,13 +635,13 @@ class ResetContactIMOverrideResponse(ResponseModel):
 
 
 class CreateIMBindingRequest(_RequestModel):
-    """Request body for setting one workspace-scoped IM override."""
+    """Request body for setting one organization-scoped IM binding."""
 
-    identity_id: IMIdentityId = Field(description="Synced IM identity identifier selected as the workspace override.")
+    identity_id: IMIdentityId = Field(description="Synced IM identity identifier selected for the contact binding.")
 
 
 class CreateIMBindingResponse(ResponseModel):
-    """Response body returned after binding one IM identity to the workspace."""
+    """Response body returned after binding one IM identity to the contact."""
 
     contact: HumanInputContact = Field(description="Contact snapshot after the IM identity is bound.")
 

@@ -545,11 +545,11 @@ class HumanInputIMIntegration(DefaultFieldsDCMixin, TypeBase):
 
     Credential values must be encrypted before persistence. CE/SaaS rows are
     tenant-scoped. EE uses a null ``tenant_id`` because the deployment is the
-    conceptual Organization boundary; creation must lock the stable ``DifySetup``
-    owner before checking for an existing null-owned row. Configuration writes use
-    ``config_version`` for explicit compare-and-swap; connectivity diagnostics
-    do not advance that revision. Asynchronous work must capture the revision
-    that produced it and reject stale current-state writes.
+    conceptual Organization boundary. First creation must lock the stable
+    ``Tenant`` or ``DifySetup`` owner before checking the corresponding singleton.
+    Configuration writes use ``config_version`` for explicit compare-and-swap;
+    connectivity diagnostics do not advance that revision. Asynchronous work must
+    capture the revision that produced it and reject stale current-state writes.
     """
 
     __tablename__ = "human_input_im_integrations"

@@ -16,7 +16,7 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, selectinload, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from core.human_input_v2.contact_directory import (
     Contact,
@@ -40,6 +40,72 @@ from models.human_input_v2 import (
 from models.model import DifySetup
 
 from .mappers import contact_from_record, contact_to_record, platform_entry_to_record
+
+
+def load_contact_directory_snapshot(
+    session: Session,
+    workspace_id: WorkspaceId,
+    *,
+    contact_id: ContactId | None = None,
+    for_update: bool = False,
+) -> ContactDirectorySnapshot:
+    """Load workspace-relative Contact facts in the caller's transaction."""
+
+    contact_statement = (
+        select(HumanInputContact)
+        .where(
+            or_(
+                HumanInputContact.tenant_id.is_(None),
+                HumanInputContact.tenant_id == str(workspace_id),
+            )
+        )
+        .order_by(HumanInputContact.id)
+    )
+    if contact_id is not None:
+        contact_statement = contact_statement.where(HumanInputContact.id == str(contact_id))
+    if for_update:
+        contact_statement = contact_statement.with_for_update()
+    contact_records = session.scalars(contact_statement).all()
+    contacts = tuple(contact_from_record(record) for record in contact_records)
+    contact_account_ids = {contact.account_id for contact in contacts if contact.account_id is not None}
+
+    membership_statement = select(TenantAccountJoin.account_id).where(TenantAccountJoin.tenant_id == str(workspace_id))
+    if contact_id is not None:
+        membership_statement = membership_statement.where(
+            TenantAccountJoin.account_id.in_([str(account_id) for account_id in contact_account_ids])
+        )
+    if for_update:
+        membership_statement = membership_statement.with_for_update()
+    member_account_ids = frozenset(AccountId(value) for value in session.scalars(membership_statement).all())
+
+    active_account_ids: frozenset[AccountId] = frozenset()
+    if contact_account_ids:
+        account_statement = select(Account.id).where(
+            Account.id.in_([str(account_id) for account_id in contact_account_ids]),
+            Account.status == AccountStatus.ACTIVE,
+        )
+        if for_update:
+            account_statement = account_statement.with_for_update()
+        active_account_ids = frozenset(AccountId(value) for value in session.scalars(account_statement).all())
+
+    contact_ids = {contact.id for contact in contacts}
+    platform_contact_ids: frozenset[ContactId] = frozenset()
+    if contact_ids:
+        platform_statement = select(HumanInputPlatformContactWorkspaceEntry.contact_id).where(
+            HumanInputPlatformContactWorkspaceEntry.tenant_id == str(workspace_id),
+            HumanInputPlatformContactWorkspaceEntry.contact_id.in_([str(value) for value in contact_ids]),
+        )
+        if for_update:
+            platform_statement = platform_statement.with_for_update()
+        platform_contact_ids = frozenset(ContactId(value) for value in session.scalars(platform_statement).all())
+
+    return ContactDirectorySnapshot(
+        workspace_id=workspace_id,
+        contacts=contacts,
+        member_account_ids=member_account_ids,
+        platform_contact_ids=platform_contact_ids,
+        unavailable_account_ids=frozenset(contact_account_ids - active_account_ids),
+    )
 
 
 class SQLAlchemyContactDirectoryRepository:
@@ -220,50 +286,7 @@ class SQLAlchemyContactDirectoryRepository:
             raise self._persistence_error() from error
 
     def _load_snapshot(self, session: Session, workspace_id: WorkspaceId) -> ContactDirectorySnapshot:
-        contact_records = session.scalars(
-            select(HumanInputContact)
-            .options(
-                selectinload(
-                    HumanInputContact.platform_workspace_entries.and_(
-                        HumanInputPlatformContactWorkspaceEntry.tenant_id == str(workspace_id)
-                    )
-                )
-            )
-            .where(
-                or_(
-                    HumanInputContact.tenant_id.is_(None),
-                    HumanInputContact.tenant_id == str(workspace_id),
-                )
-            )
-            .order_by(HumanInputContact.id)
-        ).all()
-        contacts = tuple(contact_from_record(record) for record in contact_records)
-        member_account_ids = frozenset(
-            AccountId(account_id)
-            for account_id in session.scalars(
-                select(TenantAccountJoin.account_id).where(TenantAccountJoin.tenant_id == str(workspace_id))
-            ).all()
-        )
-        contact_account_ids = {contact.account_id for contact in contacts if contact.account_id is not None}
-        active_account_ids = frozenset(
-            AccountId(account_id)
-            for account_id in session.scalars(
-                select(Account.id).where(
-                    Account.id.in_([str(account_id) for account_id in contact_account_ids]),
-                    Account.status == AccountStatus.ACTIVE,
-                )
-            ).all()
-        )
-        platform_contact_ids = frozenset(
-            ContactId(record.id) for record in contact_records if record.platform_workspace_entries
-        )
-        return ContactDirectorySnapshot(
-            workspace_id=workspace_id,
-            contacts=contacts,
-            member_account_ids=member_account_ids,
-            platform_contact_ids=platform_contact_ids,
-            unavailable_account_ids=frozenset(contact_account_ids - active_account_ids),
-        )
+        return load_contact_directory_snapshot(session, workspace_id)
 
     @staticmethod
     def _lock_deployment_owner(session: Session, *, require_setup_row: bool) -> None:

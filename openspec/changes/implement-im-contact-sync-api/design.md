@@ -132,6 +132,8 @@ Feishu / Lark 采用同一 SDK 家族的 adapter 实现。根据 2026-07-26 核�
 3. 新建成功时，异步 enqueue 一个 worker 任务，仅携带 `sync_run_id`。
 4. 立即返回 queued/running 的 run summary，不在 HTTP 请求里同步拉完整目录。
 
+如果数据库事务已经提交但 Celery publish 失败，run 保持 `QUEUED`，后续相同手动触发会复用并重新 dispatch 该 run。Worker 在读取 provider 或执行 reconciliation 前，通过行锁原子 claim `QUEUED -> RUNNING`；重复投递看到非 `QUEUED` 状态后直接退出。因此本 change 不引入完整 outbox，但关闭 commit-to-publish 崩溃窗口且不会因并发 retrigger 双执行。
+
 后台 worker 的职责是：
 
 1. 读取 run 和 captured integration revision。
@@ -212,12 +214,28 @@ Feishu / Lark 采用同一 SDK 家族的 adapter 实现。根据 2026-07-26 核�
 
 - contact directory / im control plane 的 schema 刚在 2026-07-24 到 2026-07-25 附近完成设计和落地，当前更重要的是把应用层打通，而不是再次动底层表结构。
 
+### 8. Deployment-wide integration 在 workspace console 中只提供只读 fallback
+
+`GET /im-integration` 可以继续按现有优先级读取 workspace integration 或 deployment-wide EE fallback，但只返回不含凭据的配置状态 metadata，不读取或保留 persisted deployment secrets。`PUT/DELETE /im-integration`、manual sync、binding 和 override 都需要 credential owner 或 workspace 授权语义，遇到 deployment-wide integration 时统一返回 `deployment_integration_unsupported`。
+
+`POST /im-integration/test` 是例外：当请求携带完整的新凭据时，controller 直接构造请求级 credential value 并调用 stateless provider adapter diagnostic，不读取或持久化 deployment integration，因此允许执行。如果请求使用 preserve-secret sentinel，则必须读取 persisted secret，仍然返回 `deployment_integration_unsupported`。
+
+Console management data routes `GET /im-sync-runs/latest`、`GET /im-sync-runs/latest/results` 和 `GET /im-identities` 不读取或暴露 deployment integration 的 run、result 或 identity 数据；fallback-only workspace 返回 `deployment_integration_unsupported`，repository SQL 同时强制使用 `tenant_id = workspace_id` fail closed。`resolve_effective_binding` 保留 deployment fallback 是既有 EE runtime read-resolution 例外，只服务运行时投递解析，不授权 console management/data routes，也不授权任何 mutation。
+
+原因：
+
+- 本 change 明确是 workspace-scoped API，deployment-wide credential owner 和授权边界尚未定义。
+- 在未定义 durable encryption owner 前让 workspace operation 修改或执行 deployment integration，会产生跨租户凭据和授权歧义；完整新凭据的 stateless connection test 不涉及该 owner。
+- 保留 GET fallback 的只读语义不扩大生产能力，也维持已有 console 状态展示行为。
+
 ## Risks / Trade-offs
 
 - [Provider SDK 与现有依赖未集成] -> 先在 `api/pyproject.toml` 中最小增量接入官方 SDK，并把 SDK 使用限制隔离在 adapter；如果 SDK 某个接口不可用，再在 adapter 内局部回退到 `httpx`。
 - [UI mock taxonomy 与后端 canonical bucket 不一致] -> 本 change 明确以后端五类 bucket 为准，并在 design/spec 记录该裁决；前端真实 adapter 未来做展示映射，不反向污染 core contract。
 - [后台 sync worker 失败导致 run 卡死] -> worker 必须在 provider fetch failure、stale revision 和 apply failure 路径都显式结束 run，并写入安全 error/result fact。
+- [数据库提交后 Celery publish 失败导致 queued run 永久悬挂] -> publish 失败不 terminalize run；后续 trigger 重投 queued run，worker 通过原子 claim 保证重复消息不会双执行。Worker 在 claim 后进程崩溃的 lease/reaper 不在本 change 范围。
 - [Binding 写路径误接入 External/ABSENT Contact] -> `ContactIMBindingService` 必须在写前统一做 workspace resolution 和 contact type gate，拒绝不合规主体。
+- [Deployment-wide fallback 被误解为 workspace 可写配置] -> 明确限定 GET fallback 为无凭据 metadata 只读；所有需要 persisted secret、credential owner 或 workspace 授权的操作返回 `deployment_integration_unsupported`。仅完整新凭据的 stateless connection test 允许执行，preserve-secret test 仍拒绝。
 - [实现范围膨胀到前端替换] -> tasks 明确把真实前端 repository adapter 排除在本 change 外，避免跨端大改影响收敛。
 - [高覆盖率目标导致回归成本升高] -> 以 service / controller / repository 分层测试为主，优先补高价值失败路径和并发路径，避免把覆盖率建立在低价值 snapshot test 上。
 
