@@ -79,11 +79,6 @@ def _raise_connect_error(request: httpx.Request) -> httpx.Response:
         ("token_malformed", OperationFailureCode.PROVIDER),
         ("token_invalid_jwt", OperationFailureCode.PROVIDER),
         ("token_invalid_roles", OperationFailureCode.PROVIDER),
-        ("missing_permission", OperationFailureCode.MISSING_PERMISSION),
-        ("organization_transport", OperationFailureCode.PROVIDER),
-        ("organization_malformed", OperationFailureCode.TENANT_IDENTIFICATION),
-        ("organization_rejected", OperationFailureCode.TENANT_IDENTIFICATION),
-        ("organization_mismatch", OperationFailureCode.TENANT_IDENTIFICATION),
     ],
 )
 def test_teams_credential_failures_are_typed(
@@ -102,22 +97,14 @@ def test_teams_credential_failures_are_typed(
             if scenario == "token_invalid_roles":
                 invalid_roles_token = jwt.encode({"roles": "User.Read.All"}, key="", algorithm="none")
                 return httpx.Response(200, json={"access_token": invalid_roles_token, "expires_in": 3600})
-            roles = (
-                ("User.Read.All",)
-                if scenario == "missing_permission"
-                else (
-                    "Organization.Read.All",
-                    "User.Read.All",
-                )
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": _graph_token("Organization.Read.All", "User.Read.All"),
+                    "expires_in": 3600,
+                },
             )
-            return httpx.Response(200, json={"access_token": _graph_token(*roles), "expires_in": 3600})
-        if scenario == "organization_transport":
-            return _raise_connect_error(request)
-        if scenario == "organization_malformed":
-            return httpx.Response(200, json={"displayName": "Example"})
-        if scenario == "organization_rejected":
-            return httpx.Response(403, json={"id": "tenant-1"})
-        return httpx.Response(200, json={"id": "other-tenant"})
+        raise AssertionError("credential testing must not call an unused Microsoft Graph resource API")
 
     _install_http_client(monkeypatch, handler)
     adapter = MicrosoftTeamsAdapter(_config())
@@ -540,10 +527,6 @@ def test_teams_activity_rejects_invalid_boundary_without_sink(
         pytest.param({"value": "approved"}, id="missing-action-id"),
         pytest.param({"action_id": " ", "value": "approved"}, id="blank-action-id"),
         pytest.param({"action_id": "approve", "value": " "}, id="blank-value"),
-        pytest.param(
-            {"action_id": "approve", "value": "approved", "unexpected": "field"},
-            id="extra-field",
-        ),
         pytest.param(
             {"action_id": "approve", "value": "approved", "metadata": []},
             id="metadata-not-object",

@@ -199,7 +199,7 @@ Evidence validator 的 repository-reference、fixture digest、redaction 和 con
 
 ## Matrix status after verification
 
-Evidence matrix 同时保留两个独立 accounting level：34 行 aggregate Provider-operation capability matrix，以及 77 行 exact `(provider, operation, external_entry, condition)` inventory。两层描述同一组能力的不同粒度，不能相加为一个“总缺口”；下表分别报告每层自身 evidence cells 的 `MISSING` 数量。
+Evidence matrix 同时保留两个独立 accounting level：34 行 aggregate Provider-operation capability matrix，以及 76 行 exact `(provider, operation, external_entry, condition)` inventory。两层描述同一组能力的不同粒度，不能相加为一个“总缺口”；下表分别报告每层自身 evidence cells 的 `MISSING` 数量。
 
 Aggregate capability matrix（34 rows，170 evidence cells）：
 
@@ -207,18 +207,18 @@ Aggregate capability matrix（34 rows，170 evidence cells）：
 | --- | ---: |
 | unit_test | 0 |
 | integration_test | 0 |
-| real_execution | 23 |
-| sanitized_fixture | 23 |
+| real_execution | 22 |
+| sanitized_fixture | 22 |
 | independent_crypto | 4 |
 
-Exact External Entry Inventory（77 rows，385 evidence cells）：
+Exact External Entry Inventory（76 rows，380 evidence cells）：
 
 | column | MISSING |
 | --- | ---: |
 | unit_test | 0 |
 | integration_test | 0 |
-| real_execution | 37 |
-| sanitized_fixture | 37 |
+| real_execution | 36 |
+| sanitized_fixture | 36 |
 | independent_crypto | 4 |
 
 Exact `MISSING` 按 Provider 与 actionability 分组如下；`unit_test` / `integration_test` 属于本地 executable evidence，`real_execution` / `sanitized_fixture` 需要授权的非生产 Provider 执行与留存，`independent_crypto` 需要独立于 adapter 的 test-only 生成器或验证器：
@@ -229,6 +229,6 @@ Exact `MISSING` 按 Provider 与 actionability 分组如下；`unit_test` / `int
 | Feishu/Lark | 24 | 0 | 0 | 6 | 6 | 2 |
 | DingTalk | 12 | 0 | 0 | 4 | 4 | 0 |
 | WeCom | 14 | 0 | 0 | 7 | 7 | 0 |
-| Microsoft Teams | 17 | 0 | 0 | 14 | 14 | 1 |
+| Microsoft Teams | 16 | 0 | 0 | 13 | 13 | 1 |
 
-Validation gate 对 77 个 exact identity keys 执行 exact equality，并逐 entry 强制 evidence schema、状态格式、repository reference 实存以及 `N/A` 适用性。Aggregate cells 是 exact entries 的 conservative roll-up：任一 exact entry 为 `MISSING` 时 aggregate 同轴必须保持 `MISSING`；只有全部 exact entries 均为 `N/A` 时 aggregate 才能使用 `N/A`。Tasks 7.1–7.5 任一开始勾选后，completion gate 会同时扫描 aggregate 与 exact 两层并拒绝任何残留 `MISSING`。Feishu Phase A partial fixture 闭合 destination 的 cold-token 与三个成功 identity branches，以及 text/card-send/card-update 的全部 exact entries；实际不可达的 Email destination、未观察到的 Directory department branches 与相关 aggregate cells继续保持 `MISSING`。WeCom 与 Microsoft Teams Directory partial fixtures 只闭合各自明确观察到的 token exact entry。DingTalk Directory token fixture 结合既有 probes/traversal evidence 闭合 Directory aggregate 两轴；DingTalk 与 WeCom 的 removed Webhook/STREAM scope 不保留 inventory row。Slack channel-targeted messaging/card/update 与由该 channel card 触发的 Socket `block_actions` capture 均标记为 obsolete historical evidence，不能关闭 personal-user-only rows。Historical Events API attempt 与 Slash command inspection 均继续明确标记为 out of scope；它们没有被用于补齐未实现的 Events API/slash-command entry。
+Validation gate 对 76 个 exact identity keys 执行 exact equality，并逐 entry 强制 evidence schema、状态格式、repository reference 实存以及 `N/A` 适用性。Aggregate cells 是 exact entries 的 conservative roll-up：任一 exact entry 为 `MISSING` 时 aggregate 同轴必须保持 `MISSING`；只有全部 exact entries 均为 `N/A` 时 aggregate 才能使用 `N/A`。Tasks 7.1–7.5 任一开始勾选后，completion gate 会同时扫描 aggregate 与 exact 两层并拒绝任何残留 `MISSING`。Feishu Phase A partial fixture 闭合 destination 的 cold-token 与三个成功 identity branches，以及 text/card-send/card-update 的全部 exact entries；实际不可达的 Email destination、未观察到的 Directory department branches 与相关 aggregate cells继续保持 `MISSING`。WeCom 与 Microsoft Teams Directory partial fixtures 只闭合各自明确观察到的 token exact entry。Microsoft Teams credential testing 只执行 tenant-scoped client-credentials exchange，不再维护业务未使用的 organization lookup inventory row。DingTalk Directory token fixture 结合既有 probes/traversal evidence 闭合 Directory aggregate 两轴；DingTalk 与 WeCom 的 removed Webhook/STREAM scope 不保留 inventory row。Slack channel-targeted messaging/card/update 与由该 channel card 触发的 Socket `block_actions` capture 均标记为 obsolete historical evidence，不能关闭 personal-user-only rows。Historical Events API attempt 与 Slash command inspection 均继续明确标记为 out of scope；它们没有被用于补齐未实现的 Events API/slash-command entry。

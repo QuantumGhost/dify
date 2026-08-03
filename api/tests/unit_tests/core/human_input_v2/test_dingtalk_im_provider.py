@@ -930,6 +930,18 @@ def test_dingtalk_directory_retries_legacy_200_rate_limit_without_publishing_par
             id="no-access",
         ),
         pytest.param(
+            httpx.Response(
+                200,
+                json={
+                    "errcode": 88,
+                    "errmsg": "permission denied",
+                    "sub_code": "60011",
+                },
+            ),
+            OperationFailureCode.MISSING_PERMISSION,
+            id="nested-no-access",
+        ),
+        pytest.param(
             httpx.Response(404, json={"errcode": 60121, "errmsg": "not found"}),
             OperationFailureCode.DESTINATION_UNREACHABLE,
             id="not-found",

@@ -410,6 +410,63 @@ class CardActionKind(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class CardTextInput:
+    """One required provider-neutral text input."""
+
+    input_id: str
+    label: str
+    placeholder: str | None = None
+    default_value: str | None = None
+    multiline: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "input_id", _require_non_blank("card input id", self.input_id))
+        object.__setattr__(self, "label", _require_non_blank("card input label", self.label))
+        if self.placeholder is not None:
+            object.__setattr__(self, "placeholder", _require_non_blank("card input placeholder", self.placeholder))
+        if not isinstance(self.multiline, bool):
+            raise TypeError("card text input multiline must be a bool")
+
+
+@dataclass(frozen=True, slots=True)
+class CardSelectOption:
+    """One immutable provider-neutral single-select option."""
+
+    label: str
+    value: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "label", _require_non_blank("card select option label", self.label))
+        object.__setattr__(self, "value", _require_non_blank("card select option value", self.value))
+
+
+@dataclass(frozen=True, slots=True)
+class CardSingleSelectInput:
+    """One required provider-neutral single-select input."""
+
+    input_id: str
+    label: str
+    options: tuple[CardSelectOption, ...]
+    default_value: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "input_id", _require_non_blank("card input id", self.input_id))
+        object.__setattr__(self, "label", _require_non_blank("card input label", self.label))
+        if not isinstance(self.options, tuple):
+            raise TypeError("card select options must be a tuple")
+        if not self.options:
+            raise ValueError("card single-select input requires at least one option")
+        option_values = tuple(option.value for option in self.options)
+        if len(option_values) != len(set(option_values)):
+            raise ValueError("card select option values must be unique")
+        if self.default_value is not None and self.default_value not in option_values:
+            raise ValueError("card select default value must identify one option")
+
+
+type CardInput = CardTextInput | CardSingleSelectInput
+
+
+@dataclass(frozen=True, slots=True)
 class CardAction:
     """One normalized card action with opaque provider-independent value."""
 
@@ -433,10 +490,15 @@ class CardIntent:
     facts: tuple[tuple[str, str], ...]
     actions: tuple[CardAction, ...]
     fallback_text: str
+    inputs: tuple[CardInput, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.facts, tuple) or not isinstance(self.actions, tuple):
-            raise TypeError("card facts and actions must be tuples")
+        if (
+            not isinstance(self.facts, tuple)
+            or not isinstance(self.actions, tuple)
+            or not isinstance(self.inputs, tuple)
+        ):
+            raise TypeError("card facts, actions and inputs must be tuples")
         if self.title is not None:
             object.__setattr__(self, "title", _require_non_blank("card title", self.title))
         object.__setattr__(self, "body", _require_non_blank("card body", self.body))
@@ -444,6 +506,14 @@ class CardIntent:
         for fact_name, fact_value in self.facts:
             _require_non_blank("card fact name", fact_name)
             _require_non_blank("card fact value", fact_value)
+        input_ids = tuple(card_input.input_id for card_input in self.inputs)
+        if len(input_ids) != len(set(input_ids)):
+            raise ValueError("card input ids must be unique")
+        action_ids = tuple(action.action_id for action in self.actions)
+        if len(action_ids) != len(set(action_ids)):
+            raise ValueError("card action ids must be unique")
+        if self.inputs and not any(action.kind is CardActionKind.SUBMIT for action in self.actions):
+            raise ValueError("card inputs require at least one submit action")
 
 
 @dataclass(frozen=True, slots=True)

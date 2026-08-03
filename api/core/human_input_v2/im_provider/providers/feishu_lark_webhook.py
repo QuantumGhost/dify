@@ -2,8 +2,12 @@
 
 The Webhook role is stateless and shares only the adapter's immutable config.
 Challenges are authenticated by their verification token as in the official
-SDK. Business events additionally require the official SHA-256 request
-signature and a fresh timestamp whenever an encryption key is configured.
+SDK. Encrypted event callbacks use the SDK's SHA-256 encrypt-key signature,
+while ``card.action.trigger`` also supports the card-action protocol's SHA-1
+verification-token signature. The schemes keep distinct key material and both
+require a fresh timestamp; neither accepts the other scheme's digest. Provider
+event times are accepted only in Unix second, millisecond, or microsecond
+precision.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import re
 from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives import hashes, padding
@@ -34,6 +39,14 @@ from ..provider_types import FeishuLarkAdapterConfig
 
 _MAX_REQUEST_AGE_SECONDS = 300
 _CARD_ACTION_EVENT_TYPE = "card.action.trigger"
+_SECOND_TIMESTAMP_DIGITS = 10
+_MILLISECOND_TIMESTAMP_DIGITS = 13
+_MICROSECOND_TIMESTAMP_DIGITS = 16
+_GO_REQUEST_TIMESTAMP = re.compile(
+    r"(?P<date>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\."
+    r"(?P<fraction>\d{1,9}) (?P<offset>[+-]\d{4}) "
+    r"[A-Za-z][A-Za-z0-9_+\-/]*(?: m=[+-]\d+(?:\.\d+)?)?"
+)
 _JSON_OBJECT_ADAPTER = TypeAdapter(dict[str, JsonValue])
 
 
@@ -124,8 +137,30 @@ def _decrypt(ciphertext: str, encrypt_key: str) -> bytes:
 def _event_time(create_time: str | None) -> datetime | None:
     if create_time is None:
         return None
-    timestamp_milliseconds = int(create_time)
-    return datetime.fromtimestamp(timestamp_milliseconds / 1000, tz=UTC)
+    timestamp = int(create_time)
+    if len(create_time) == _SECOND_TIMESTAMP_DIGITS:
+        return datetime.fromtimestamp(timestamp, tz=UTC)
+    if len(create_time) == _MILLISECOND_TIMESTAMP_DIGITS:
+        return datetime.fromtimestamp(timestamp / 1_000, tz=UTC)
+    if len(create_time) == _MICROSECOND_TIMESTAMP_DIGITS:
+        return datetime.fromtimestamp(timestamp / 1_000_000, tz=UTC)
+    raise ValueError("event timestamp has an unsupported precision")
+
+
+def _request_time(timestamp_value: str) -> datetime:
+    try:
+        return datetime.fromtimestamp(int(timestamp_value), tz=UTC)
+    except ValueError:
+        pass
+
+    match = _GO_REQUEST_TIMESTAMP.fullmatch(timestamp_value)
+    if match is None:
+        raise ValueError("request timestamp has an unsupported format")
+    fraction = match.group("fraction")[:6].ljust(6, "0")
+    return datetime.strptime(
+        f"{match.group('date')}.{fraction} {match.group('offset')}",
+        "%Y-%m-%d %H:%M:%S.%f %z",
+    )
 
 
 class _FeishuLarkWebhookClient:
@@ -171,7 +206,7 @@ class _FeishuLarkWebhookClient:
         if event_envelope.header.token != self._config.verification_token:
             return WebhookRejected(_response(401, {"msg": "invalid_token"}))
 
-        signature_facts = self._verify_signature(request)
+        signature_facts = self._verify_signature(request, event_envelope.header.event_type)
         if signature_facts is None:
             return WebhookRejected(_response(401, {"msg": "invalid_signature"}))
         if event_envelope.header.event_type != _CARD_ACTION_EVENT_TYPE:
@@ -207,7 +242,7 @@ class _FeishuLarkWebhookClient:
             replay_expires_at=replay_expires_at,
         )
 
-    def _verify_signature(self, request: WebhookRequest) -> tuple[str, datetime] | None:
+    def _verify_signature(self, request: WebhookRequest, event_type: str) -> tuple[str, datetime] | None:
         if self._config.encrypt_key is None:
             signature = hashlib.sha256(request.body).hexdigest()
             return signature, request.received_at + timedelta(seconds=_MAX_REQUEST_AGE_SECONDS)
@@ -217,17 +252,27 @@ class _FeishuLarkWebhookClient:
         if timestamp_value is None or nonce is None or supplied_signature is None:
             return None
         try:
-            timestamp = int(timestamp_value)
-            replay_expires_at = datetime.fromtimestamp(timestamp + _MAX_REQUEST_AGE_SECONDS, tz=UTC)
+            request_time = _request_time(timestamp_value)
+            replay_expires_at = request_time + timedelta(seconds=_MAX_REQUEST_AGE_SECONDS)
         except (OSError, OverflowError, ValueError):
             return None
-        if abs(request.received_at.timestamp() - timestamp) > _MAX_REQUEST_AGE_SECONDS:
+        if abs(request.received_at.timestamp() - request_time.timestamp()) > _MAX_REQUEST_AGE_SECONDS:
             return None
-        signature_material = (
+        event_callback_material = (
             timestamp_value.encode() + nonce.encode() + self._config.encrypt_key.encode() + request.body
         )
-        expected_signature = hashlib.sha256(signature_material).hexdigest()
-        if not hmac.compare_digest(expected_signature, supplied_signature):
+        expected_event_callback_signature = hashlib.sha256(event_callback_material).hexdigest()
+        event_callback_matches = hmac.compare_digest(expected_event_callback_signature, supplied_signature)
+
+        card_action_material = (
+            timestamp_value.encode() + nonce.encode() + self._config.verification_token.encode() + request.body
+        )
+        expected_card_action_signature = hashlib.sha1(card_action_material, usedforsecurity=False).hexdigest()
+        card_action_matches = event_type == _CARD_ACTION_EVENT_TYPE and hmac.compare_digest(
+            expected_card_action_signature,
+            supplied_signature,
+        )
+        if event_callback_matches == card_action_matches:
             return None
         return supplied_signature, replay_expires_at
 

@@ -57,6 +57,8 @@ from ..contracts import (
     CardActionKind,
     CardAssessment,
     CardIntent,
+    CardSingleSelectInput,
+    CardTextInput,
     CredentialTestResult,
     CredentialTestSuccess,
     DestinationTestResult,
@@ -223,6 +225,41 @@ def _encode_submit_action_value(action_value: str, metadata: OpaqueMetadata) -> 
     return encoded_value
 
 
+def _is_submit_interaction_payload(provider_payload: object) -> bool:
+    """Recognize only submit actions emitted by this adapter's card renderer."""
+    if not isinstance(provider_payload, dict):
+        return False
+    actions = provider_payload.get("actions")
+    if not isinstance(actions, list) or len(actions) != 1:
+        return False
+    action = actions[0]
+    if not isinstance(action, dict) or action.get("type") != "button":
+        return False
+    action_id = action.get("action_id")
+    encoded_value = action.get("value")
+    if not isinstance(action_id, str) or not action_id.strip() or not isinstance(encoded_value, str):
+        return False
+    try:
+        submit_value = _JSON_OBJECT_ADAPTER.validate_json(encoded_value)
+    except ValueError:
+        return False
+    if set(submit_value) != {"v", "action_value", "metadata"}:
+        return False
+    version = submit_value["v"]
+    action_value = submit_value["action_value"]
+    metadata = submit_value["metadata"]
+    return (
+        type(version) is int
+        and version == _SLACK_SUBMIT_VALUE_VERSION
+        and isinstance(action_value, str)
+        and bool(action_value.strip())
+        and isinstance(metadata, dict)
+        and all(
+            isinstance(key, str) and bool(key.strip()) and isinstance(value, str) for key, value in metadata.items()
+        )
+    )
+
+
 def _render_card_blocks(intent: CardIntent, metadata: OpaqueMetadata) -> list[JsonValue] | OperationFailure:
     blocks: list[JsonValue] = []
     if intent.title is not None:
@@ -237,6 +274,47 @@ def _render_card_blocks(intent: CardIntent, metadata: OpaqueMetadata) -> list[Js
                 ],
             }
         )
+    for card_input in intent.inputs:
+        if isinstance(card_input, CardTextInput):
+            text_element: dict[str, JsonValue] = {
+                "type": "plain_text_input",
+                "action_id": card_input.input_id,
+                "multiline": card_input.multiline,
+            }
+            if card_input.placeholder is not None:
+                text_element["placeholder"] = {"type": "plain_text", "text": card_input.placeholder}
+            if card_input.default_value is not None:
+                text_element["initial_value"] = card_input.default_value
+            blocks.append(
+                {
+                    "type": "input",
+                    "block_id": card_input.input_id,
+                    "label": {"type": "plain_text", "text": card_input.label},
+                    "element": text_element,
+                }
+            )
+        elif isinstance(card_input, CardSingleSelectInput):
+            options = [
+                {"text": {"type": "plain_text", "text": option.label}, "value": option.value}
+                for option in card_input.options
+            ]
+            select_element: dict[str, JsonValue] = {
+                "type": "radio_buttons",
+                "action_id": card_input.input_id,
+                "options": options,
+            }
+            if card_input.default_value is not None:
+                select_element["initial_option"] = next(
+                    option for option in options if option["value"] == card_input.default_value
+                )
+            blocks.append(
+                {
+                    "type": "input",
+                    "block_id": card_input.input_id,
+                    "label": {"type": "plain_text", "text": card_input.label},
+                    "element": select_element,
+                }
+            )
     if intent.actions:
         action_elements: list[JsonValue] = []
         for action in intent.actions:
@@ -669,6 +747,8 @@ class _SlackProviderClient:
             envelope = _SlackInteractiveEnvelope.model_validate(provider_payload)
         except (ValueError, ValidationError):
             return WebhookRejected(_webhook_response(400, b'{"error":"invalid_payload"}'))
+        if not _is_submit_interaction_payload(provider_payload):
+            return WebhookRejected(_webhook_response(200, b""))
         event = AuthenticatedIMEvent(
             provider=IMProvider.SLACK,
             provider_tenant_id=envelope.team.id,
@@ -767,16 +847,22 @@ class _SlackSocketModeEventListener:
         self._accept = accept
 
     def __call__(self, client: BaseSocketModeClient, request: SocketModeRequest) -> None:
-        authenticated_event = self._normalize_business_delivery(request)
-        if authenticated_event is None:
+        parsed_request = self._parse_interactive_request(request)
+        if parsed_request is None:
             return
-        if self._accept(authenticated_event) is EventAcceptance.ACCEPTED:
-            cast(_SlackStreamSDKClient, client).send_socket_mode_response(
-                SocketModeResponse(envelope_id=request.envelope_id),
-            )
+        request_payload, interactive = parsed_request
+        if _is_submit_interaction_payload(request_payload):
+            authenticated_event = self._normalize_business_delivery(request_payload, interactive)
+            if self._accept(authenticated_event) is not EventAcceptance.ACCEPTED:
+                return
+        cast(_SlackStreamSDKClient, client).send_socket_mode_response(
+            SocketModeResponse(envelope_id=request.envelope_id),
+        )
 
     @staticmethod
-    def _normalize_business_delivery(request: SocketModeRequest) -> AuthenticatedIMEvent | None:
+    def _parse_interactive_request(
+        request: SocketModeRequest,
+    ) -> tuple[dict[str, JsonValue], _SlackInteractiveEnvelope] | None:
         try:
             if request.type != _SLACK_INTERACTIVE_REQUEST_TYPE:
                 return None
@@ -784,7 +870,13 @@ class _SlackSocketModeEventListener:
             interactive = _SlackInteractiveEnvelope.model_validate(request_payload)
         except ValidationError:
             return None
+        return request_payload, interactive
 
+    @staticmethod
+    def _normalize_business_delivery(
+        request_payload: dict[str, JsonValue],
+        interactive: _SlackInteractiveEnvelope,
+    ) -> AuthenticatedIMEvent:
         return AuthenticatedIMEvent(
             provider=IMProvider.SLACK,
             provider_tenant_id=interactive.team.id,

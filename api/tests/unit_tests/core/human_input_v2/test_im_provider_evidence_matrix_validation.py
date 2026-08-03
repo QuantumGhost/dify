@@ -320,11 +320,6 @@ _EXPECTED_EXACT_INVENTORY_ENTRIES = {
             "Graph token cache miss or expiry",
         ),
         (
-            "credential.test_credentials",
-            "GET /v1.0/organization/{tenant_id}",
-            "after Graph role validation",
-        ),
-        (
             "directory.read_snapshot",
             "POST /{tenant_id}/oauth2/v2.0/token [Graph scope]",
             "Graph token cache miss or expiry",
@@ -523,7 +518,7 @@ def test_exact_inventory_covers_every_external_row_and_conditional_request() -> 
     inventory_keys = [(row["provider"], row["operation"], row["external_entry"], row["condition"]) for row in inventory]
 
     assert len(inventory_keys) == len(set(inventory_keys)), "each exact external entry must be unique"
-    assert len(inventory_keys) == 77
+    assert len(inventory_keys) == 76
     assert matrix_cells <= {(provider, operation) for provider, operation, _, _ in inventory_keys}
     assert set(inventory_keys) == _expected_exact_inventory_keys()
     for row in inventory:
@@ -537,19 +532,19 @@ def test_scope_corrected_matrix_has_expected_missing_baseline() -> None:
     exact_rows = _parse_exact_external_inventory()
 
     assert len(aggregate_rows) == 34
-    assert len(exact_rows) == 77
+    assert len(exact_rows) == 76
     assert {column: sum(row[column] == "MISSING" for row in aggregate_rows) for column in _EVIDENCE_COLUMNS} == {
         "unit_test": 0,
         "integration_test": 0,
-        "real_execution": 23,
-        "sanitized_fixture": 23,
+        "real_execution": 22,
+        "sanitized_fixture": 22,
         "independent_crypto": 4,
     }
     assert {column: sum(row[column] == "MISSING" for row in exact_rows) for column in _EVIDENCE_COLUMNS} == {
         "unit_test": 0,
         "integration_test": 0,
-        "real_execution": 37,
-        "sanitized_fixture": 37,
+        "real_execution": 36,
+        "sanitized_fixture": 36,
         "independent_crypto": 4,
     }
 
@@ -1377,7 +1372,6 @@ def test_microsoft_teams_directory_partial_fixture_closes_only_the_exact_token_e
     assert "/v1.0/users" not in serialized
 
     aggregate_operations = (
-        "credential.test_credentials",
         "directory.read_snapshot",
         "basic_messaging.test_destination",
         "basic_messaging.send_text",
@@ -1407,6 +1401,9 @@ def test_microsoft_teams_directory_partial_fixture_closes_only_the_exact_token_e
         "`openspec/changes/define-im-provider-adapter-contracts/evidence/fixtures/"
         "microsoft-teams-live-read-only-2026-08-02.json`"
     )
+    credential_aggregate = aggregate_rows[("Microsoft Teams", "credential.test_credentials")]
+    assert credential_aggregate["real_execution"] == old_receipt_reference
+    assert credential_aggregate["sanitized_fixture"] == old_fixture_reference
     credential_token_row = exact_rows[
         (
             "Microsoft Teams",
@@ -1430,7 +1427,7 @@ def test_microsoft_teams_directory_partial_fixture_closes_only_the_exact_token_e
         for key, row in exact_rows.items()
         if key[0] == "Microsoft Teams" and (row["real_execution"] == "MISSING" or row["sanitized_fixture"] == "MISSING")
     ]
-    assert len(remaining_missing_rows) == 14
+    assert len(remaining_missing_rows) == 13
     assert all(row["real_execution"] == "MISSING" for row in remaining_missing_rows)
     assert all(row["sanitized_fixture"] == "MISSING" for row in remaining_missing_rows)
     assert {row["external_entry"] for row in remaining_missing_rows} >= set(

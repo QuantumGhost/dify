@@ -23,6 +23,7 @@ from core.human_input_v2.im_provider import (
     AuthenticatedIMEvent,
     EventAcceptance,
     IMEventSink,
+    OpaqueMetadata,
     OperationFailure,
     OperationFailureCode,
     SlackAdapter,
@@ -37,6 +38,10 @@ def _config() -> SlackAdapterConfig:
         signing_secret="signing-test",
         app_token="xapp-test",
     )
+
+
+def _submit_action_value() -> str:
+    return slack_provider._encode_submit_action_value("approved", OpaqueMetadata(entries=()))
 
 
 @dataclass(slots=True)
@@ -193,7 +198,7 @@ def _interactive_request(
     payload: dict[str, object] = {
         "type": "block_actions",
         "user": {"id": "U-test"},
-        "actions": [{"action_id": "approve", "value": "approved"}],
+        "actions": [{"type": "button", "action_id": "approve", "value": _submit_action_value()}],
     }
     if team_id is not None:
         payload = {"type": "block_actions", "team": {"id": team_id, "domain": "test-workspace"}, **payload}
@@ -489,7 +494,7 @@ def test_slack_socket_mode_routes_only_interactive_block_actions(
         "type": "block_actions",
         "team": {"id": "T-interactive", "domain": "test-workspace"},
         "user": {"id": "U-test"},
-        "actions": [{"action_id": "approve", "value": "approved"}],
+        "actions": [{"type": "button", "action_id": "approve", "value": _submit_action_value()}],
     }
     adapter.close()
 

@@ -85,6 +85,15 @@ def _submit_value_size(action_value: str, metadata: OpaqueMetadata) -> int:
     )
 
 
+def _encoded_submit_action_value(action_value: str = "approved") -> str:
+    return json.dumps(
+        {"v": 1, "action_value": action_value, "metadata": {}},
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
 @dataclass
 class _RecordingSink(IMEventSink):
     acceptance: EventAcceptance
@@ -1187,7 +1196,7 @@ def test_slack_webhook_acknowledges_accepted_replay_without_trusting_retry_heade
                 {
                     "type": "block_actions",
                     "team": {"id": "T123"},
-                    "actions": [{"action_id": "approve", "value": "approved"}],
+                    "actions": [{"type": "button", "action_id": "approve", "value": _encoded_submit_action_value()}],
                 }
             )
         }
@@ -1227,7 +1236,7 @@ def test_slack_webhook_redelivers_after_retry_then_remembers_acceptance() -> Non
                 {
                     "type": "block_actions",
                     "team": {"id": "T123"},
-                    "actions": [{"action_id": "approve", "value": "approved"}],
+                    "actions": [{"type": "button", "action_id": "approve", "value": _encoded_submit_action_value()}],
                 }
             )
         }
@@ -1272,7 +1281,7 @@ def test_slack_interactive_action_is_authenticated_and_mapped_to_sink(
     interactive_payload = {
         "type": "block_actions",
         "team": {"id": "T123"},
-        "actions": [{"action_id": "approve", "value": "approved"}],
+        "actions": [{"type": "button", "action_id": "approve", "value": _encoded_submit_action_value()}],
     }
     body = urlencode({"payload": json.dumps(interactive_payload)}).encode()
     signed_request = _signed_request(

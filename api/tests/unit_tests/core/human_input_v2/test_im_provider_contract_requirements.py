@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from core.human_input_v2 import im_provider
 from core.human_input_v2.entities import IMProvider
 from core.human_input_v2.im_provider import (
     AuthenticatedIMEvent,
@@ -32,6 +33,12 @@ from core.human_input_v2.im_provider import (
 )
 
 _NOW = datetime(2026, 8, 2, 8, tzinfo=UTC)
+
+
+def test_card_contract_exposes_required_text_and_single_select_inputs() -> None:
+    assert hasattr(im_provider, "CardTextInput")
+    assert hasattr(im_provider, "CardSelectOption")
+    assert hasattr(im_provider, "CardSingleSelectInput")
 
 
 @pytest.mark.parametrize(

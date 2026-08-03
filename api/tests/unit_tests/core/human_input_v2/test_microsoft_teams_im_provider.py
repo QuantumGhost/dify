@@ -575,7 +575,7 @@ def test_teams_webhook_retries_unaccepted_delivery_before_remembering_replay(
     adapter.close()
 
 
-def test_teams_credentials_use_graph_token_roles_and_stable_organization(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_teams_credentials_require_only_tenant_scoped_client_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -588,7 +588,7 @@ def test_teams_credentials_use_graph_token_roles_and_stable_organization(monkeyp
                     "expires_in": 3600,
                 },
             )
-        return httpx.Response(200, json={"id": "tenant-1"})
+        raise AssertionError("credential testing must not call an unused Microsoft Graph resource API")
 
     _install_http_client(monkeypatch, handler)
     adapter = MicrosoftTeamsAdapter(_config())
@@ -598,11 +598,11 @@ def test_teams_credentials_use_graph_token_roles_and_stable_organization(monkeyp
     assert isinstance(result, CredentialTestSuccess)
     assert result.provider is IMProvider.MS_TEAMS
     assert result.provider_tenant_id == "tenant-1"
-    assert [permission.name for permission in result.permissions] == ["Organization.Read.All", "User.Read.All"]
+    assert [permission.name for permission in result.permissions] == ["oauth.client_credentials"]
     token_form = httpx.QueryParams(requests[0].content.decode())
     assert token_form["grant_type"] == "client_credentials"
     assert token_form["scope"] == "https://graph.microsoft.com/.default"
-    assert requests[1].url == httpx.URL("https://graph.microsoft.com/v1.0/organization/tenant-1")
+    assert len(requests) == 1
 
     adapter.close()
 
@@ -823,7 +823,7 @@ def test_teams_rejects_dot_path_segment_before_requesting_bot_token(
     adapter.close()
 
 
-def test_teams_encodes_tenant_id_in_token_and_organization_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_teams_encodes_tenant_id_in_token_path(monkeypatch: pytest.MonkeyPatch) -> None:
     requests: list[httpx.Request] = []
     tenant_id = "tenant/segment?query#fragment%2F:用户"
 
@@ -837,7 +837,7 @@ def test_teams_encodes_tenant_id_in_token_and_organization_paths(monkeypatch: py
                     "expires_in": 3600,
                 },
             )
-        return httpx.Response(200, json={"id": tenant_id})
+        raise AssertionError("credential testing must not call an unused Microsoft Graph resource API")
 
     _install_http_client(monkeypatch, handler)
     adapter = MicrosoftTeamsAdapter(
@@ -853,7 +853,7 @@ def test_teams_encodes_tenant_id_in_token_and_organization_paths(monkeypatch: py
 
     encoded_tenant = b"tenant%2Fsegment%3Fquery%23fragment%252F%3A%E7%94%A8%E6%88%B7"
     assert requests[0].url.raw_path == b"/" + encoded_tenant + b"/oauth2/v2.0/token"
-    assert requests[1].url.raw_path == b"/v1.0/organization/" + encoded_tenant
+    assert len(requests) == 1
 
     adapter.close()
 
@@ -951,6 +951,8 @@ def test_teams_activity_jwt_validation_precedes_sink_and_maps_acceptance(
             "action_id": "approve",
             "value": "approved",
             "metadata": {"form_id": "form-1", "empty_value": ""},
+            "review_comment": "Ready to deploy",
+            "risk_level": "high",
         },
     }
     if channel_id is not None:

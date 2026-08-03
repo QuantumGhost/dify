@@ -1,6 +1,8 @@
 """Microsoft Graph and Bot Framework boundary owned by ``MicrosoftTeamsAdapter``.
 
 Graph and Bot Framework access tokens use distinct scopes and cache entries.
+Credential testing succeeds after the tenant-scoped Graph OAuth exchange;
+``User.Read.All`` is required only when the Directory users API is invoked.
 The client never retries side-effecting Activity operations; directory-only
 rate-limit handling remains internal and returns no partial snapshot.
 Every Provider-owned identifier interpolated into a URL is encoded as one path
@@ -32,6 +34,8 @@ from ..contracts import (
     CardActionKind,
     CardAssessment,
     CardIntent,
+    CardSingleSelectInput,
+    CardTextInput,
     CredentialTestResult,
     CredentialTestSuccess,
     DestinationTestResult,
@@ -62,7 +66,6 @@ from ..provider_types import (
 _GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 _GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 _BOT_SCOPE = "https://api.botframework.com/.default"
-_REQUIRED_GRAPH_ROLES = ("Organization.Read.All", "User.Read.All")
 _ACCOUNT_STATUS_ROLE = "User.EnableDisableAccount.All"
 _HTTP_TIMEOUT_SECONDS = 10.0
 _MAX_DIRECTORY_RATE_LIMIT_RETRIES = 3
@@ -98,12 +101,6 @@ class _TokenErrorResponse(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     error: str
-
-
-class _OrganizationResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True)
-
-    id: str
 
 
 class _GraphUser(BaseModel):
@@ -182,7 +179,7 @@ class _ActivityAuthenticationContext(BaseModel):
 
 
 class _CardSubmitValue(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(extra="allow", frozen=True, strict=True)
 
     action_id: str
     value: str
@@ -245,7 +242,11 @@ def _header(request: WebhookRequest, name: str) -> str | None:
 
 
 def _card_payload(intent: CardIntent, metadata: OpaqueMetadata) -> dict[str, JsonValue]:
-    """Render caller metadata only inside Adaptive Card submit data."""
+    """Render caller metadata only inside Adaptive Card submit data.
+
+    The enclosing Bot Activity must omit top-level text so Teams creates one exact,
+    updatable Activity instead of separate text and card activities.
+    """
     body: list[JsonValue] = []
     if intent.title is not None:
         body.append({"type": "TextBlock", "text": intent.title, "weight": "Bolder"})
@@ -257,6 +258,33 @@ def _card_payload(intent: CardIntent, metadata: OpaqueMetadata) -> dict[str, Jso
                 "facts": [{"title": name, "value": value} for name, value in intent.facts],
             }
         )
+    for card_input in intent.inputs:
+        if isinstance(card_input, CardTextInput):
+            text_input: dict[str, JsonValue] = {
+                "type": "Input.Text",
+                "id": card_input.input_id,
+                "label": card_input.label,
+                "isRequired": True,
+                "isMultiline": card_input.multiline,
+            }
+            if card_input.placeholder is not None:
+                text_input["placeholder"] = card_input.placeholder
+            if card_input.default_value is not None:
+                text_input["value"] = card_input.default_value
+            body.append(text_input)
+        elif isinstance(card_input, CardSingleSelectInput):
+            select_input: dict[str, JsonValue] = {
+                "type": "Input.ChoiceSet",
+                "id": card_input.input_id,
+                "label": card_input.label,
+                "isRequired": True,
+                "isMultiSelect": False,
+                "style": "expanded",
+                "choices": [{"title": option.label, "value": option.value} for option in card_input.options],
+            }
+            if card_input.default_value is not None:
+                select_input["value"] = card_input.default_value
+            body.append(select_input)
     submit_metadata: dict[str, JsonValue] = {}
     for key, value in metadata.entries:
         submit_metadata[key] = value
@@ -377,32 +405,10 @@ class _MicrosoftTeamsProviderClient:
         token = self._graph_token()
         if isinstance(token, OperationFailure):
             return token
-        missing_roles = tuple(role for role in _REQUIRED_GRAPH_ROLES if role not in token.roles)
-        if missing_roles:
-            return _failure(
-                OperationFailureCode.MISSING_PERMISSION,
-                f"Microsoft Graph token is missing required roles: {', '.join(missing_roles)}",
-            )
-        try:
-            tenant_path_segment = _encode_path_segment(self._config.tenant_id)
-        except ValueError:
-            return _failure(OperationFailureCode.TENANT_IDENTIFICATION, "Microsoft tenant identifier was invalid")
-        try:
-            response = self._http_client.get(
-                f"{_GRAPH_ROOT}/organization/{tenant_path_segment}",
-                headers={"authorization": f"Bearer {token.token}"},
-            )
-            organization = _OrganizationResponse.model_validate_json(response.content)
-        except httpx.RequestError:
-            return _failure(OperationFailureCode.PROVIDER, "Microsoft organization request failed")
-        except ValidationError:
-            return _failure(OperationFailureCode.TENANT_IDENTIFICATION, "Microsoft organization response was invalid")
-        if response.status_code >= 400 or organization.id != self._config.tenant_id:
-            return _failure(OperationFailureCode.TENANT_IDENTIFICATION, "Microsoft tenant identity did not match")
         return CredentialTestSuccess(
             IMProvider.MS_TEAMS,
-            organization.id,
-            tuple(PermissionFact(role, True) for role in _REQUIRED_GRAPH_ROLES),
+            self._config.tenant_id,
+            (PermissionFact("oauth.client_credentials", True),),
         )
 
     def read_directory(self) -> DirectoryReadResult:
@@ -537,7 +543,6 @@ class _MicrosoftTeamsProviderClient:
             destination,
             {
                 "type": "message",
-                "text": intent.fallback_text,
                 "attachments": [
                     {"contentType": _ADAPTIVE_CARD_CONTENT_TYPE, "content": _card_payload(intent, metadata)}
                 ],
@@ -559,7 +564,6 @@ class _MicrosoftTeamsProviderClient:
             destination,
             {
                 "type": "message",
-                "text": intent.fallback_text,
                 "attachments": [
                     {"contentType": _ADAPTIVE_CARD_CONTENT_TYPE, "content": _card_payload(intent, metadata)}
                 ],

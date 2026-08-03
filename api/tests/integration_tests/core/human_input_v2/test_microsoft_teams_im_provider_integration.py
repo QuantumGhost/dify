@@ -328,8 +328,6 @@ def test_teams_public_adapter_uses_one_real_http_context_for_all_api_capabilitie
                     roles=("Organization.Read.All", "User.Read.All", "User.EnableDisableAccount.All"),
                 )
             return _token_response(form["scope"])
-        if request.path == "/v1.0/organization/tenant-1":
-            return _json_response({"id": "tenant-1"})
         if request.path == "/v1.0/users" and "$skiptoken" not in request.query:
             return _json_response(
                 {
@@ -460,10 +458,6 @@ def test_teams_card_send_acquires_cold_bot_token_before_adaptive_card_over_real_
             ),
             OperationFailureCode.PROVIDER,
         ),
-        (
-            _token_response("https://graph.microsoft.com/.default", roles=("User.Read.All",)),
-            OperationFailureCode.MISSING_PERMISSION,
-        ),
     ],
     ids=(
         "rate-limited",
@@ -476,7 +470,6 @@ def test_teams_card_send_acquires_cold_bot_token_before_adaptive_card_over_real_
         "non-positive-expiry",
         "invalid-jwt",
         "invalid-roles",
-        "missing-role",
     ),
 )
 def test_teams_credential_token_failures_are_typed_over_real_tls(
@@ -493,40 +486,6 @@ def test_teams_credential_token_failures_are_typed_over_real_tls(
         assert result.code is expected_code
         assert "integration-secret" not in repr(result)
         assert len(stub.requests) == 1
-        adapter.close()
-
-
-@pytest.mark.parametrize("organization_kind", ["mismatch", "malformed", "rejected", "disconnect"])
-def test_teams_credential_organization_failures_are_typed_over_real_tls(
-    monkeypatch: pytest.MonkeyPatch,
-    tls_material: tuple[Path, Path],
-    organization_kind: str,
-) -> None:
-    def respond(request: _RecordedRequest) -> _StubResponse:
-        if request.host == "login.microsoftonline.com":
-            return _token_response(
-                "https://graph.microsoft.com/.default",
-                roles=("Organization.Read.All", "User.Read.All"),
-            )
-        if organization_kind == "disconnect":
-            return _StubResponse(0, b"", disconnect=True)
-        if organization_kind == "malformed":
-            return _StubResponse(200, b"not-json")
-        if organization_kind == "rejected":
-            return _json_response({"id": "tenant-1"}, status_code=500)
-        return _json_response({"id": "other-tenant"})
-
-    with _run_teams_stub(monkeypatch, tls_material, respond):
-        adapter = MicrosoftTeamsAdapter(_config())
-        result = adapter.test_credentials()
-
-        assert isinstance(result, OperationFailure)
-        expected_code = (
-            OperationFailureCode.PROVIDER
-            if organization_kind == "disconnect"
-            else OperationFailureCode.TENANT_IDENTIFICATION
-        )
-        assert result.code is expected_code
         adapter.close()
 
 

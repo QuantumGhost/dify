@@ -169,12 +169,28 @@ def test_feishu_card_empty_metadata_is_nested_in_every_submit_action(
     assert isinstance(result, MessageAccepted)
     request_body = TypeAdapter(dict[str, JsonValue]).validate_json(requests[1].content)
     card = TypeAdapter(dict[str, JsonValue]).validate_json(str(request_body["content"]))
-    elements = TypeAdapter(list[dict[str, JsonValue]]).validate_python(card["elements"])
-    actions = TypeAdapter(list[dict[str, JsonValue]]).validate_python(elements[-1]["actions"])
-    assert [action["value"] for action in actions] == [
-        {"action_id": "approve", "value": "approved", "metadata": {}},
-        {"action_id": "reject", "value": "rejected", "metadata": {}},
+    body = TypeAdapter(dict[str, JsonValue]).validate_python(card["body"])
+    elements = TypeAdapter(list[dict[str, JsonValue]]).validate_python(body["elements"])
+    actions = [element for element in elements if element.get("tag") == "button"]
+    assert [action["behaviors"] for action in actions] == [
+        [
+            {
+                "type": "callback",
+                "value": {"action_id": "approve", "value": "approved", "metadata": {}},
+            }
+        ],
+        [
+            {
+                "type": "callback",
+                "value": {"action_id": "reject", "value": "rejected", "metadata": {}},
+            }
+        ],
     ]
+    assert [action["text"] for action in actions] == [
+        {"tag": "plain_text", "content": "Approve"},
+        {"tag": "plain_text", "content": "Reject"},
+    ]
+    assert card["schema"] == "2.0"
     adapter.close()
 
 
@@ -333,53 +349,65 @@ def test_feishu_text_card_send_and_exact_update_reuse_one_token(
     update_content = TypeAdapter(dict[str, JsonValue]).validate_json(str(update_request["content"]))
     assert card_content["config"] == update_content["config"]
     assert card_content["header"] == update_content["header"]
-    card_elements = TypeAdapter(list[dict[str, JsonValue]]).validate_python(card_content["elements"])
-    update_elements = TypeAdapter(list[dict[str, JsonValue]]).validate_python(update_content["elements"])
-    assert card_elements[:-1] == update_elements[:-1]
+    card_body = TypeAdapter(dict[str, JsonValue]).validate_python(card_content["body"])
+    update_body = TypeAdapter(dict[str, JsonValue]).validate_python(update_content["body"])
+    card_elements = TypeAdapter(list[dict[str, JsonValue]]).validate_python(card_body["elements"])
+    update_elements = TypeAdapter(list[dict[str, JsonValue]]).validate_python(update_body["elements"])
+    assert card_elements[:2] == update_elements[:2]
+    assert card_elements[-1] == update_elements[-1]
     assert card_content == {
+        "schema": "2.0",
         "config": {"update_multi": True},
         "header": {"title": {"tag": "plain_text", "content": "Approval"}},
-        "elements": [
-            {"tag": "markdown", "content": "Please **review** this request."},
-            {
-                "tag": "div",
-                "fields": [
-                    {
-                        "is_short": True,
-                        "text": {"tag": "lark_md", "content": "**Environment**\nStaging"},
-                    }
-                ],
-            },
-            {
-                "tag": "action",
-                "actions": [
-                    {
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": "Approve"},
-                        "type": "primary",
-                        "value": {
-                            "action_id": "approve",
-                            "value": "approved",
-                            "metadata": {"form_id": "form-1"},
-                        },
-                    },
-                    {
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": "Details"},
-                        "type": "default",
-                        "url": "https://example.com/details",
-                    },
-                ],
-            },
-        ],
+        "body": {
+            "direction": "vertical",
+            "elements": [
+                {"tag": "markdown", "content": "Please **review** this request."},
+                {
+                    "tag": "div",
+                    "fields": [
+                        {
+                            "is_short": True,
+                            "text": {"tag": "lark_md", "content": "**Environment**\nStaging"},
+                        }
+                    ],
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "Approve"},
+                    "type": "primary",
+                    "behaviors": [
+                        {
+                            "type": "callback",
+                            "value": {
+                                "action_id": "approve",
+                                "value": "approved",
+                                "metadata": {"form_id": "form-1"},
+                            },
+                        }
+                    ],
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "Details"},
+                    "type": "default",
+                    "behaviors": [{"type": "open_url", "default_url": "https://example.com/details"}],
+                },
+            ],
+        },
     }
-    update_actions = TypeAdapter(list[dict[str, JsonValue]]).validate_python(update_elements[-1]["actions"])
-    assert update_actions[0]["value"] == {
-        "action_id": "approve",
-        "value": "approved",
-        "metadata": {"form_id": "form-2"},
-    }
-    assert "value" not in update_actions[1]
+    update_behaviors = TypeAdapter(list[dict[str, JsonValue]]).validate_python(update_elements[-2]["behaviors"])
+    assert update_behaviors == [
+        {
+            "type": "callback",
+            "value": {
+                "action_id": "approve",
+                "value": "approved",
+                "metadata": {"form_id": "form-2"},
+            },
+        }
+    ]
+    assert "value" not in update_elements[-1]
 
     adapter.close()
 

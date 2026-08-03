@@ -16,7 +16,9 @@ or HTTP 200 with ``errcode=88``. Both forms receive the same bounded retry at
 the current traversal node or page, with a 0.1-second fallback delay when the
 Provider supplies no usable retry interval. A snapshot is published only after
 the complete traversal succeeds, so exhausted retries never expose partial
-Directory state.
+Directory state. Exact user lookup can return the same top-level error code
+with permission ``sub_code=60011``; destination validation preserves that
+secondary code so callers receive a typed missing-permission failure.
 
 The adapter intentionally exposes no DingTalk Webhook or STREAM capability.
 Its typed configuration therefore contains only API credentials and the
@@ -66,6 +68,7 @@ _TOKEN_AUTHENTICATION_ERROR_CODES = frozenset(
     {"InvalidAuthentication", "invalid.client", "unauthorized.client", "unsupported.grant.type"}
 )
 _MISSING_PERMISSION_ERROR_CODES = frozenset({60011})
+_MISSING_PERMISSION_SUB_CODES = frozenset({"60011"})
 _LEGACY_RATE_LIMIT_ERROR_CODES = frozenset({88})
 _MARKDOWN_TITLE_LIMIT = 64
 
@@ -125,6 +128,7 @@ class _UserListResponse(_LegacyResponse):
 
 
 class _UserGetResponse(_LegacyResponse):
+    sub_code: str | None = None
     result: _User | None = None
 
 
@@ -459,6 +463,8 @@ class _DingTalkProviderClient:
             user_response = _UserGetResponse.model_validate_json(response.content)
         except ValidationError:
             return _failure(OperationFailureCode.PROVIDER, "DingTalk destination response was invalid")
+        if user_response.sub_code in _MISSING_PERMISSION_SUB_CODES:
+            return _failure(OperationFailureCode.MISSING_PERMISSION, "DingTalk cannot read the destination user")
         if (
             response.status_code >= 400
             or user_response.errcode != 0

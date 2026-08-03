@@ -3,7 +3,7 @@
 - [ ] 1.1 Confirm the authoritative API credential, tenant-identification and baseline-permission operations for Slack, Feishu/Lark, DingTalk, WeCom and Microsoft Teams.
 - [ ] 1.2 Confirm each Provider's directory endpoints, configured visibility scope, pagination or organization traversal, rate-limit behavior and complete-snapshot boundary.
 - [ ] 1.3 Confirm each Provider's personal-user-only proactive destination shape and lifecycle, including Microsoft Teams personal conversation context; exclude all group、channel、chat、department、tag and multi-user broadcast destinations.
-- [ ] 1.4 Derive a field-complete normalized generic card intent and verify equivalent assessment, send and update semantics for Slack, Feishu/Lark and Microsoft Teams.
+- [ ] 1.4 Derive a field-complete normalized generic card intent covering required text input、required single-select input、multiple actions and opaque metadata, and verify equivalent assessment, send and update semantics for Slack, Feishu/Lark and Microsoft Teams.
 - [ ] 1.5 Confirm Webhook authentication, challenge and response semantics for Slack, Feishu/Lark and Microsoft Teams, plus STREAM connection, callback, reconnect, stop and ACK semantics for Slack and Feishu/Lark.
 - [ ] 1.6 Record each Provider SDK client's concurrency guarantees and determine whether the concrete adapter needs serialization, pooling or distinct client roles.
 
@@ -38,7 +38,7 @@
 - [ ] 5.3 Keep Provider-specific personal destination、CommonMark rendering、card rendering、message locator and error translation inside each concrete adapter, with no group or broadcast destination branches.
 - [ ] 5.4 Ensure one side-effecting method invocation makes at most one Provider call and returns a typed known or ambiguous outcome without automatic replay.
 - [ ] 5.5 Ensure successful sends distinguish Provider acceptance from delivery and return the exact Provider-discriminated message reference.
-- [ ] 5.6 Add tests for client reuse、single-user destination reachability、absence of broadcast surfaces、text fallback、side-effect-free card assessment、no dummy card capability、one-call-per-invocation and exact-reference updates.
+- [ ] 5.6 Add tests for client reuse、single-user destination reachability、absence of broadcast surfaces、text fallback、side-effect-free card assessment、text/single-select/multi-action card rendering、opaque metadata round-trip、no dummy card capability、one-call-per-invocation and exact-reference updates.
 
 ## 6. Implement IM event capabilities and control inversion
 
@@ -49,7 +49,7 @@
 - [ ] 6.5 Keep STREAM ACK ownership inside the receiving callback or connection and map the sink outcome without exposing ACK handles to downstream consumers.
 - [ ] 6.6 Preserve only confirmed real Provider event IDs; never synthesize IDs from payload, timestamps, message references or ACK envelopes.
 - [ ] 6.7 Keep transport credentials, HTTP response objects, connection state and SDK clients outside `AuthenticatedIMEvent`; retain immutable decrypted Provider-native payload for independent consumers.
-- [ ] 6.8 Add receiver-level tests for the applicable Slack, Feishu/Lark and Microsoft Teams Webhooks and Slack/Feishu/Lark STREAM paths, covering challenge or control frames, authentication failure, sink outcomes, redelivery, event-ID boundaries, ACK ownership, reconnect and stop behavior.
+- [ ] 6.8 Add receiver-level tests for the applicable Slack, Feishu/Lark and Microsoft Teams Webhooks and Slack/Feishu/Lark STREAM paths, covering challenge or control frames, authentication failure, text/single-select/multi-action callback payloads、opaque metadata、sink outcomes, redelivery, event-ID boundaries, ACK ownership, reconnect and stop behavior.
 
 ## 7. Complete exhaustive Provider verification
 

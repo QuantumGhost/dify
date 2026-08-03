@@ -45,6 +45,8 @@ from ..contracts import (
     CardActionKind,
     CardAssessment,
     CardIntent,
+    CardSingleSelectInput,
+    CardTextInput,
     CredentialTestResult,
     CredentialTestSuccess,
     DestinationTestResult,
@@ -84,6 +86,9 @@ _TOKEN_AUTHENTICATION_ERROR_CODES = frozenset({10003})
 _TENANT_PERMISSION_ERROR_CODES = frozenset({99991672})
 _DIRECTORY_PERMISSION_ERROR_CODES = frozenset({40004, 40014})
 _CARD_ACTION_EVENT_TYPE = "card.action.trigger"
+_SECOND_TIMESTAMP_DIGITS = 10
+_MILLISECOND_TIMESTAMP_DIGITS = 13
+_MICROSECOND_TIMESTAMP_DIGITS = 16
 
 logger = logging.getLogger(__name__)
 
@@ -397,6 +402,39 @@ def _render_card(intent: CardIntent, metadata: OpaqueMetadata) -> dict[str, Json
                 ],
             }
         )
+    if intent.inputs:
+        form_elements: list[JsonValue] = []
+        for card_input in intent.inputs:
+            if isinstance(card_input, CardTextInput):
+                input_element: dict[str, JsonValue] = {
+                    "tag": "input",
+                    "name": card_input.input_id,
+                    "label": {"tag": "plain_text", "content": card_input.label},
+                    "required": True,
+                }
+                if card_input.placeholder is not None:
+                    input_element["placeholder"] = {"tag": "plain_text", "content": card_input.placeholder}
+                if card_input.default_value is not None:
+                    input_element["default_value"] = card_input.default_value
+                form_elements.append(input_element)
+            elif isinstance(card_input, CardSingleSelectInput):
+                select_element: dict[str, JsonValue] = {
+                    "tag": "select_static",
+                    "name": card_input.input_id,
+                    "placeholder": {
+                        "tag": "plain_text",
+                        "content": card_input.label,
+                    },
+                    "required": True,
+                    "options": [
+                        {"text": {"tag": "plain_text", "content": option.label}, "value": option.value}
+                        for option in card_input.options
+                    ],
+                }
+                if card_input.default_value is not None:
+                    select_element["initial_option"] = card_input.default_value
+                form_elements.append(select_element)
+        elements.append({"tag": "form", "name": "dify_hitl_form", "elements": form_elements})
     if intent.actions:
         action_elements: list[JsonValue] = []
         caller_metadata: dict[str, JsonValue] = {}
@@ -408,7 +446,7 @@ def _render_card(intent: CardIntent, metadata: OpaqueMetadata) -> dict[str, Json
                     "tag": "button",
                     "text": {"tag": "plain_text", "content": action.label},
                     "type": "default",
-                    "url": action.value,
+                    "behaviors": [{"type": "open_url", "default_url": action.value}],
                 }
             else:
                 submit_value: dict[str, JsonValue] = {
@@ -420,13 +458,26 @@ def _render_card(intent: CardIntent, metadata: OpaqueMetadata) -> dict[str, Json
                     "tag": "button",
                     "text": {"tag": "plain_text", "content": action.label},
                     "type": "primary",
-                    "value": submit_value,
+                    "behaviors": [{"type": "callback", "value": submit_value}],
                 }
+                if intent.inputs:
+                    button["form_action_type"] = "submit"
+                    button["name"] = action.action_id
             action_elements.append(button)
-        elements.append({"tag": "action", "actions": action_elements})
+        if intent.inputs:
+            form = elements[-1]
+            if not isinstance(form, dict):
+                raise TypeError("Feishu/Lark form payload was invalid")
+            form_elements = form["elements"]
+            if not isinstance(form_elements, list):
+                raise TypeError("Feishu/Lark form elements were invalid")
+            form_elements.extend(action_elements)
+        else:
+            elements.extend(action_elements)
     card: dict[str, JsonValue] = {
+        "schema": "2.0",
         "config": {"update_multi": True},
-        "elements": elements,
+        "body": {"direction": "vertical", "elements": elements},
     }
     if intent.title is not None:
         card["header"] = {"title": {"tag": "plain_text", "content": intent.title}}
@@ -1040,9 +1091,16 @@ class _FeishuLarkStreamEventListener:
         if create_time is None:
             return None
         try:
-            return datetime.fromtimestamp(int(create_time) / 1000, tz=UTC)
+            timestamp = int(create_time)
+            if len(create_time) == _SECOND_TIMESTAMP_DIGITS:
+                return datetime.fromtimestamp(timestamp, tz=UTC)
+            if len(create_time) == _MILLISECOND_TIMESTAMP_DIGITS:
+                return datetime.fromtimestamp(timestamp / 1_000, tz=UTC)
+            if len(create_time) == _MICROSECOND_TIMESTAMP_DIGITS:
+                return datetime.fromtimestamp(timestamp / 1_000_000, tz=UTC)
         except (OSError, OverflowError, ValueError) as error:
             raise ValueError("Feishu/Lark STREAM event time is invalid") from error
+        raise ValueError("Feishu/Lark STREAM event time has an unsupported precision")
 
 
 class _FeishuLarkStreamClientRole:

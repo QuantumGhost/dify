@@ -121,6 +121,8 @@ Provider-specific personal destination shape、markdown/card rendering、message
 
 Dynamic Card Messaging 的 `send_card` 和 exact-reference update 必须接收 immutable `OpaqueMetadata`。该值对象只接受唯一 string keys，避免 Provider rendering 时用 `dict` 静默折叠重复 key。Metadata 是 caller 提供的 opaque correlation hint；concrete adapter 不解释其业务含义，并且只把它嵌套编码到每个 `SUBMIT` control，绝不附加到 `OPEN_URL` control。每个 submit control 同时保留原始 `CardAction.action_id` 和 `CardAction.value`：Feishu/Lark 与 Microsoft Teams 使用 nested object，Slack 使用 versioned compact JSON button value。Slack renderer 在任何 Provider call 前检查完整 button value 的 2000-byte UTF-8 limit，超限返回 typed rendering failure。
 
+Normalized card intent 还保留本期 HITL 必需的 required text input、required single-select input 和 ordered actions。Input ID 在一张卡中唯一，single-select option value 在该控件内唯一；存在 input 时至少存在一个 `SUBMIT` action。多个 submit action 是同一份表单的不同业务决策，不复制 input，也不把 selected action 混入 form values。Slack 使用 `input` block、`plain_text_input` 与 `radio_buttons`；Feishu/Lark 使用 schema 2.0 `form`、`input` 与 `select_static`；Microsoft Teams 使用 `Input.Text`、single-select `Input.ChoiceSet` 与多个 `Action.Submit`。三家 callback 均保留 Provider-native form values 与 selected action envelope，adapter 不在此边界组装 consumer submission model。
+
 Submit callback 中返回的 metadata 已经过 end-user-controlled Provider client，必须视为不可信输入，不能作为 authentication 或 authorization evidence。Provider adapter 继续只输出 Provider-native authenticated payload；独立 consumer/decoder 负责解析 Provider-specific submit envelope，并使用自己的可信状态验证 action 与 correlation。Metadata 不替代用于 message mutation 的 exact Provider message reference，也不引入 shared correlation token contract。
 
 ### 6. Webhook and STREAM invert control through IMEventSink
@@ -211,6 +213,7 @@ Shared contract tests不能替代具体 Provider evidence。Fixture 必须先脱
 - [Provider-native payload delays normalization] → This is intentional; generic Provider infrastructure must not guess consumer business schemas.
 - [Submit metadata can be modified by an end user or Provider client] → Treat it only as an opaque correlation hint; independent consumers must authorize from trusted state rather than returned metadata.
 - [Slack submit metadata can exceed the button-value wire limit] → Render the complete versioned envelope and return a typed failure before any Provider call when its UTF-8 encoding exceeds 2000 bytes.
+- [Provider form controls can silently diverge] → Keep the common intent limited to required text and required single-select controls supported by all three card Providers, assert every rendered input/action in concrete tests, and retain Provider-native callback values for independent decoding.
 
 ## Migration Plan
 

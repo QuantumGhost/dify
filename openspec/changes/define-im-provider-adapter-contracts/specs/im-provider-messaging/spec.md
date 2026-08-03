@@ -32,6 +32,8 @@ Slack, Feishu/Lark, DingTalk, WeCom and Microsoft Teams MUST implement Basic Mes
 ### Requirement: Dynamic Card Messaging MUST group assessment, send and update
 Dynamic Card Messaging MUST contain side-effect-free card representability assessment, `send_card` and exact-reference card update. Assessment MUST receive only a normalized generic card intent and MUST return a boolean representability decision plus an optional human-readable reason. The reason MUST be used only for diagnostics and MUST NOT be parsed as a stable decision code.
 
+The normalized card intent MUST preserve required text inputs, required single-select inputs with immutable labeled options, and an ordered set of actions. Text and single-select inputs MUST have unique stable input IDs. Actions MUST have unique stable action IDs and MAY contain multiple `SUBMIT` buttons. When inputs are present, at least one `SUBMIT` action MUST be present so the card remains completable. Slack, Feishu/Lark and Microsoft Teams MUST render these controls using their Provider-native form components rather than dropping inputs or replacing them with static text.
+
 #### Scenario: Provider can represent a card intent
 - **WHEN** assessment receives a normalized card intent that preserves its controls and semantics on the Provider
 - **THEN** it MUST return true without sending a message or creating Provider state
@@ -39,6 +41,10 @@ Dynamic Card Messaging MUST contain side-effect-free card representability asses
 #### Scenario: Provider cannot represent a card intent
 - **WHEN** assessment receives a normalized card intent containing an unsupported control
 - **THEN** it MUST return false with an optional reason and MUST NOT issue a Provider operation
+
+#### Scenario: Card contains text, single-select and multiple submit controls
+- **WHEN** assessment receives one required text input, one required single-select input and two or more submit actions
+- **THEN** Slack, Feishu/Lark and Microsoft Teams MUST report the card as representable and MUST preserve every control in send and exact-reference update payloads
 
 ### Requirement: Basic and Dynamic Card Messaging MUST expose distinct send operations
 Basic Messaging MUST expose `send_text`; Dynamic Card Messaging MUST expose `send_card`. `send_text` MUST receive one personal-user destination and one fully rendered CommonMark body without custom tags. The concrete adapter MUST render supported formatting for its Provider and MUST fall back to the same content as plain text when formatting is not expressible. `send_card` MUST receive one personal-user destination, one normalized card intent and one required immutable `OpaqueMetadata` value. Exact-reference card update MUST receive the same card intent and metadata inputs for the replacement rendering. `OpaqueMetadata` MUST contain string key/value pairs with unique, nonblank keys; construction MUST reject duplicate and blank or whitespace-only keys rather than silently collapsing or normalizing them. A nonblank key MUST retain its original string unchanged, and an opaque metadata value MAY be empty.
@@ -62,6 +68,8 @@ Basic Messaging MUST expose `send_text`; Dynamic Card Messaging MUST expose `sen
 ### Requirement: Caller metadata MUST round-trip only through submit controls
 Caller metadata MUST remain an opaque correlation hint. The concrete adapter MUST embed the complete metadata as one nested object inside every `SUBMIT` action produced by that `send_card` or update invocation, while preserving the action's `action_id` and `value`. It MUST NOT attach metadata to `OPEN_URL` actions. Feishu/Lark and Microsoft Teams MUST use Provider-native nested submit objects. Slack MUST use a versioned compact JSON button value containing the action value and nested metadata.
 
+Provider-native text and single-select values MUST be returned alongside the selected submit action in the authenticated callback payload. They MUST remain Provider-native payload fields; the Provider adapter MUST NOT combine them with opaque metadata or decode them into a consumer form model.
+
 Metadata returned through a Provider interaction MUST be treated as untrusted end-user-controlled input and MUST NOT be used as authentication or authorization evidence. The Provider adapter MUST retain the authenticated Provider-native callback payload without converting it into a shared business submission. An independent consumer or decoder MUST interpret the Provider-specific submit envelope and authorize the action from trusted application state. Metadata MUST NOT replace the exact Provider message reference used for card updates, and this contract MUST NOT introduce a separate shared card correlation token.
 
 #### Scenario: Card contains submit and open-URL actions
@@ -71,6 +79,10 @@ Metadata returned through a Provider interaction MUST be treated as untrusted en
 #### Scenario: Consumer receives returned metadata
 - **WHEN** an authenticated Provider callback contains metadata previously emitted in a submit control
 - **THEN** the adapter MUST preserve it only as part of the Provider-native payload and the consumer MUST NOT authorize the action from that metadata
+
+#### Scenario: Consumer receives submitted form controls
+- **WHEN** a user enters text, chooses one option and activates one of multiple submit actions
+- **THEN** the authenticated Provider-native payload MUST preserve the entered text, selected option, selected action ID/value and complete opaque metadata without treating any of them as authorization evidence
 
 #### Scenario: Slack submit envelope exceeds the Provider limit
 - **WHEN** one complete Slack versioned submit value exceeds 2000 bytes when encoded as UTF-8
