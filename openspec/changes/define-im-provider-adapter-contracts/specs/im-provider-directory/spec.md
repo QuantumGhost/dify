@@ -45,3 +45,18 @@ Slack cursor pagination, Feishu/Lark department traversal and the Provider-speci
 #### Scenario: Providers expose different traversal models
 - **WHEN** the five initial Providers expose different pagination, department or organization traversal models
 - **THEN** each concrete adapter MUST finish its own traversal without requiring callers to understand that protocol
+
+### Requirement: Applicable directory pagination seams MUST remain Provider-specific
+Slack, Feishu/Lark, DingTalk and Microsoft Teams configurations MUST expose an optional typed positive integer `directory_page_size` seam. WeCom MUST NOT expose that field because its implemented Directory traversal has no page-size parameter. The seam MUST alter only the concrete Provider's real pagination request and MUST NOT introduce a generic options map or local pseudo-pagination.
+
+#### Scenario: Default pagination configuration is used
+- **WHEN** `directory_page_size` is absent
+- **THEN** Slack MUST continue requesting `limit=200`, DingTalk MUST continue requesting user pages with `size=100`, Feishu/Lark MUST retain its existing scope and Directory endpoint defaults, and Microsoft Teams MUST omit `$top`
+
+#### Scenario: Explicit pagination configuration is used
+- **WHEN** a positive `directory_page_size` is configured
+- **THEN** Slack MUST send it as `limit`, DingTalk MUST send it as user-page `size`, Feishu/Lark MUST send it as `page_size` on each paginated Directory endpoint, and Microsoft Teams MUST send it as the initial `$top`
+
+#### Scenario: Provider supplies a continuation cursor
+- **WHEN** a configured first page returns a Slack cursor, DingTalk `next_cursor`, Feishu/Lark `page_token`, or Microsoft Graph `@odata.nextLink`
+- **THEN** the concrete adapter MUST follow that Provider continuation without synthesizing local pages, and Microsoft Teams MUST follow the exact trusted nextLink without reattaching `$top`

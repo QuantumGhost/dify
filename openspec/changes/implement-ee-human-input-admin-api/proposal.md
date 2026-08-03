@@ -13,13 +13,12 @@ Human Input v2 已经在 Dify 主仓库形成 Contact Directory、IM control-pla
 
 ## Cross-Repository Ownership
 
-本 change 是存放在 Dify repository 中的 cross-repository coordination plan。Dify 是 Human Input 领域行为与 internal API contract 的 source of truth，但该存放位置不改变 EE 对自身 transport、authentication 与 principal model 的 ownership。
+本 change 是该 capability 的 authoritative cross-repository coordination、specification 与 progress checklist。Dify repository 拥有这份跨仓规范以及 Human Input 领域行为和 internal API contract；`dify-enterprise` repository 拥有 EE Go/Protobuf transport implementation、Dashboard authentication/authorization 与 human-actor audit code。
 
-- 本 change 的 `specs/` 只定义 Dify-owned 领域行为、Dify internal API contract 与 `EE → Dify` boundary invariants。
-- `tasks.md` 中涉及 EE 的内容仅是 external delivery checklist；每组任务必须标注目标 repository 与 blocking dependency，不作为 Dify 领域规范，也不能由 Dify repo-local apply 执行。
-- EE public Protobuf contract、Dashboard authentication/authorization 与 human-actor audit model 由 `dify-enterprise` 代码拥有。它们在本 change 中只作为 integration dependency 被引用，不同步为 Dify main spec。
-- 所有 EE implementation 与 generated source 只写入 `dify-enterprise` repository；Dify repository 不承载 EE Go/Protobuf implementation。
-- EE implementation 开始前 MUST 在 `dify-enterprise` repository 建立并链接 repo-owned delivery artifact；本 coordination change 不得代替 EE repository 的实现计划或归档记录。
+- EE handwritten/generated source 只写入 `dify-enterprise` repository；Dify repository 不承载 EE Go/Protobuf implementation。
+- 不要求在 `dify-enterprise` 中复制 OpenSpec、progress checklist 或其他 delivery artifact；本 change 可以直接引用 EE implementation commit 作为交付证据。
+- 当前 EE implementation evidence 固定为 commit `935c2a9030a1fe9238d5b469298a7e31cfefb639`。该 commit 只证明 HTTP-only、default-off facade、typed/fake client、service/query/use-case boundary 和 durable audit lifecycle 的本地行为，不证明 Dify internal dependency 或真实跨仓 E2E 已完成。
+- 在 Dify internal surface、caller-scoped authentication、projection、workspace no-loop、manual-sync single-owner behavior 与真实跨仓 E2E 全部验证前，feature enablement MUST 保持 **NO-GO**。
 
 ## Capabilities
 
@@ -38,5 +37,6 @@ Human Input v2 已经在 Dify 主仓库形成 Contact Directory、IM control-pla
 - EE API contract：`dify-enterprise/server/pkg/apis/enterprise/v1/` 及其 Kratos HTTP generated bindings。
 - EE application/client：`dify-enterprise/server/pkg/enterprise/service/`、负责 audit/orchestration 的 use case、`server/pkg/difyclient/`、HTTP registration 与 Wire composition。
 - Dify upstream dependency：需要一个独立 change 提供 Organization Contact projection lifecycle、`/inner/api/enterprise/human-input/*` trusted HTTP surface，并让它与 workspace controllers 共用 Dify Human Input application service。
-- 不影响 EE Dify DB Ent schema，不新增 EE worker/provider dependency，不在 EE repo拥有 Human Input persistence migration。
+- EE target commit 已扩展 EE audit database 的 `audit_logs` lifecycle fields；它不新增 Dify DB Human Input Ent schema、EE worker/provider dependency 或 Human Input persistence migration。
 - Dify normative specification 来源：Dify Contact Directory / IM control-plane core specs 与 Dify internal API contract；`human-input-v2-api-summary.md` 和 `human-input-v2-api-contracts/specs/human-input-ee-admin-api/spec.md` 仅作为 EE delivery contract 输入。
+- EE target commit 的 merge evidence 仅覆盖 local/fake/default-off 测试范围；当前 rollout/feature enablement 结论为 **NO-GO**。

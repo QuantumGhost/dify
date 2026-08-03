@@ -1,0 +1,557 @@
+{
+  "audit": {
+    "ack_attempts": 1,
+    "ack_successes": 1,
+    "automatic_retries": 0,
+    "block_actions_deliveries": 1,
+    "chat_post_message_attempts": 1,
+    "chat_update_attempts": 1,
+    "duration_seconds": 137.513,
+    "endpoint_discovery_attempts": 1,
+    "endpoint_discovery_successes": 1,
+    "gui_acknowledge_button_clicks": 1,
+    "gui_buttons_removed": 1,
+    "gui_rendered_message_containers": 1,
+    "gui_same_container_updates": 1,
+    "residual_runner_threads": 0,
+    "sink_acceptances": 1,
+    "websocket_connection_successes": 1
+  },
+  "captured_at": "2026-08-02T20:47:05.572062Z",
+  "gui_observation": {
+    "clicked": {
+      "acknowledge_button_clicks": 1
+    },
+    "rendered": {
+      "enabled_acknowledge_buttons": 1,
+      "matching_message_containers": 1
+    },
+    "updated": {
+      "button_removed": true,
+      "matching_bodies": 1,
+      "matching_message_containers": 1,
+      "matching_titles": 1,
+      "remaining_acknowledge_buttons": 0,
+      "same_message_container": true
+    }
+  },
+  "operations": [
+    {
+      "exchanges": [
+        {
+          "authorization_present": true,
+          "method": "POST",
+          "path": "/api/chat.postMessage",
+          "provider_error_code": null,
+          "provider_request_id_present": true,
+          "provider_warning_codes": [
+            "missing_charset"
+          ],
+          "query": [],
+          "request_body": {
+            "blocks": [
+              {
+                "text": {
+                  "text": "Dify Slack Socket Evidence",
+                  "type": "<redacted:string>"
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "text": {
+                  "text": "One controlled click verifies the current Socket Mode block action.",
+                  "type": "<redacted:string>"
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "fields": [
+                  {
+                    "text": "<redacted:string>",
+                    "type": "<redacted:string>"
+                  }
+                ],
+                "type": "<redacted:string>"
+              },
+              {
+                "elements": [
+                  {
+                    "action_id": "dify_slack_evidence_ack",
+                    "text": {
+                      "text": "Acknowledge",
+                      "type": "<redacted:string>"
+                    },
+                    "type": "button",
+                    "value": "{\"action_value\":\"accepted\",\"metadata\":{\"evidence_batch\":\"slack-socket-block-actions\"},\"v\":\"<redacted:number>\"}"
+                  }
+                ],
+                "type": "actions"
+              }
+            ],
+            "channel": "<pseudonym:slack-channel:d542a7f821994f8f9b8e34fc>",
+            "text": "Dify Slack Socket Mode evidence card"
+          },
+          "response_body": {
+            "channel": "<pseudonym:slack-channel:d542a7f821994f8f9b8e34fc>",
+            "message": {
+              "app_id": "<redacted:string>",
+              "blocks": [
+                {
+                  "block_id": "<redacted:string>",
+                  "text": {
+                    "emoji": true,
+                    "text": "Dify Slack Socket Evidence",
+                    "type": "<redacted:string>"
+                  },
+                  "type": "<redacted:string>"
+                },
+                {
+                  "block_id": "<redacted:string>",
+                  "text": {
+                    "text": "One controlled click verifies the current Socket Mode block action.",
+                    "type": "<redacted:string>",
+                    "verbatim": false
+                  },
+                  "type": "<redacted:string>"
+                },
+                {
+                  "block_id": "<redacted:string>",
+                  "fields": [
+                    {
+                      "text": "<redacted:string>",
+                      "type": "<redacted:string>",
+                      "verbatim": false
+                    }
+                  ],
+                  "type": "<redacted:string>"
+                },
+                {
+                  "block_id": "<redacted:string>",
+                  "elements": [
+                    {
+                      "action_id": "dify_slack_evidence_ack",
+                      "text": {
+                        "emoji": true,
+                        "text": "Acknowledge",
+                        "type": "<redacted:string>"
+                      },
+                      "type": "button",
+                      "value": "{\"action_value\":\"accepted\",\"metadata\":{\"evidence_batch\":\"slack-socket-block-actions\"},\"v\":\"<redacted:number>\"}"
+                    }
+                  ],
+                  "type": "actions"
+                }
+              ],
+              "bot_id": "<redacted:string>",
+              "bot_profile": {
+                "app_id": "<redacted:string>",
+                "deleted": false,
+                "icons": {
+                  "image_36": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>"
+                },
+                "id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "updated": "<redacted:number>",
+                "user_id": "<redacted:string>"
+              },
+              "team": "<redacted:string>",
+              "text": "Dify Slack Socket Mode evidence card",
+              "ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+              "type": "message",
+              "user": "<redacted:string>"
+            },
+            "ok": true,
+            "response_metadata": {
+              "warnings": [
+                "missing_charset"
+              ]
+            },
+            "ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+            "warning": "missing_charset"
+          },
+          "status_code": 200
+        }
+      ],
+      "operation": "dynamic_card.send_card",
+      "result": {
+        "exact_reference_present": true,
+        "outcome": "accepted",
+        "provider_request_id_present": true
+      }
+    },
+    {
+      "ack": {
+        "envelope_id": "<redacted:string>",
+        "payload": null
+      },
+      "delivery": {
+        "accepts_response_payload": false,
+        "envelope_id": "<redacted:string>",
+        "payload": {
+          "actions": [
+            {
+              "action_id": "dify_slack_evidence_ack",
+              "action_ts": "<redacted:string>",
+              "block_id": "<redacted:string>",
+              "text": {
+                "emoji": true,
+                "text": "Acknowledge",
+                "type": "<redacted:string>"
+              },
+              "type": "button",
+              "value": "{\"action_value\":\"accepted\",\"metadata\":{\"evidence_batch\":\"slack-socket-block-actions\"},\"v\":\"<redacted:number>\"}"
+            }
+          ],
+          "api_app_id": "<redacted:string>",
+          "channel": {
+            "id": "<redacted:string>",
+            "name": "<redacted:string>"
+          },
+          "container": {
+            "channel_id": "<pseudonym:slack-channel:d542a7f821994f8f9b8e34fc>",
+            "is_ephemeral": false,
+            "message_ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+            "type": "message"
+          },
+          "enterprise": null,
+          "is_enterprise_install": false,
+          "message": {
+            "app_id": "<redacted:string>",
+            "blocks": [
+              {
+                "block_id": "<redacted:string>",
+                "text": {
+                  "emoji": true,
+                  "text": "Dify Slack Socket Evidence",
+                  "type": "<redacted:string>"
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "block_id": "<redacted:string>",
+                "text": {
+                  "text": "One controlled click verifies the current Socket Mode block action.",
+                  "type": "<redacted:string>",
+                  "verbatim": false
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "block_id": "<redacted:string>",
+                "fields": [
+                  {
+                    "text": "<redacted:string>",
+                    "type": "<redacted:string>",
+                    "verbatim": false
+                  }
+                ],
+                "type": "<redacted:string>"
+              },
+              {
+                "block_id": "<redacted:string>",
+                "elements": [
+                  {
+                    "action_id": "dify_slack_evidence_ack",
+                    "text": {
+                      "emoji": true,
+                      "text": "Acknowledge",
+                      "type": "<redacted:string>"
+                    },
+                    "type": "button",
+                    "value": "{\"action_value\":\"accepted\",\"metadata\":{\"evidence_batch\":\"slack-socket-block-actions\"},\"v\":\"<redacted:number>\"}"
+                  }
+                ],
+                "type": "actions"
+              }
+            ],
+            "bot_id": "<redacted:string>",
+            "team": "<redacted:string>",
+            "text": "Dify Slack Socket Mode evidence card",
+            "ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+            "type": "message",
+            "user": "<redacted:string>"
+          },
+          "response_url": "<redacted:string>",
+          "state": {
+            "values": {}
+          },
+          "team": {
+            "domain": "<redacted:string>",
+            "id": "<redacted:string>"
+          },
+          "token": "<redacted:string>",
+          "trigger_id": "<redacted:string>",
+          "type": "block_actions",
+          "user": {
+            "id": "<redacted:string>",
+            "name": "<redacted:string>",
+            "team_id": "<redacted:string>",
+            "username": "<redacted:string>"
+          }
+        },
+        "retry_attempt": null,
+        "retry_reason": null,
+        "type": "interactive"
+      },
+      "normalized_event": {
+        "provider": "slack",
+        "provider_event_id": null,
+        "provider_event_time": null,
+        "provider_event_type": "block_actions",
+        "provider_payload": {
+          "actions": [
+            {
+              "action_id": "dify_slack_evidence_ack",
+              "action_ts": "<redacted:string>",
+              "block_id": "<redacted:string>",
+              "text": {
+                "emoji": true,
+                "text": "Acknowledge",
+                "type": "<redacted:string>"
+              },
+              "type": "button",
+              "value": "{\"action_value\":\"accepted\",\"metadata\":{\"evidence_batch\":\"slack-socket-block-actions\"},\"v\":\"<redacted:number>\"}"
+            }
+          ],
+          "api_app_id": "<redacted:string>",
+          "channel": {
+            "id": "<redacted:string>",
+            "name": "<redacted:string>"
+          },
+          "container": {
+            "channel_id": "<pseudonym:slack-channel:d542a7f821994f8f9b8e34fc>",
+            "is_ephemeral": false,
+            "message_ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+            "type": "message"
+          },
+          "enterprise": null,
+          "is_enterprise_install": false,
+          "message": {
+            "app_id": "<redacted:string>",
+            "blocks": [
+              {
+                "block_id": "<redacted:string>",
+                "text": {
+                  "emoji": true,
+                  "text": "Dify Slack Socket Evidence",
+                  "type": "<redacted:string>"
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "block_id": "<redacted:string>",
+                "text": {
+                  "text": "One controlled click verifies the current Socket Mode block action.",
+                  "type": "<redacted:string>",
+                  "verbatim": false
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "block_id": "<redacted:string>",
+                "fields": [
+                  {
+                    "text": "<redacted:string>",
+                    "type": "<redacted:string>",
+                    "verbatim": false
+                  }
+                ],
+                "type": "<redacted:string>"
+              },
+              {
+                "block_id": "<redacted:string>",
+                "elements": [
+                  {
+                    "action_id": "dify_slack_evidence_ack",
+                    "text": {
+                      "emoji": true,
+                      "text": "Acknowledge",
+                      "type": "<redacted:string>"
+                    },
+                    "type": "button",
+                    "value": "{\"action_value\":\"accepted\",\"metadata\":{\"evidence_batch\":\"slack-socket-block-actions\"},\"v\":\"<redacted:number>\"}"
+                  }
+                ],
+                "type": "actions"
+              }
+            ],
+            "bot_id": "<redacted:string>",
+            "team": "<redacted:string>",
+            "text": "Dify Slack Socket Mode evidence card",
+            "ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+            "type": "message",
+            "user": "<redacted:string>"
+          },
+          "response_url": "<redacted:string>",
+          "state": {
+            "values": {}
+          },
+          "team": {
+            "domain": "<redacted:string>",
+            "id": "<redacted:string>"
+          },
+          "token": "<redacted:string>",
+          "trigger_id": "<redacted:string>",
+          "type": "block_actions",
+          "user": {
+            "id": "<redacted:string>",
+            "name": "<redacted:string>",
+            "team_id": "<redacted:string>",
+            "username": "<redacted:string>"
+          }
+        },
+        "provider_tenant_id": "<redacted:string>"
+      },
+      "operation": "stream.interactive.block_actions",
+      "result": {
+        "ack_success_count": 1,
+        "outcome": "accepted",
+        "sink_acceptance_count": 1
+      }
+    },
+    {
+      "exchanges": [
+        {
+          "authorization_present": true,
+          "method": "POST",
+          "path": "/api/chat.update",
+          "provider_error_code": null,
+          "provider_request_id_present": true,
+          "provider_warning_codes": [
+            "missing_charset"
+          ],
+          "query": [],
+          "request_body": {
+            "blocks": [
+              {
+                "text": {
+                  "text": "Dify Slack Socket Evidence Complete",
+                  "type": "<redacted:string>"
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "text": {
+                  "text": "The same message was updated through its exact Slack reference.",
+                  "type": "<redacted:string>"
+                },
+                "type": "<redacted:string>"
+              },
+              {
+                "fields": [
+                  {
+                    "text": "<redacted:string>",
+                    "type": "<redacted:string>"
+                  },
+                  {
+                    "text": "<redacted:string>",
+                    "type": "<redacted:string>"
+                  }
+                ],
+                "type": "<redacted:string>"
+              }
+            ],
+            "channel": "<pseudonym:slack-channel:d542a7f821994f8f9b8e34fc>",
+            "text": "Dify Slack Socket Mode evidence complete",
+            "ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>"
+          },
+          "response_body": {
+            "channel": "<pseudonym:slack-channel:d542a7f821994f8f9b8e34fc>",
+            "message": {
+              "app_id": "<redacted:string>",
+              "blocks": [
+                {
+                  "block_id": "<redacted:string>",
+                  "text": {
+                    "emoji": true,
+                    "text": "Dify Slack Socket Evidence Complete",
+                    "type": "<redacted:string>"
+                  },
+                  "type": "<redacted:string>"
+                },
+                {
+                  "block_id": "<redacted:string>",
+                  "text": {
+                    "text": "The same message was updated through its exact Slack reference.",
+                    "type": "<redacted:string>",
+                    "verbatim": false
+                  },
+                  "type": "<redacted:string>"
+                },
+                {
+                  "block_id": "<redacted:string>",
+                  "fields": [
+                    {
+                      "text": "<redacted:string>",
+                      "type": "<redacted:string>",
+                      "verbatim": false
+                    },
+                    {
+                      "text": "<redacted:string>",
+                      "type": "<redacted:string>",
+                      "verbatim": false
+                    }
+                  ],
+                  "type": "<redacted:string>"
+                }
+              ],
+              "bot_id": "<redacted:string>",
+              "bot_profile": {
+                "app_id": "<redacted:string>",
+                "deleted": false,
+                "icons": {
+                  "image_36": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>"
+                },
+                "id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "updated": "<redacted:number>",
+                "user_id": "<redacted:string>"
+              },
+              "edited": {
+                "ts": "<pseudonym:slack-message-ts:d783de38bda5f898846bbd13>",
+                "user": "<redacted:string>"
+              },
+              "team": "<redacted:string>",
+              "text": "Dify Slack Socket Mode evidence complete",
+              "type": "message",
+              "user": "<redacted:string>"
+            },
+            "ok": true,
+            "response_metadata": {
+              "warnings": [
+                "missing_charset"
+              ]
+            },
+            "text": "Dify Slack Socket Mode evidence complete",
+            "ts": "<pseudonym:slack-message-ts:559c219b978ac8468702f2d1>",
+            "warning": "missing_charset"
+          },
+          "status_code": 200
+        }
+      ],
+      "operation": "dynamic_card.update_card",
+      "result": {
+        "exact_reference_preserved": true,
+        "outcome": "accepted",
+        "provider_request_id_present": true
+      }
+    }
+  ],
+  "provider": "slack",
+  "sanitization": {
+    "credentials_retained": false,
+    "pii_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false,
+    "safe_test_content_retained": true,
+    "stable_reference_pseudonyms": true,
+    "url_or_wss_retained": false
+  },
+  "transport": "socket_mode"
+}

@@ -13,13 +13,12 @@ EE backend使用Go 1.25、Kratos、Protobuf HTTP annotations和Wire。这里的P
 
 ### Repository 与 specification ownership
 
-本 change 选择 Dify repository 作为跨仓协调入口，因为 Human Input 领域上下文与 internal API contract 均由 Dify 拥有。该选择只决定 plan 的存放位置，不把 EE implementation ownership 转移给 Dify：
+本 change 是该 capability 的 authoritative cross-repository coordination、specification 与 progress checklist。Dify repository 拥有这份跨仓规范以及 Human Input 领域行为和 internal API contract；该规范 ownership 不会把 EE implementation ownership 转移给 Dify：
 
-- Dify `specs/` 的 normative scope 仅包含 Dify 领域行为、internal API contract 与跨边界不变量；
-- EE public Protobuf、Dashboard authentication/authorization 与 human-actor audit model 由 `dify-enterprise` 拥有，本设计对它们的描述是 external delivery context；
-- `tasks.md` 中的 EE task 是带目标 repository 和 upstream dependency 的 external delivery checklist；
-- EE handwritten/generated source 必须只提交到 `dify-enterprise`，不得放入 Dify repository。
-- EE implementation 开始前必须在 `dify-enterprise` repository 建立并链接 repo-owned delivery artifact；Dify 中的 coordination checklist 不能作为 EE source 的 repo-local apply 或 archive owner。
+- EE public Protobuf、Dashboard authentication/authorization、human-actor audit 和 handwritten/generated source 由 `dify-enterprise` 代码拥有，并且只提交到 `dify-enterprise`；
+- 不要求在 `dify-enterprise` 中复制 OpenSpec、progress checklist 或其他 delivery artifact，本 checklist 可以直接引用 EE implementation commit；
+- 当前 implementation evidence 是 EE commit `935c2a9030a1fe9238d5b469298a7e31cfefb639`，其证明范围仅为 HTTP-only、default-off facade 与 local/fake behavior；
+- Dify internal dependency、真实跨仓 E2E 与 feature enablement readiness 仍由本 change 统一跟踪，当前 enablement 结论为 **NO-GO**。
 
 ## Goals / Non-Goals
 
@@ -113,16 +112,18 @@ Dify Workspace
 
 现有系统级双向依赖继续存在，但Human Input capability内只有`EE → Dify → Provider`方向；这避免了request recursion和业务ownership循环。
 
-### 5. EE use case拥有admin audit/orchestration，typed Dify client隐藏HTTP机制
+### 5. EE query、mutation orchestration 与 data adapter 使用独立边界
 
-新增边界建议如下：
+EE target commit `935c2a9030a1fe9238d5b469298a7e31cfefb639` 固定了下列 consumer-owned boundary：
 
-- `server/pkg/difyclient/apiv1/human_input.go`：typed internal request/response、`HumanInputControlPlaneClient`与HTTP implementation，拥有service authentication、timeout、safe-read retry和Dify error decoding；
-- `server/pkg/enterprise/biz/human_input.go`：拥有admin command/query orchestration、operation/correlation ID、EE human-actor audit lifecycle、ambiguous mutation outcome与transport-neutral upstream error；
-- `server/pkg/enterprise/service/human_input.go`：Protobuf mapping、defaulting、authenticated Dashboard User extraction和enterprise error mapping；
-- `server/pkg/enterprise/server/http.go`与Wire provider set：Kratos HTTP registration与dependency injection。
+- 五个 read method（Contact list、integration get、latest run、latest results 与 IM identity list）由 Kratos service 直接依赖 `HumanInputQuery`；
+- 七个 mutation method（integration upsert/delete/test、manual sync create 与 binding create/delete/test）由 service 调用 `HumanInputUsecase`，use case 通过 `HumanInputGateway` 执行 command，并拥有 operation/correlation ID 与 EE human-actor audit lifecycle；
+- data adapter 是 wire response status-dependent semantic validation 的唯一 owner；低层 HTTP client 只负责 HTTP decode、stable error decoding 与 retry classification，不重复判断 configured projection 等组合不变量；
+- service 只负责 Protobuf mapping/defaulting、authenticated Dashboard User extraction 与 enterprise error mapping，不能重新实现 Dify business rule。
 
-Use case不解释provider response、不执行CAS，也不依赖Dify Ent、provider client或Human Input persistence。Mutation在调用Dify前写入或提交EE-owned audit start record，完成后记录success/rejected/unknown outcome；ambiguous timeout保持`unknown`并通过current-state read恢复，而不是blind retry。为测试提供fake `HumanInputControlPlaneClient`与audit recorder，service tests不得启动Dify DB或provider client。
+Use case 不解释 provider response、不执行 CAS，也不依赖 Dify Ent、provider client 或 Human Input persistence。每次 mutation 必须先调用 durable audit `Begin`，以 unique operation ID 同步插入一条 `started` row，再调用 `HumanInputGateway`；`Complete` 必须以 `started` 为前置条件，通过 CAS 把同一 row 更新为 `success`、`rejected` 或 `unknown`。default-off composition 不得连接 audit database。
+
+如果 gateway 已产生 mutation outcome、但 `Complete` 失败，调用方必须同时得到 mutation outcome 和明确的 audit-completion-unavailable 信号。遗留 `started` row 只表示 audit completion unresolved，绝不能据此推断 mutation outcome；operation/correlation metadata 只支持 current-state read 与 manual reconciliation，本设计不承诺自动改写既有 audit outcome。测试使用 fake `HumanInputQuery`、`HumanInputGateway` 与 audit recorder，service/use-case tests 不得启动 Dify DB 或 provider client。
 
 ### 6. EE独占human actor audit；Dify只接收operation/correlation metadata
 
@@ -159,20 +160,22 @@ EE Dashboard是Organization integration/sync/binding管理入口。Dify workspac
 - [新增一次EE到Dify HTTP hop] → 复用现有`difyclient`连接、authentication、timeout与observability；相比双实现，额外hop的复杂度和延迟更可控。
 - [Dify internal与EE Protobuf contract漂移] → 维护语义contract tests，验证EE必需字段、enum、pagination与error-code mapping；不要求两个contract的非公共字段或整体shape一一同构。
 - [现有系统双向依赖导致误用] → capability-level architecture test明确禁止Dify Human Input调用EE Human Input façade；license/edition/Organization capability仍可通过窄port或在entry/composition boundary预解析的policy snapshot提供，EE path继续禁止Human Input Ent/provider/worker依赖。
-- [Mutation timeout产生不确定结果] → 不blind retry；通过GET current integration/latest run/refreshed Contact恢复确定状态。
+- [Mutation timeout产生不确定结果] → 不blind retry；operation/correlation metadata 支持 GET current integration/latest run/refreshed Contact 的 current-state read 与 manual reconciliation，但不会据此自动改写 audit 或 mutation outcome。
 - [Dify internal API不可用导致EE Dashboard不可用] → 返回sanitized upstream error并提供operation/latency/correlation metrics；不使用stale EE cache伪造current control-plane state。
-- [EE human-actor audit与Dify mutation失配] → EE在发起mutation前记录actor与operation ID，按success/rejected/unknown完成outcome；Dify只记录caller service与同一correlation context，EE actor不进入Dify Account-specific字段。
+- [EE human-actor audit与Dify mutation失配] → EE在发起 mutation 前同步插入单条 `started` row，完成时以 CAS 更新同一 row；`Complete` 失败时暴露 audit completion unavailable，遗留 `started` 只代表 audit completion unresolved。Dify只记录caller service与同一correlation context，EE actor不进入Dify Account-specific字段。
 
 ## Migration Plan
 
 1. 先在独立Dify change中落地Human Input application service、provider/sync implementation与`/inner/api/enterprise/human-input/*` contract，并完成workspace controller共用service的验证。
-2. 在EE repo增加Human Input Protobuf API、Kratos HTTP generated bindings与typed `difyclient`，使用fake upstream完成service/client tests。
+2. 以 EE commit `935c2a9030a1fe9238d5b469298a7e31cfefb639` 的 HTTP-only、default-off facade、query/use-case/data-adapter boundary 与 durable audit local/fake tests 作为已完成的本地实现证据；该证据不等同于真实 Dify integration readiness。
 3. 对Dify internal JSON/error contract与EE必需public fields执行语义cross-repo contract test，确认EE不需要Human Input Ent schema、worker或provider dependency，也不要求两个contract整体同构。
-4. 注册Kratos HTTP service并在feature gate下部署，先验证read endpoint，再验证CAS mutation、manual sync和binding mutation。
-5. 启用EE Dashboard入口，观察upstream latency/error、stale revision和ambiguous mutation timeout；Dify侧继续观察worker、provider与reconciliation指标。
+4. 在真实 Dify internal surface 上验证 Kratos HTTP service，先验证 read endpoint，再验证 CAS mutation、manual sync、binding mutation、caller-scoped authentication、durable audit `Complete` failure semantics 与 manual reconciliation。
+5. 只有在 Dify internal dependency、projection、caller-scoped authentication、真实跨仓 E2E、workspace no-loop 与 manual-sync single-owner behavior 完成后才允许启用 EE Dashboard 入口，并观察 upstream latency/error、stale revision 和 ambiguous mutation timeout；Dify侧继续观察worker、provider与reconciliation指标。
 
 回滚时关闭EE Human Input admin feature gate并移除HTTP registration即可。Dify control-plane数据与worker不回滚，EE没有本地Human Input state需要清理。
 
 ## Open Questions
 
-- 无未决设计问题。Dify internal API 是本 change 的显式 blocking upstream dependency；在该 contract 冻结并落地前，EE 只能完成 fake-client 范围，不能宣称端到端 apply-ready。
+- Dify internal Human Input surface、caller-scoped authentication、Organization Contact projection 与 `joined_at` source 仍是 blocking upstream dependencies。
+- 真实跨仓 contract/E2E、workspace no-loop 与 manual sync single-owner behavior 尚未验证。
+- Durable `started` row 只表示 audit completion unresolved；current-state/manual reconciliation 不承诺改写既有 audit outcome。在上述真实跨仓 blocker 关闭前，target commit 只能视为 local/fake/default-off evidence，feature enablement 为 **NO-GO**。

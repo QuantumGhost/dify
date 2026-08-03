@@ -1,0 +1,72 @@
+{
+  "audit": {
+    "adapter_instances": 1,
+    "automatic_retries": 0,
+    "credential_invocations": 0,
+    "directory_invocations": 1,
+    "gui_invocations": 0,
+    "messaging_invocations": 0,
+    "observed_endpoint_counts": {
+      "contact_scopes": 1,
+      "explicit_user": 2,
+      "tenant_query": 1,
+      "tenant_token": 1
+    },
+    "provider_configuration_changes": 0,
+    "retained_endpoint_counts": {
+      "tenant_token": 1
+    }
+  },
+  "captured_at": "2026-08-02T21:22:40.269705Z",
+  "evidence_scope": {
+    "aggregate_directory_complete": false,
+    "closed_exact_entries": [
+      "POST /auth/v3/tenant_access_token/internal"
+    ],
+    "unobserved_exact_entries": [
+      "GET /contact/v3/departments/{department_id}/children [paginated]",
+      "GET /contact/v3/users/find_by_department [paginated]"
+    ]
+  },
+  "exchange_catalog": {
+    "tenant-token-1": {
+      "authorization_present": false,
+      "method": "POST",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    }
+  },
+  "operations": [
+    {
+      "exchange_ids": [
+        "tenant-token-1"
+      ],
+      "operation": "directory.read_snapshot",
+      "result": {
+        "evidence_outcome": "partial",
+        "snapshot_outcome": "success",
+        "tenant_bound": true
+      }
+    }
+  ],
+  "provider": "feishu",
+  "sanitization": {
+    "credentials_retained": false,
+    "pii_retained": false,
+    "preclosed_exchanges_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false
+  },
+  "source_attempt_sha256": "b003b70793a1b4d3d428e9556f8ff7f9ecdf63b2e384c149bb335db0e969bfca"
+}

@@ -1,0 +1,179 @@
+{
+  "captured_at": "2026-08-02T13:01:08Z",
+  "provider": "ding_talk",
+  "sanitization": {
+    "raw_headers_retained": false,
+    "credentials_retained": false,
+    "provider_identity_retained": false,
+    "pii_retained": false
+  },
+  "operations": [
+    {
+      "operation": "credential.test_credentials",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "permissions": [
+          { "name": "contact.department.read", "granted": true },
+          { "name": "contact.user.read", "granted": true }
+        ]
+      },
+      "exchange_ids": ["oauth-token-1", "department-probe-1", "user-probe-1"]
+    },
+    {
+      "operation": "directory.read_snapshot",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "entry_count": 2,
+        "unique_provider_user_id_count": 2,
+        "email_present_count": 2,
+        "available_counts": { "true": 2, "false": 0, "unknown": 0 }
+      },
+      "exchange_ids": ["department-probe-2", "user-probe-2", "department-list-1", "user-list-1"]
+    }
+  ],
+  "exchange_catalog": {
+    "oauth-token-1": {
+      "method": "POST",
+      "path": "/v1.0/oauth2/<redacted:path-segment>/token",
+      "query": [],
+      "authorization_present": false,
+      "request_body": {
+        "client_id": "<redacted:string>",
+        "client_secret": "<redacted:string>",
+        "grant_type": "<redacted:string>"
+      },
+      "status_code": 200,
+      "response_body": {
+        "access_token": "<redacted:string>",
+        "expires_in": "<redacted:number>"
+      }
+    },
+    "department-probe-1": {
+      "method": "POST",
+      "path": "/topapi/v2/department/listsub",
+      "query": [["access_token", "<redacted:string>"]],
+      "authorization_present": false,
+      "request_body": { "dept_id": "<redacted:number>" },
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "request_id": "<redacted:string>",
+        "result": []
+      }
+    },
+    "department-probe-2": { "$same_shape_and_values_as": "department-probe-1" },
+    "department-list-1": { "$same_shape_and_values_as": "department-probe-1" },
+    "user-probe-1": {
+      "method": "POST",
+      "path": "/topapi/v2/user/list",
+      "query": [["access_token", "<redacted:string>"]],
+      "authorization_present": false,
+      "request_body": {
+        "cursor": "<redacted:number>",
+        "dept_id": "<redacted:number>",
+        "size": "<redacted:number>"
+      },
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "request_id": "<redacted:string>",
+        "result": {
+          "has_more": true,
+          "next_cursor": "<redacted:number>",
+          "list": [
+            {
+              "active": true,
+              "admin": true,
+              "avatar": "<redacted:string>",
+              "boss": true,
+              "dept_id_list": ["<redacted:number>"],
+              "dept_order": "<redacted:number>",
+              "email": "<redacted:string>",
+              "exclusive_account": false,
+              "hide_mobile": false,
+              "job_number": "<redacted:string>",
+              "leader": false,
+              "name": "<redacted:string>",
+              "org_email": "<redacted:string>",
+              "remark": "<redacted:string>",
+              "telephone": "<redacted:string>",
+              "title": "<redacted:string>",
+              "unionid": "<redacted:string>",
+              "userid": "<redacted:string>",
+              "work_place": "<redacted:string>"
+            }
+          ]
+        }
+      }
+    },
+    "user-probe-2": { "$same_shape_and_values_as": "user-probe-1" },
+    "user-list-1": {
+      "method": "POST",
+      "path": "/topapi/v2/user/list",
+      "query": [["access_token", "<redacted:string>"]],
+      "authorization_present": false,
+      "request_body": {
+        "cursor": "<redacted:number>",
+        "dept_id": "<redacted:number>",
+        "size": "<redacted:number>"
+      },
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "request_id": "<redacted:string>",
+        "result": {
+          "has_more": false,
+          "list": [
+            {
+              "active": true,
+              "admin": true,
+              "avatar": "<redacted:string>",
+              "boss": true,
+              "dept_id_list": ["<redacted:number>"],
+              "dept_order": "<redacted:number>",
+              "email": "<redacted:string>",
+              "exclusive_account": false,
+              "hide_mobile": false,
+              "job_number": "<redacted:string>",
+              "leader": false,
+              "name": "<redacted:string>",
+              "org_email": "<redacted:string>",
+              "remark": "<redacted:string>",
+              "telephone": "<redacted:string>",
+              "title": "<redacted:string>",
+              "unionid": "<redacted:string>",
+              "userid": "<redacted:string>",
+              "work_place": "<redacted:string>"
+            },
+            {
+              "active": true,
+              "admin": false,
+              "avatar": "<redacted:string>",
+              "boss": false,
+              "dept_id_list": ["<redacted:number>"],
+              "dept_order": "<redacted:number>",
+              "email": "<redacted:string>",
+              "exclusive_account": false,
+              "hide_mobile": false,
+              "job_number": "<redacted:string>",
+              "leader": false,
+              "name": "<redacted:string>",
+              "org_email": "<redacted:string>",
+              "remark": "<redacted:string>",
+              "telephone": "<redacted:string>",
+              "title": "<redacted:string>",
+              "unionid": "<redacted:string>",
+              "userid": "<redacted:string>",
+              "work_place": "<redacted:string>"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

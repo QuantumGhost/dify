@@ -1,0 +1,823 @@
+{
+  "audit": {
+    "adapter_instances": 6,
+    "automatic_retries": 0,
+    "directory_page_size": 1,
+    "operation_invocations": 6,
+    "provider_configuration_changes": 0,
+    "side_effecting_endpoint_counts": {
+      "message_interactive": 1,
+      "message_text": 1,
+      "message_update": 1
+    }
+  },
+  "captured_at": "2026-08-03T06:36:42.719959Z",
+  "exchange_catalog": {
+    "exchange-1": {
+      "authorization_present": false,
+      "endpoint": "tenant_token",
+      "method": "POST",
+      "operation": "credential.test_credentials",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-10": {
+      "authorization_present": true,
+      "endpoint": "explicit_user",
+      "method": "GET",
+      "operation": "directory.read_snapshot",
+      "path": "/open-apis/contact/v3/users/<redacted:path-segment>",
+      "query": [
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "user": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "city": "<redacted:string>",
+            "country": "<redacted:string>",
+            "description": "<redacted:string>",
+            "email": "<redacted:string>",
+            "employee_no": "<redacted:string>",
+            "employee_type": "<redacted:number>",
+            "en_name": "<redacted:string>",
+            "enterprise_email": "<redacted:string>",
+            "is_tenant_manager": false,
+            "job_title": "<redacted:string>",
+            "join_time": "<redacted:number>",
+            "mobile_visible": true,
+            "name": "<redacted:string>",
+            "open_id": "<redacted:string>",
+            "status": {
+              "is_activated": true,
+              "is_exited": false,
+              "is_frozen": false,
+              "is_resigned": false,
+              "is_unjoin": false
+            },
+            "union_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "work_station": "<redacted:string>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-11": {
+      "authorization_present": false,
+      "endpoint": "tenant_token",
+      "method": "POST",
+      "operation": "basic_messaging.test_destination",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-12": {
+      "authorization_present": true,
+      "endpoint": "destination_email",
+      "method": "POST",
+      "operation": "basic_messaging.test_destination",
+      "path": "/open-apis/contact/v3/users/batch_get_id",
+      "query": [
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": {
+        "emails": [
+          "<redacted:string>"
+        ]
+      },
+      "response_body": {
+        "code": 99991672,
+        "error": {
+          "log_id": "<redacted:string>",
+          "message": "<redacted:string>",
+          "permission_violations": [
+            {
+              "subject": "<redacted:string>",
+              "type": "<redacted:string>"
+            }
+          ],
+          "troubleshooter": "<redacted:string>"
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 400
+    },
+    "exchange-13": {
+      "authorization_present": true,
+      "endpoint": "destination_user",
+      "method": "GET",
+      "operation": "basic_messaging.test_destination",
+      "path": "/open-apis/contact/v3/users/<redacted:path-segment>",
+      "query": [
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "user": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "city": "<redacted:string>",
+            "country": "<redacted:string>",
+            "description": "<redacted:string>",
+            "email": "<redacted:string>",
+            "employee_no": "<redacted:string>",
+            "employee_type": "<redacted:number>",
+            "en_name": "<redacted:string>",
+            "enterprise_email": "<redacted:string>",
+            "is_tenant_manager": true,
+            "job_title": "<redacted:string>",
+            "join_time": "<redacted:number>",
+            "mobile_visible": true,
+            "name": "<redacted:string>",
+            "open_id": "<redacted:string>",
+            "status": {
+              "is_activated": true,
+              "is_exited": false,
+              "is_frozen": false,
+              "is_resigned": false,
+              "is_unjoin": false
+            },
+            "union_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "work_station": "<redacted:string>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-14": {
+      "authorization_present": true,
+      "endpoint": "destination_user",
+      "method": "GET",
+      "operation": "basic_messaging.test_destination",
+      "path": "/open-apis/contact/v3/users/<redacted:path-segment>",
+      "query": [
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "user": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "city": "<redacted:string>",
+            "country": "<redacted:string>",
+            "description": "<redacted:string>",
+            "email": "<redacted:string>",
+            "employee_no": "<redacted:string>",
+            "employee_type": "<redacted:number>",
+            "en_name": "<redacted:string>",
+            "enterprise_email": "<redacted:string>",
+            "is_tenant_manager": true,
+            "job_title": "<redacted:string>",
+            "join_time": "<redacted:number>",
+            "mobile_visible": true,
+            "name": "<redacted:string>",
+            "open_id": "<redacted:string>",
+            "status": {
+              "is_activated": true,
+              "is_exited": false,
+              "is_frozen": false,
+              "is_resigned": false,
+              "is_unjoin": false
+            },
+            "union_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "work_station": "<redacted:string>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-15": {
+      "authorization_present": true,
+      "endpoint": "destination_user",
+      "method": "GET",
+      "operation": "basic_messaging.test_destination",
+      "path": "/open-apis/contact/v3/users/<redacted:path-segment>",
+      "query": [
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "user": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "city": "<redacted:string>",
+            "country": "<redacted:string>",
+            "description": "<redacted:string>",
+            "email": "<redacted:string>",
+            "employee_no": "<redacted:string>",
+            "employee_type": "<redacted:number>",
+            "en_name": "<redacted:string>",
+            "enterprise_email": "<redacted:string>",
+            "is_tenant_manager": true,
+            "job_title": "<redacted:string>",
+            "join_time": "<redacted:number>",
+            "mobile_visible": true,
+            "name": "<redacted:string>",
+            "open_id": "<redacted:string>",
+            "status": {
+              "is_activated": true,
+              "is_exited": false,
+              "is_frozen": false,
+              "is_resigned": false,
+              "is_unjoin": false
+            },
+            "union_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "work_station": "<redacted:string>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-16": {
+      "authorization_present": false,
+      "endpoint": "tenant_token",
+      "method": "POST",
+      "operation": "basic_messaging.send_text",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-17": {
+      "authorization_present": true,
+      "endpoint": "message_text",
+      "method": "POST",
+      "operation": "basic_messaging.send_text",
+      "path": "/open-apis/im/v1/messages",
+      "query": [
+        [
+          "receive_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": {
+        "content": "<redacted:string>",
+        "msg_type": "<redacted:string>",
+        "receive_id": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "data": {
+          "body": {
+            "content": "<redacted:string>"
+          },
+          "chat_id": "<redacted:string>",
+          "create_time": "<redacted:string>",
+          "deleted": false,
+          "message_id": "<pseudonym:feishu-message:1>",
+          "msg_type": "<redacted:string>",
+          "sender": {
+            "id": "<redacted:string>",
+            "id_type": "<redacted:string>",
+            "sender_type": "<redacted:string>",
+            "tenant_key": "<redacted:string>"
+          },
+          "update_time": "<redacted:string>",
+          "updated": false
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-18": {
+      "authorization_present": false,
+      "endpoint": "tenant_token",
+      "method": "POST",
+      "operation": "dynamic_card.send_card",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-19": {
+      "authorization_present": true,
+      "endpoint": "message_interactive",
+      "method": "POST",
+      "operation": "dynamic_card.send_card",
+      "path": "/open-apis/im/v1/messages",
+      "query": [
+        [
+          "receive_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": {
+        "content": "<redacted:string>",
+        "msg_type": "<redacted:string>",
+        "receive_id": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "data": {
+          "body": {
+            "content": "<redacted:string>"
+          },
+          "chat_id": "<redacted:string>",
+          "create_time": "<redacted:string>",
+          "deleted": false,
+          "message_id": "<pseudonym:feishu-message:2>",
+          "msg_type": "<redacted:string>",
+          "sender": {
+            "id": "<redacted:string>",
+            "id_type": "<redacted:string>",
+            "sender_type": "<redacted:string>",
+            "tenant_key": "<redacted:string>"
+          },
+          "update_time": "<redacted:string>",
+          "updated": false
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-2": {
+      "authorization_present": true,
+      "endpoint": "tenant_query",
+      "method": "GET",
+      "operation": "credential.test_credentials",
+      "path": "/open-apis/tenant/v2/tenant/query",
+      "query": [],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "tenant": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "display_id": "<redacted:string>",
+            "name": "<redacted:string>",
+            "tenant_key": "<redacted:string>",
+            "tenant_tag": "<redacted:number>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-20": {
+      "authorization_present": false,
+      "endpoint": "tenant_token",
+      "method": "POST",
+      "operation": "dynamic_card.update_card",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-21": {
+      "authorization_present": true,
+      "endpoint": "message_update",
+      "method": "PATCH",
+      "operation": "dynamic_card.update_card",
+      "path": "/open-apis/im/v1/messages/<pseudonym:feishu-message:2>",
+      "query": [],
+      "request_body": {
+        "content": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "data": {},
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-3": {
+      "authorization_present": true,
+      "endpoint": "contact_scopes",
+      "method": "GET",
+      "operation": "credential.test_credentials",
+      "path": "/open-apis/contact/v3/scopes",
+      "query": [
+        [
+          "department_id_type",
+          "<redacted:string>"
+        ],
+        [
+          "page_size",
+          "<redacted:string>"
+        ],
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "has_more": true,
+          "page_token": "<redacted:string>",
+          "user_ids": [
+            "<redacted:string>"
+          ]
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-4": {
+      "authorization_present": true,
+      "endpoint": "contact_scopes",
+      "method": "GET",
+      "operation": "credential.test_credentials",
+      "path": "/open-apis/contact/v3/scopes",
+      "query": [
+        [
+          "department_id_type",
+          "<redacted:string>"
+        ],
+        [
+          "page_size",
+          "<redacted:string>"
+        ],
+        [
+          "page_token",
+          "<redacted:string>"
+        ],
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "has_more": false,
+          "user_ids": [
+            "<redacted:string>"
+          ]
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-5": {
+      "authorization_present": false,
+      "endpoint": "tenant_token",
+      "method": "POST",
+      "operation": "directory.read_snapshot",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "response_body": {
+        "code": 0,
+        "expire": "<redacted:number>",
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-6": {
+      "authorization_present": true,
+      "endpoint": "tenant_query",
+      "method": "GET",
+      "operation": "directory.read_snapshot",
+      "path": "/open-apis/tenant/v2/tenant/query",
+      "query": [],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "tenant": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "display_id": "<redacted:string>",
+            "name": "<redacted:string>",
+            "tenant_key": "<redacted:string>",
+            "tenant_tag": "<redacted:number>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-7": {
+      "authorization_present": true,
+      "endpoint": "contact_scopes",
+      "method": "GET",
+      "operation": "directory.read_snapshot",
+      "path": "/open-apis/contact/v3/scopes",
+      "query": [
+        [
+          "department_id_type",
+          "<redacted:string>"
+        ],
+        [
+          "page_size",
+          "<redacted:string>"
+        ],
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "has_more": true,
+          "page_token": "<redacted:string>",
+          "user_ids": [
+            "<redacted:string>"
+          ]
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-8": {
+      "authorization_present": true,
+      "endpoint": "contact_scopes",
+      "method": "GET",
+      "operation": "directory.read_snapshot",
+      "path": "/open-apis/contact/v3/scopes",
+      "query": [
+        [
+          "department_id_type",
+          "<redacted:string>"
+        ],
+        [
+          "page_size",
+          "<redacted:string>"
+        ],
+        [
+          "page_token",
+          "<redacted:string>"
+        ],
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "has_more": false,
+          "user_ids": [
+            "<redacted:string>"
+          ]
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    },
+    "exchange-9": {
+      "authorization_present": true,
+      "endpoint": "explicit_user",
+      "method": "GET",
+      "operation": "directory.read_snapshot",
+      "path": "/open-apis/contact/v3/users/<redacted:path-segment>",
+      "query": [
+        [
+          "user_id_type",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "code": 0,
+        "data": {
+          "user": {
+            "avatar": {
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_72": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            },
+            "city": "<redacted:string>",
+            "country": "<redacted:string>",
+            "description": "<redacted:string>",
+            "email": "<redacted:string>",
+            "employee_no": "<redacted:string>",
+            "employee_type": "<redacted:number>",
+            "en_name": "<redacted:string>",
+            "enterprise_email": "<redacted:string>",
+            "is_tenant_manager": true,
+            "job_title": "<redacted:string>",
+            "join_time": "<redacted:number>",
+            "mobile_visible": true,
+            "name": "<redacted:string>",
+            "open_id": "<redacted:string>",
+            "status": {
+              "is_activated": true,
+              "is_exited": false,
+              "is_frozen": false,
+              "is_resigned": false,
+              "is_unjoin": false
+            },
+            "union_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "work_station": "<redacted:string>"
+          }
+        },
+        "msg": "<redacted:string>"
+      },
+      "status_code": 200
+    }
+  },
+  "operations": [
+    {
+      "endpoint_counts": {
+        "contact_scopes": 2,
+        "tenant_query": 1,
+        "tenant_token": 1
+      },
+      "operation": "credential.test_credentials",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true
+      }
+    },
+    {
+      "endpoint_counts": {
+        "contact_scopes": 2,
+        "explicit_user": 2,
+        "tenant_query": 1,
+        "tenant_token": 1
+      },
+      "operation": "directory.read_snapshot",
+      "result": {
+        "entries_present": true,
+        "outcome": "success",
+        "tenant_bound": true
+      }
+    },
+    {
+      "address_type_results": {
+        "email": {
+          "failure_code": "destination_unreachable",
+          "outcome": "failure"
+        },
+        "open_id": {
+          "outcome": "success"
+        },
+        "union_id": {
+          "outcome": "success"
+        },
+        "user_id": {
+          "outcome": "success"
+        }
+      },
+      "endpoint_counts": {
+        "destination_email": 1,
+        "destination_user": 3,
+        "tenant_token": 1
+      },
+      "operation": "basic_messaging.test_destination",
+      "result": {
+        "outcome": "success"
+      }
+    },
+    {
+      "endpoint_counts": {
+        "message_text": 1,
+        "tenant_token": 1
+      },
+      "operation": "basic_messaging.send_text",
+      "result": {
+        "exact_reference_present": true,
+        "outcome": "accepted"
+      }
+    },
+    {
+      "endpoint_counts": {
+        "message_interactive": 1,
+        "tenant_token": 1
+      },
+      "operation": "dynamic_card.send_card",
+      "result": {
+        "exact_reference_present": true,
+        "outcome": "accepted"
+      }
+    },
+    {
+      "endpoint_counts": {
+        "message_update": 1,
+        "tenant_token": 1
+      },
+      "operation": "dynamic_card.update_card",
+      "result": {
+        "exact_reference_present": true,
+        "outcome": "accepted"
+      }
+    }
+  ],
+  "provider": "feishu",
+  "sanitization": {
+    "credentials_retained": false,
+    "performed_in_memory_before_persistence": true,
+    "pii_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false,
+    "stable_reference_pseudonyms": true
+  }
+}

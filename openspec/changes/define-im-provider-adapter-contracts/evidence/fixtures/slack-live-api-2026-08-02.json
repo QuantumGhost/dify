@@ -1,0 +1,533 @@
+{
+  "captured_at": "2026-08-02T12:37:03Z",
+  "provider": "slack",
+  "sanitization": {
+    "raw_headers_retained": false,
+    "credentials_retained": false,
+    "provider_identity_retained": false,
+    "pii_retained": false,
+    "safe_test_content_retained": true
+  },
+  "operations": [
+    {
+      "operation": "credential.test_credentials",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "permissions": [
+          { "name": "chat:write", "granted": true },
+          { "name": "users:read", "granted": true },
+          { "name": "users:read.email", "granted": true }
+        ]
+      },
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/auth.test",
+          "query": [],
+          "authorization_present": true,
+          "request_body": null,
+          "status_code": 200,
+          "response_body": {
+            "ok": true,
+            "url": "<redacted:string>",
+            "team": "<redacted:string>",
+            "user": "<redacted:string>",
+            "team_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "bot_id": "<redacted:string>",
+            "is_enterprise_install": false
+          }
+        }
+      ]
+    },
+    {
+      "operation": "directory.read_snapshot",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "entry_count": 5,
+        "unique_provider_user_id_count": 5,
+        "email_present_count": 2,
+        "available_counts": { "true": 4, "false": 1, "unknown": 0 }
+      },
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/auth.test",
+          "query": [],
+          "authorization_present": true,
+          "request_body": null,
+          "status_code": 200,
+          "response_body": {
+            "ok": true,
+            "url": "<redacted:string>",
+            "team": "<redacted:string>",
+            "user": "<redacted:string>",
+            "team_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "bot_id": "<redacted:string>",
+            "is_enterprise_install": false
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/users.list",
+          "query": [["limit", "<redacted:string>"]],
+          "authorization_present": true,
+          "request_body": null,
+          "status_code": 200,
+          "response_body": {
+            "ok": true,
+            "members": [
+              {
+                "id": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "deleted": false,
+                "color": "<redacted:string>",
+                "real_name": "<redacted:string>",
+                "tz": "<redacted:string>",
+                "tz_label": "<redacted:string>",
+                "tz_offset": "<redacted:number>",
+                "profile": {
+                  "avatar_hash": "<redacted:string>",
+                  "status_text": "<redacted:string>",
+                  "status_emoji": "<redacted:string>",
+                  "real_name": "<redacted:string>",
+                  "display_name": "<redacted:string>",
+                  "real_name_normalized": "<redacted:string>",
+                  "display_name_normalized": "<redacted:string>",
+                  "first_name": "<redacted:string>",
+                  "last_name": "<redacted:string>",
+                  "image_24": "<redacted:string>",
+                  "image_32": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>",
+                  "image_192": "<redacted:string>",
+                  "image_512": "<redacted:string>",
+                  "status_text_canonical": "<redacted:string>",
+                  "team": "<redacted:string>",
+                  "title": "<redacted:string>",
+                  "phone": "<redacted:string>",
+                  "skype": "<redacted:string>",
+                  "fields": {},
+                  "status_emoji_display_info": [],
+                  "status_expiration": "<redacted:number>",
+                  "always_active": true
+                },
+                "is_admin": false,
+                "is_owner": false,
+                "is_primary_owner": false,
+                "is_restricted": false,
+                "is_ultra_restricted": false,
+                "is_bot": false,
+                "is_app_user": false,
+                "updated": "<redacted:number>",
+                "is_email_confirmed": false,
+                "who_can_share_contact_card": "<redacted:string>"
+              },
+              {
+                "id": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "deleted": true,
+                "profile": {
+                  "avatar_hash": "<redacted:string>",
+                  "status_text": "<redacted:string>",
+                  "status_emoji": "<redacted:string>",
+                  "real_name": "<redacted:string>",
+                  "display_name": "<redacted:string>",
+                  "real_name_normalized": "<redacted:string>",
+                  "display_name_normalized": "<redacted:string>",
+                  "first_name": "<redacted:string>",
+                  "last_name": "<redacted:string>",
+                  "image_24": "<redacted:string>",
+                  "image_32": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>",
+                  "image_192": "<redacted:string>",
+                  "image_512": "<redacted:string>",
+                  "status_text_canonical": "<redacted:string>",
+                  "team": "<redacted:string>",
+                  "title": "<redacted:string>",
+                  "phone": "<redacted:string>",
+                  "skype": "<redacted:string>",
+                  "status_emoji_display_info": [],
+                  "status_expiration": "<redacted:number>",
+                  "bot_id": "<redacted:string>",
+                  "api_app_id": "<redacted:string>",
+                  "always_active": true
+                },
+                "is_bot": true,
+                "is_app_user": false,
+                "updated": "<redacted:number>"
+              },
+              {
+                "id": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "deleted": false,
+                "color": "<redacted:string>",
+                "real_name": "<redacted:string>",
+                "tz": "<redacted:string>",
+                "tz_label": "<redacted:string>",
+                "tz_offset": "<redacted:number>",
+                "profile": {
+                  "avatar_hash": "<redacted:string>",
+                  "status_text": "<redacted:string>",
+                  "status_emoji": "<redacted:string>",
+                  "real_name": "<redacted:string>",
+                  "display_name": "<redacted:string>",
+                  "real_name_normalized": "<redacted:string>",
+                  "display_name_normalized": "<redacted:string>",
+                  "email": "<redacted:string>",
+                  "first_name": "<redacted:string>",
+                  "last_name": "<redacted:string>",
+                  "image_24": "<redacted:string>",
+                  "image_32": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>",
+                  "image_192": "<redacted:string>",
+                  "image_512": "<redacted:string>",
+                  "status_text_canonical": "<redacted:string>",
+                  "team": "<redacted:string>",
+                  "title": "<redacted:string>",
+                  "phone": "<redacted:string>",
+                  "skype": "<redacted:string>",
+                  "status_emoji_display_info": [],
+                  "status_expiration": "<redacted:number>"
+                },
+                "is_admin": true,
+                "is_owner": true,
+                "is_primary_owner": true,
+                "is_restricted": false,
+                "is_ultra_restricted": false,
+                "is_bot": false,
+                "is_app_user": false,
+                "updated": "<redacted:number>",
+                "is_email_confirmed": true,
+                "who_can_share_contact_card": "<redacted:string>"
+              },
+              {
+                "id": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "deleted": false,
+                "color": "<redacted:string>",
+                "real_name": "<redacted:string>",
+                "tz": "<redacted:string>",
+                "tz_label": "<redacted:string>",
+                "tz_offset": "<redacted:number>",
+                "profile": {
+                  "avatar_hash": "<redacted:string>",
+                  "status_text": "<redacted:string>",
+                  "status_emoji": "<redacted:string>",
+                  "real_name": "<redacted:string>",
+                  "display_name": "<redacted:string>",
+                  "real_name_normalized": "<redacted:string>",
+                  "display_name_normalized": "<redacted:string>",
+                  "email": "<redacted:string>",
+                  "first_name": "<redacted:string>",
+                  "last_name": "<redacted:string>",
+                  "image_24": "<redacted:string>",
+                  "image_32": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>",
+                  "image_192": "<redacted:string>",
+                  "image_512": "<redacted:string>",
+                  "status_text_canonical": "<redacted:string>",
+                  "team": "<redacted:string>",
+                  "title": "<redacted:string>",
+                  "phone": "<redacted:string>",
+                  "skype": "<redacted:string>",
+                  "status_emoji_display_info": [],
+                  "status_expiration": "<redacted:number>"
+                },
+                "is_admin": false,
+                "is_owner": false,
+                "is_primary_owner": false,
+                "is_restricted": false,
+                "is_ultra_restricted": false,
+                "is_bot": false,
+                "is_app_user": false,
+                "updated": "<redacted:number>",
+                "is_email_confirmed": true,
+                "who_can_share_contact_card": "<redacted:string>"
+              },
+              {
+                "id": "<redacted:string>",
+                "team_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "deleted": false,
+                "color": "<redacted:string>",
+                "real_name": "<redacted:string>",
+                "tz": "<redacted:string>",
+                "tz_label": "<redacted:string>",
+                "tz_offset": "<redacted:number>",
+                "profile": {
+                  "avatar_hash": "<redacted:string>",
+                  "status_text": "<redacted:string>",
+                  "status_emoji": "<redacted:string>",
+                  "real_name": "<redacted:string>",
+                  "display_name": "<redacted:string>",
+                  "real_name_normalized": "<redacted:string>",
+                  "display_name_normalized": "<redacted:string>",
+                  "first_name": "<redacted:string>",
+                  "last_name": "<redacted:string>",
+                  "image_24": "<redacted:string>",
+                  "image_32": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>",
+                  "image_192": "<redacted:string>",
+                  "image_512": "<redacted:string>",
+                  "status_text_canonical": "<redacted:string>",
+                  "team": "<redacted:string>",
+                  "title": "<redacted:string>",
+                  "phone": "<redacted:string>",
+                  "skype": "<redacted:string>",
+                  "status_emoji_display_info": [],
+                  "status_expiration": "<redacted:number>",
+                  "bot_id": "<redacted:string>",
+                  "api_app_id": "<redacted:string>",
+                  "always_active": false
+                },
+                "is_admin": false,
+                "is_owner": false,
+                "is_primary_owner": false,
+                "is_restricted": false,
+                "is_ultra_restricted": false,
+                "is_bot": true,
+                "is_app_user": false,
+                "updated": "<redacted:number>",
+                "is_email_confirmed": false,
+                "who_can_share_contact_card": "<redacted:string>"
+              }
+            ],
+            "cache_ts": "<redacted:number>",
+            "response_metadata": { "next_cursor": "<redacted:string>" }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "basic_messaging.test_destination",
+      "result": {
+        "outcome": "failure",
+        "code": "missing_permission",
+        "message": "Slack token is missing destination scope: channels:read, groups:read, mpim:read, im:read"
+      },
+      "exchanges": [
+        {
+          "method": "GET",
+          "path": "/api/conversations.info",
+          "query": [["channel", "<redacted:string>"]],
+          "authorization_present": true,
+          "request_body": null,
+          "status_code": 200,
+          "response_body": {
+            "ok": false,
+            "error": "<redacted:string>",
+            "needed": "<redacted:string>",
+            "provided": "<redacted:string>"
+          }
+        }
+      ]
+    },
+    {
+      "operation": "basic_messaging.send_text",
+      "result": {
+        "outcome": "accepted",
+        "exact_reference_present": true,
+        "provider_request_id_present": true
+      },
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/chat.postMessage",
+          "query": [],
+          "authorization_present": true,
+          "request_body": {
+            "channel": "<redacted:string>",
+            "text": "Dify IM adapter evidence check: Slack basic message accepted."
+          },
+          "status_code": 200,
+          "response_body": {
+            "ok": true,
+            "channel": "<redacted:string>",
+            "ts": "<redacted:string>",
+            "message": {
+              "user": "<redacted:string>",
+              "type": "message",
+              "ts": "<redacted:string>",
+              "bot_id": "<redacted:string>",
+              "app_id": "<redacted:string>",
+              "text": "Dify IM adapter evidence check: Slack basic message accepted.",
+              "team": "<redacted:string>",
+              "bot_profile": {
+                "id": "<redacted:string>",
+                "app_id": "<redacted:string>",
+                "user_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "icons": {
+                  "image_36": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>"
+                },
+                "deleted": false,
+                "updated": "<redacted:number>",
+                "team_id": "<redacted:string>"
+              },
+              "blocks": [
+                {
+                  "type": "rich_text",
+                  "block_id": "<redacted:string>",
+                  "elements": [
+                    {
+                      "type": "rich_text_section",
+                      "elements": [
+                        {
+                          "type": "text",
+                          "text": "Dify IM adapter evidence check: Slack basic message accepted."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "warning": "<redacted:string>",
+            "response_metadata": { "warnings": ["<redacted:string>"] }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "dynamic_card.assess",
+      "result": { "outcome": "success", "representable": true, "reason": null },
+      "exchanges": []
+    },
+    {
+      "operation": "dynamic_card.send_card",
+      "result": {
+        "outcome": "accepted",
+        "exact_reference_present": true,
+        "provider_request_id_present": true
+      },
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/chat.postMessage",
+          "query": [],
+          "authorization_present": true,
+          "request_body": {
+            "channel": "<redacted:string>",
+            "text": "Dify IM adapter evidence card",
+            "blocks": [
+              {
+                "type": "header",
+                "text": { "type": "plain_text", "text": "<redacted:string>" }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Dify IM adapter evidence card. No action beyond this test is required."
+                }
+              },
+              {
+                "type": "section",
+                "fields": [{ "type": "mrkdwn", "text": "<redacted:string>" }]
+              },
+              {
+                "type": "actions",
+                "elements": [
+                  {
+                    "type": "button",
+                    "text": { "type": "plain_text", "text": "<redacted:string>" },
+                    "action_id": "<redacted:string>",
+                    "value": "<redacted:string>"
+                  }
+                ]
+              }
+            ]
+          },
+          "status_code": 200,
+          "response_body": {
+            "ok": true,
+            "channel": "<redacted:string>",
+            "ts": "<redacted:string>",
+            "message": {
+              "user": "<redacted:string>",
+              "type": "message",
+              "ts": "<redacted:string>",
+              "bot_id": "<redacted:string>",
+              "app_id": "<redacted:string>",
+              "text": "Dify IM adapter evidence card",
+              "team": "<redacted:string>",
+              "bot_profile": {
+                "id": "<redacted:string>",
+                "app_id": "<redacted:string>",
+                "user_id": "<redacted:string>",
+                "name": "<redacted:string>",
+                "icons": {
+                  "image_36": "<redacted:string>",
+                  "image_48": "<redacted:string>",
+                  "image_72": "<redacted:string>"
+                },
+                "deleted": false,
+                "updated": "<redacted:number>",
+                "team_id": "<redacted:string>"
+              },
+              "blocks": [
+                {
+                  "type": "header",
+                  "block_id": "<redacted:string>",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "<redacted:string>",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "block_id": "<redacted:string>",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Dify IM adapter evidence card. No action beyond this test is required.",
+                    "verbatim": false
+                  }
+                },
+                {
+                  "type": "section",
+                  "block_id": "<redacted:string>",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "<redacted:string>", "verbatim": false }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "block_id": "<redacted:string>",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "action_id": "<redacted:string>",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "<redacted:string>",
+                        "emoji": true
+                      },
+                      "value": "<redacted:string>"
+                    }
+                  ]
+                }
+              ]
+            },
+            "warning": "<redacted:string>",
+            "response_metadata": { "warnings": ["<redacted:string>"] }
+          }
+        }
+      ]
+    }
+  ]
+}

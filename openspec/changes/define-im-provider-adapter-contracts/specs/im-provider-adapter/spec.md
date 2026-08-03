@@ -12,14 +12,14 @@ An `IMProviderAdapter` MUST be constructed from one concrete Provider's typed co
 - **THEN** the adapter MAY own a Provider-specific client bundle, but each client role MUST be created or lazily memoized by the adapter rather than reconstructed by each capability call
 
 ### Requirement: IMProviderAdapter MUST expose narrow capability views
-The adapter MUST expose required `directory`, `messaging` and `webhook_events` capability views. It MUST expose `dynamic_card_messaging` and `stream_events` only when the concrete Provider supports them. Capability presence MUST be the authoritative support signal; the adapter MUST NOT expose a separate support flag that can disagree with the capability view and MUST NOT provide dummy unsupported methods.
+The adapter MUST expose required `directory` and `messaging` capability views. It MUST expose `dynamic_card_messaging`, `webhook_events` and `stream_events` only when the concrete Provider supports them. Capability presence MUST be the authoritative support signal; the adapter MUST NOT expose a separate support flag that can disagree with the capability view and MUST NOT provide dummy unsupported methods.
 
 #### Scenario: Initial Provider capabilities are inspected
 - **WHEN** callers inspect the five initial adapters
-- **THEN** all five MUST expose Directory, Basic Messaging and Webhook Events; Slack, Feishu/Lark and Microsoft Teams MUST expose Dynamic Card Messaging; and only Slack, Feishu/Lark and DingTalk MUST expose STREAM Events
+- **THEN** all five MUST expose Directory and Basic Messaging; Slack, Feishu/Lark and Microsoft Teams MUST expose Dynamic Card Messaging and Webhook Events; and only Slack and Feishu/Lark MUST expose STREAM Events
 
 #### Scenario: Unsupported capability is requested
-- **WHEN** a caller inspects Dynamic Card Messaging on DingTalk or WeCom, or STREAM Events on WeCom or Microsoft Teams
+- **WHEN** a caller inspects Dynamic Card Messaging, Webhook Events or STREAM Events on DingTalk or WeCom, or STREAM Events on Microsoft Teams
 - **THEN** the capability MUST be absent rather than represented by a method that fails with an unsupported result
 
 ### Requirement: IMProviderAdapter MUST expose credential testing over its bound configuration
@@ -38,7 +38,7 @@ The adapter MUST expose `test_credentials()` without credential or event transpo
 - **THEN** it MUST NOT mutate remote Provider configuration or any caller-owned business state
 
 ### Requirement: Provider configuration shapes MUST remain Provider-specific
-The shared adapter boundary MUST NOT flatten API credentials, Webhook verification material, encryption material or STREAM connection material into one generic key/value map. Each concrete adapter configuration MUST keep its typed Provider-specific shape while exposing the same shared capability interfaces.
+The shared adapter boundary MUST NOT flatten API credentials, applicable Webhook verification material, encryption material, STREAM connection material or Directory page-size seams into one generic key/value map. Each concrete adapter configuration MUST keep its typed Provider-specific shape while exposing the same shared capability interfaces. DingTalk and WeCom MUST NOT retain event-transport configuration fields.
 
 #### Scenario: Slack and Feishu adapters are constructed
 - **WHEN** Slack and Feishu/Lark require different API and event-transport configuration fields

@@ -1,0 +1,69 @@
+{
+  "audit": {
+    "adapter_instances": 1,
+    "automatic_retries": 0,
+    "credential_invocations": 0,
+    "destination_invocations": 0,
+    "directory_invocations": 1,
+    "observed_endpoint_counts": {
+      "department_permission_probe": 1,
+      "department_traversal": 1,
+      "oauth_token": 1,
+      "user_permission_probe": 1,
+      "user_traversal": 1
+    },
+    "operation_invocations": 1,
+    "provider_configuration_changes": 0,
+    "retained_endpoint_counts": {
+      "oauth_token": 1
+    },
+    "send_invocations": 0
+  },
+  "captured_at": "2026-08-02T22:08:54.469703Z",
+  "evidence_scope": {
+    "closed_exact_entries": [
+      "POST /v1.0/oauth2/{corpId}/token"
+    ],
+    "unobserved_missing_entries": []
+  },
+  "exchange_catalog": {
+    "oauth-token-1": {
+      "authorization_present": false,
+      "method": "POST",
+      "path": "/v1.0/oauth2/<redacted:path-segment>/token",
+      "query": [],
+      "request_body": {
+        "client_id": "<redacted:string>",
+        "client_secret": "<redacted:string>",
+        "grant_type": "<redacted:string>"
+      },
+      "response_body": {
+        "access_token": "<redacted:string>",
+        "expires_in": "<redacted:number>"
+      },
+      "status_code": 200
+    }
+  },
+  "operations": [
+    {
+      "exchange_ids": [
+        "oauth-token-1"
+      ],
+      "operation": "directory.read_snapshot",
+      "result": {
+        "entries_present": true,
+        "evidence_outcome": "complete",
+        "snapshot_outcome": "success",
+        "tenant_bound": true
+      }
+    }
+  ],
+  "provider": "ding_talk",
+  "sanitization": {
+    "credentials_retained": false,
+    "pii_retained": false,
+    "preclosed_exchanges_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false
+  }
+}

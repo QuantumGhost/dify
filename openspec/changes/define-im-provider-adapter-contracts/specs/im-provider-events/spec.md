@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Event transport support MUST be expressed by adapter capabilities
-Every initial `IMProviderAdapter` MUST expose Webhook Events. Slack, Feishu/Lark and DingTalk MUST additionally expose STREAM Events. WeCom and Microsoft Teams MUST not expose STREAM Events. Capability presence MUST be authoritative; no separate transport-support flag or dummy unsupported event capability may exist.
+Slack, Feishu/Lark and Microsoft Teams MUST expose Webhook Events. Slack and Feishu/Lark MUST additionally expose STREAM Events. DingTalk and WeCom MUST expose neither event capability. Capability presence MUST be authoritative; no separate transport-support flag or dummy unsupported event capability may exist.
 
 #### Scenario: Microsoft Teams event capabilities are inspected
 - **WHEN** a caller inspects a Microsoft Teams adapter
@@ -9,7 +9,11 @@ Every initial `IMProviderAdapter` MUST expose Webhook Events. Slack, Feishu/Lark
 
 #### Scenario: DingTalk event capabilities are inspected
 - **WHEN** a caller inspects a DingTalk adapter
-- **THEN** both Webhook Events and STREAM Events MUST be present
+- **THEN** both Webhook Events and STREAM Events MUST be absent
+
+#### Scenario: WeCom event capabilities are inspected
+- **WHEN** a caller inspects a WeCom adapter
+- **THEN** both Webhook Events and STREAM Events MUST be absent
 
 ### Requirement: Webhook and STREAM authentication MUST converge at AuthenticatedIMEvent
 Webhook and STREAM capabilities MUST keep their wire authentication and lifecycle differences before a shared immutable `AuthenticatedIMEvent`. A successful event MUST contain provider, stable Provider tenant ID, optional real Provider event ID, optional Provider event time, local receive time and decrypted Provider-native payload.
@@ -42,7 +46,7 @@ Webhook and STREAM capabilities MUST deliver authenticated events through an app
 - **THEN** it MAY return `ACCEPTED` so the adapter acknowledges the redelivery without exposing deduplication state through the Provider contract
 
 ### Requirement: Webhook Events MUST expose caller-driven request handling
-Webhook Events MUST expose `handle(request, sink) -> response` using framework-neutral Webhook request and response values. The concrete adapter MUST own URL challenge, signature and timestamp verification, replay checks, decryption and Provider-specific response encoding. It MUST call the sink at most once for one authenticated event and only return a successful ACK response after the sink returns `ACCEPTED`.
+The Slack, Feishu/Lark and Microsoft Teams Webhook Events capabilities MUST expose `handle(request, sink) -> response` using framework-neutral Webhook request and response values. The concrete adapter MUST own applicable URL challenge, signature and timestamp verification, replay checks, decryption and Provider-specific response encoding. It MUST call the sink at most once for one authenticated event and only return a successful ACK response after the sink returns `ACCEPTED`.
 
 #### Scenario: Provider sends a URL challenge
 - **WHEN** a Provider sends a valid Webhook URL challenge
@@ -53,7 +57,7 @@ Webhook Events MUST expose `handle(request, sink) -> response` using framework-n
 - **THEN** `handle` MUST return the Provider-specific successful response
 
 ### Requirement: STREAM Events MUST expose SDK-driven run lifecycle
-STREAM Events MUST expose a long-running `run(sink, stop)` operation. The concrete adapter MUST own Provider SDK connection establishment, callback registration, connection authentication, control frames, reconnect behavior and protocol ACK. Provider SDK callbacks MUST authenticate and normalize one delivery, call the sink, and map the sink outcome to the ACK owned by the same callback or connection.
+Slack and Feishu/Lark STREAM Events MUST expose a long-running `run(sink, stop)` operation. The concrete adapter MUST own Provider SDK connection establishment, callback registration, connection authentication, control frames, reconnect behavior and protocol ACK. Provider SDK callbacks MUST authenticate and normalize one delivery, call the sink, and map the sink outcome to the ACK owned by the same callback or connection.
 
 #### Scenario: Provider SDK invokes an event callback
 - **WHEN** a STREAM SDK callback receives an authenticated business delivery
@@ -66,6 +70,13 @@ STREAM Events MUST expose a long-running `run(sink, stop)` operation. The concre
 #### Scenario: Stop is requested
 - **WHEN** the supplied stop signal requests termination
 - **THEN** `run` MUST stop reconnecting, close adapter-owned STREAM resources and return according to the concrete SDK lifecycle
+
+### Requirement: Card-submission event scope MUST match card-capable Webhook Providers
+Card-submission event handling MUST exist only for Slack interactive block actions, Feishu/Lark card actions and Microsoft Teams Action.Submit Activities. DingTalk and WeCom MUST NOT retain callback configuration, event normalization or evidence inventory entries for card submissions.
+
+#### Scenario: Card-submission capabilities are inspected
+- **WHEN** callers inspect the initial Provider event adapters
+- **THEN** only Slack, Feishu/Lark and Microsoft Teams MUST expose a Webhook path for card submissions
 
 ### Requirement: Transport lifecycle MUST remain outside AuthenticatedIMEvent
 URL challenge data, HTTP response encoding, signature headers, encrypted request bodies, decryption keys, stream connection state, control frames, ACK envelope identifiers and SDK clients MUST remain inside the applicable concrete event capability.

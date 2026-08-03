@@ -1,0 +1,201 @@
+{
+  "captured_at": "2026-08-02T12:37:03Z",
+  "provider": "we_com",
+  "sanitization": {
+    "raw_headers_retained": false,
+    "credentials_retained": false,
+    "provider_identity_retained": false,
+    "pii_retained": false,
+    "safe_test_content_retained": true
+  },
+  "role_presence": {
+    "corp_id": true,
+    "agent_id": true,
+    "corp_secret": true,
+    "destination_selected_from_directory_only": true
+  },
+  "operations": [
+    {
+      "operation": "credential.test_credentials",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "permissions": [{ "name": "agent.visibility.read", "granted": true }]
+      },
+      "exchange_ids": ["gettoken-1", "agent-get-1"]
+    },
+    {
+      "operation": "directory.read_snapshot",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "entry_count": 2,
+        "unique_provider_user_id_count": 2,
+        "email_present_count": 0,
+        "available_counts": { "true": 2, "false": 0, "unknown": 0 }
+      },
+      "exchange_ids": ["agent-get-2", "department-list-1", "user-list-1"]
+    },
+    {
+      "operation": "basic_messaging.test_destination",
+      "result": { "outcome": "success" },
+      "exchange_ids": ["agent-get-3", "department-list-2", "user-list-2"]
+    },
+    {
+      "operation": "basic_messaging.send_text",
+      "result": {
+        "outcome": "accepted",
+        "exact_reference_present": true,
+        "provider_request_id_present": false
+      },
+      "exchange_ids": ["message-send-1"]
+    }
+  ],
+  "exchange_catalog": {
+    "gettoken-1": {
+      "method": "GET",
+      "path": "/cgi-bin/gettoken",
+      "query": [
+        ["corpid", "<redacted:string>"],
+        ["corpsecret", "<redacted:string>"]
+      ],
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "access_token": "<redacted:string>",
+        "expires_in": 7200
+      }
+    },
+    "agent-get-1": {
+      "method": "GET",
+      "path": "/cgi-bin/agent/get",
+      "query": [
+        ["access_token", "<redacted:string>"],
+        ["agentid", "<redacted:string>"]
+      ],
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "agentid": "<redacted:number>",
+        "name": "<redacted:string>",
+        "square_logo_url": "<redacted:string>",
+        "description": "<redacted:string>",
+        "allow_userinfos": { "user": [] },
+        "allow_partys": { "partyid": ["<redacted:number>"] },
+        "close": 0,
+        "redirect_domain": "<redacted:string>",
+        "report_location_flag": 0,
+        "isreportenter": 0,
+        "home_url": "<redacted:string>"
+      }
+    },
+    "agent-get-2": { "$same_shape_and_values_as": "agent-get-1" },
+    "agent-get-3": { "$same_shape_and_values_as": "agent-get-1" },
+    "department-list-1": {
+      "method": "GET",
+      "path": "/cgi-bin/department/list",
+      "query": [
+        ["access_token", "<redacted:string>"],
+        ["id", "<redacted:string>"]
+      ],
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "department": [
+          {
+            "id": "<redacted:number>",
+            "name": "<redacted:string>",
+            "parentid": "<redacted:number>",
+            "order": "<redacted:number>",
+            "department_leader": []
+          }
+        ]
+      }
+    },
+    "department-list-2": { "$same_shape_and_values_as": "department-list-1" },
+    "user-list-1": {
+      "method": "GET",
+      "path": "/cgi-bin/user/list",
+      "query": [
+        ["access_token", "<redacted:string>"],
+        ["department_id", "<redacted:string>"]
+      ],
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "userlist": [
+          {
+            "userid": "<redacted:string>",
+            "name": "<redacted:string>",
+            "department": ["<redacted:number>"],
+            "order": ["<redacted:number>"],
+            "position": "<redacted:string>",
+            "telephone": "<redacted:string>",
+            "isleader": 0,
+            "enable": 1,
+            "alias": "<redacted:string>",
+            "status": 1,
+            "main_department": "<redacted:number>",
+            "is_leader_in_dept": [0],
+            "direct_leader": [],
+            "extattr": { "attrs": [] },
+            "external_profile": {
+              "external_corp_name": "<redacted:string>",
+              "external_attr": []
+            },
+            "hide_mobile": 0
+          },
+          {
+            "userid": "<redacted:string>",
+            "name": "<redacted:string>",
+            "department": ["<redacted:number>"],
+            "order": ["<redacted:number>"],
+            "position": "<redacted:string>",
+            "telephone": "<redacted:string>",
+            "isleader": 0,
+            "enable": 1,
+            "alias": "<redacted:string>",
+            "status": 1,
+            "main_department": "<redacted:number>",
+            "is_leader_in_dept": [0],
+            "direct_leader": [],
+            "extattr": { "attrs": [] },
+            "external_profile": {
+              "external_corp_name": "<redacted:string>",
+              "external_attr": []
+            },
+            "hide_mobile": 0
+          }
+        ]
+      }
+    },
+    "user-list-2": { "$same_shape_and_values_as": "user-list-1" },
+    "message-send-1": {
+      "method": "POST",
+      "path": "/cgi-bin/message/send",
+      "query": [["access_token", "<redacted:string>"]],
+      "request_body": {
+        "msgtype": "text",
+        "agentid": "<redacted:number>",
+        "text": {
+          "content": "Dify IM adapter evidence check: WeCom basic message accepted."
+        },
+        "touser": "<redacted:string>"
+      },
+      "status_code": 200,
+      "response_body": {
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "msgid": "<redacted:string>"
+      }
+    }
+  }
+}

@@ -110,6 +110,8 @@ Contact management 与 workflow recipient selection 使用不同读取模型：`
 
 EE sync read model 与 workspace console 保持同一语义：只暴露 latest summary 和 latest results；`finished_at` 是 UI 同步时间，不返回 `started_by`；results 必须指定一个真实 bucket，使用 `page / limit / total`，不支持 All、cursor 或在分页响应中重复 run summary。
 
+Dify repository 是该跨仓 capability 的 authoritative coordinator 与 specification owner；`dify-enterprise` 拥有 EE Go/Protobuf transport implementation。EE 本地实现证据固定在 commit `935c2a9030a1fe9238d5b469298a7e31cfefb639`，其范围仅证明 HTTP-only、default-off facade、typed/fake client 与 durable audit lifecycle 的本地行为；Dify internal surface 和真实跨仓 E2E 尚未完成，因此 feature enablement 当前为 **NO-GO**。无需在 EE repository 复制本规范或 progress artifact，source checklist 可以直接引用该 commit。
+
 ```proto
 syntax = "proto3";
 
@@ -278,6 +280,13 @@ message IMIntegrationCredentials {
   }
 }
 
+// PGV owns local wire-shape validation only. The data adapter is the single
+// owner of status-dependent internal response invariants.
+// NOT_CONFIGURED requires an empty/zero configured projection; its effective
+// event mode may be unspecified or a known read-only mode.
+// Every other status requires a known provider, non-empty integration ID,
+// positive version, non-zero configured/updated timestamps, and a known
+// non-zero effective event mode.
 message IMIntegration {
   IMProvider provider = 1 [(validate.rules).enum = { defined_only: true }];
   IMIntegrationStatus status = 2 [(validate.rules).enum = { defined_only: true, not_in: [0] }];
@@ -285,11 +294,11 @@ message IMIntegration {
   optional string permission_hint = 4 [json_name = "permission_hint"];
   google.protobuf.Timestamp configured_at = 5 [json_name = "configured_at"];
   google.protobuf.Timestamp updated_at = 6 [json_name = "updated_at"];
-  string integration_id = 7 [json_name = "integration_id", (validate.rules).string = { min_len: 1 }];
-  int64 config_version = 8 [json_name = "config_version", (validate.rules).int64 = { gte: 1 }];
+  string integration_id = 7 [json_name = "integration_id"];
+  int64 config_version = 8 [json_name = "config_version"];
   IMEventTransportMode event_transport_mode = 9 [
     json_name = "event_transport_mode",
-    (validate.rules).enum = { defined_only: true, not_in: [0] }
+    (validate.rules).enum = { defined_only: true }
   ];
 }
 
@@ -576,6 +585,8 @@ service EnterpriseHumanInputAdmin {
   }
 }
 ```
+
+`IMIntegration` 的 transport validation 与上面草案保持分层：PGV 只验证局部 shape 和 enum 是否已定义，并始终要求 `status` 非零。`NOT_CONFIGURED` response 必须让 provider、integration ID、config version、configured/updated timestamp 等 configured projection 保持空或零；effective event mode 可以是 unspecified，也可以是已知的只读 deployment mode。其他 status 必须具有 known nonzero provider、非空 integration ID、正 config version、非零 configured/updated timestamp 和 known nonzero event mode。该组合不变量只由 EE data adapter 的 internal response semantic validator 判定；低层 HTTP client 与 Kratos service 不得重复拥有。Request 中 required ID、完整 CAS token、page/limit 和 credential command 仍由 PGV 与 request mapping 在调用 Dify 前拒绝非法值。
 
 ## 5. 不进入本期的接口
 

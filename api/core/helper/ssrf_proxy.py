@@ -83,22 +83,62 @@ def _create_proxy_mounts(verify: bool) -> dict[str, httpx.HTTPTransport]:
     }
 
 
-def _build_ssrf_client(verify: bool) -> httpx.Client:
+def _build_ssrf_client(
+    verify: bool,
+    *,
+    headers: Headers | None = None,
+    timeout: httpx.Timeout | float | None = None,
+) -> httpx.Client:
+    client_options: dict[str, Any] = {
+        "verify": verify,
+        "limits": _SSRF_CLIENT_LIMITS,
+    }
+    if headers is not None:
+        client_options["headers"] = headers
+    if timeout is not None:
+        client_options["timeout"] = timeout
+
     if dify_config.SSRF_PROXY_ALL_URL:
         return httpx.Client(
             proxy=dify_config.SSRF_PROXY_ALL_URL,
-            verify=verify,
-            limits=_SSRF_CLIENT_LIMITS,
+            **client_options,
         )
 
     if dify_config.SSRF_PROXY_HTTP_URL and dify_config.SSRF_PROXY_HTTPS_URL:
         return httpx.Client(
             mounts=_create_proxy_mounts(verify=verify),
-            verify=verify,
-            limits=_SSRF_CLIENT_LIMITS,
+            **client_options,
         )
 
-    return httpx.Client(verify=verify, limits=_SSRF_CLIENT_LIMITS)
+    return httpx.Client(**client_options)
+
+
+def create_ssrf_protected_client(
+    *,
+    verify: bool,
+    headers: Headers | None = None,
+    timeout: httpx.Timeout | float | None = None,
+) -> httpx.Client:
+    """Create a caller-owned HTTP client using Dify's outbound proxy policy.
+
+    This factory is for provider integrations that require an independent
+    connection-pool lifecycle or operation-specific retry semantics. It returns
+    a raw client and performs no request retries; the caller must close it.
+
+    Args:
+        verify: Whether the client verifies TLS certificates.
+        headers: Optional default request headers owned by the new client.
+        timeout: Optional default timeout owned by the new client.
+
+    Returns:
+        A new, unshared ``httpx.Client`` configured with current proxy policy.
+
+    Raises:
+        ValueError: The TLS verification option is not boolean.
+    """
+    if not isinstance(verify, bool):
+        raise ValueError("SSRF client verify flag must be a boolean")
+    return _build_ssrf_client(verify=verify, headers=headers, timeout=timeout)
 
 
 def _get_ssrf_client(ssl_verify_enabled: bool) -> httpx.Client:

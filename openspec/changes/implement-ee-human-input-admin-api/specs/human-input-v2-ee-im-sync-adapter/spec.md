@@ -26,7 +26,7 @@ EE client MUST 一对一转发 integration get/upsert/delete/test request，包�
 
 ### Requirement: Manual sync MUST 由 Dify 创建并异步执行
 
-EE `CreateIMSyncRun` MUST 只调用 Dify command endpoint并返回 Dify创建或复用的 active run。Single-active-run、captured integration revision、async scheduling、retry、idempotent apply 与 terminal transition MUST 全部由 Dify保证。EE client MUST NOT 对 timed-out mutation执行 blind retry。
+EE `CreateIMSyncRun` MUST 由 Kratos service 通过 `HumanInputUsecase` 与 `HumanInputGateway` 调用 Dify command endpoint，并返回 Dify创建或复用的 active run。Single-active-run、captured integration revision、async scheduling、retry、idempotent apply 与 terminal transition MUST 全部由 Dify保证。EE client MUST NOT 对 timed-out mutation执行 blind retry。
 
 #### Scenario: 两个 EE 请求并发触发 sync
 - **WHEN** 两个 administrator request同时到达 EE
@@ -34,11 +34,11 @@ EE `CreateIMSyncRun` MUST 只调用 Dify command endpoint并返回 Dify创建或
 
 #### Scenario: Create sync response timeout
 - **WHEN** Dify可能已接受 command但 EE 未收到 response
-- **THEN** EE MUST 返回可识别的 upstream outcome并允许调用方重新读取 latest run，MUST NOT 自行创建 run或启动 provider fetch
+- **THEN** EE MUST 返回可识别的 upstream outcome并允许调用方通过 latest-run current-state read与manual reconciliation调查结果，MUST NOT 自行创建run、启动provider fetch或据此改写durable audit outcome
 
 ### Requirement: Latest sync read model MUST 原样来自 Dify
 
-EE MUST 通过 Dify internal API读取 latest run summary 与 latest result page。Result request MUST 指定 `added`、`not_matched`、`failed`、`removed` 或 `skipped` 中一个真实 bucket，并使用 `page / limit / total`；response MUST 使用 `finished_at`，省略 `started_by`，且 result page MUST 不重复 run summary。
+EE Kratos service MUST 直接通过 consumer-owned `HumanInputQuery` 与 Dify internal API读取 latest run summary 与 latest result page。Result request MUST 指定 `added`、`not_matched`、`failed`、`removed` 或 `skipped` 中一个真实 bucket，并使用 `page / limit / total`；response MUST 使用 `finished_at`，省略 `started_by`，且 result page MUST 不重复 run summary。
 
 #### Scenario: 管理员读取 latest result bucket
 - **WHEN** request包含有效 bucket、page 与 limit
@@ -71,3 +71,11 @@ EE Dify client MUST 为所有 operation设置 bounded timeout并传播 correlati
 #### Scenario: Upsert integration遇到 connection reset
 - **WHEN** request可能已经到达 Dify
 - **THEN** client MUST NOT 自动重放 mutation，并 MUST 返回 ambiguous upstream failure供调用方重新读取 current revision
+
+### Requirement: IM sync adapter rollout MUST 保持 default-off
+
+EE commit `935c2a9030a1fe9238d5b469298a7e31cfefb639` MUST 只作为 HTTP-only、default-off、local/fake client与service evidence。它 MUST NOT 被解释为 Dify internal surface、caller-scoped authentication、workspace no-loop、manual-sync single-owner behavior 或真实跨仓 integration/sync E2E 已验证；current-state/manual reconciliation 不承诺自动改写既有 audit outcome。
+
+#### Scenario: Integration/sync enablement review
+- **WHEN** Dify internal dependency、projection、caller-scoped authentication、workspace no-loop、manual-sync single-owner behavior或真实跨仓E2E任一项尚未完成
+- **THEN** Integration/sync admin feature MUST 保持 disabled，rollout decision MUST 为 **NO-GO**

@@ -1,0 +1,150 @@
+{
+  "captured_at": "2026-08-02T13:01:08Z",
+  "provider": "feishu",
+  "sanitization": {
+    "raw_headers_retained": false,
+    "credentials_retained": false,
+    "provider_identity_retained": false,
+    "pii_retained": false,
+    "raw_stream_frames_retained": false
+  },
+  "operations": [
+    {
+      "operation": "credential.test_credentials",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "permissions": [
+          { "name": "tenant:tenant:readonly", "granted": true },
+          { "name": "contact.scope.read", "granted": true }
+        ]
+      },
+      "exchange_ids": ["tenant-token-1", "tenant-query-1", "contact-scopes-1"]
+    },
+    {
+      "operation": "directory.read_snapshot",
+      "result": {
+        "outcome": "failure",
+        "code": "missing_permission",
+        "message": "Feishu/Lark app is missing required permission: contact:user.base:readonly"
+      },
+      "exchange_ids": ["tenant-query-2", "contact-scopes-2", "user-get-1"]
+    },
+    {
+      "operation": "stream.stop",
+      "result": {
+        "connect_attempt_count": 1,
+        "connected": true,
+        "sink_event_count": 0,
+        "run_outcome": "success",
+        "runner_alive_after_stop": false,
+        "close_error": null
+      },
+      "exchange_ids": []
+    }
+  ],
+  "exchange_catalog": {
+    "tenant-token-1": {
+      "method": "POST",
+      "path": "/open-apis/auth/v3/tenant_access_token/internal",
+      "query": [],
+      "authorization_present": false,
+      "request_body": {
+        "app_id": "<redacted:string>",
+        "app_secret": "<redacted:string>"
+      },
+      "status_code": 200,
+      "response_body": {
+        "code": 0,
+        "msg": "<redacted:string>",
+        "tenant_access_token": "<redacted:string>",
+        "expire": "<redacted:number>"
+      }
+    },
+    "tenant-query-1": {
+      "method": "GET",
+      "path": "/open-apis/tenant/v2/tenant/query",
+      "query": [],
+      "authorization_present": true,
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "code": 0,
+        "msg": "<redacted:string>",
+        "data": {
+          "tenant": {
+            "name": "<redacted:string>",
+            "display_id": "<redacted:string>",
+            "tenant_key": "<redacted:string>",
+            "tenant_tag": "<redacted:number>",
+            "avatar": {
+              "avatar_72": "<redacted:string>",
+              "avatar_240": "<redacted:string>",
+              "avatar_640": "<redacted:string>",
+              "avatar_origin": "<redacted:string>"
+            }
+          }
+        }
+      }
+    },
+    "tenant-query-2": { "$same_shape_and_values_as": "tenant-query-1" },
+    "contact-scopes-1": {
+      "method": "GET",
+      "path": "/open-apis/contact/v3/scopes",
+      "query": [
+        ["user_id_type", "<redacted:string>"],
+        ["department_id_type", "<redacted:string>"],
+        ["page_size", "<redacted:string>"]
+      ],
+      "authorization_present": true,
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "code": 0,
+        "msg": "<redacted:string>",
+        "data": {
+          "has_more": false,
+          "user_ids": ["<redacted:string>", "<redacted:string>"]
+        }
+      }
+    },
+    "contact-scopes-2": { "$same_shape_and_values_as": "contact-scopes-1" },
+    "user-get-1": {
+      "method": "GET",
+      "path": "/open-apis/contact/v3/users/<redacted:path-segment>",
+      "query": [["user_id_type", "<redacted:string>"]],
+      "authorization_present": true,
+      "request_body": null,
+      "status_code": 200,
+      "response_body": {
+        "code": 0,
+        "msg": "<redacted:string>",
+        "data": {
+          "user": {
+            "city": "<redacted:string>",
+            "country": "<redacted:string>",
+            "email": "<redacted:string>",
+            "employee_no": "<redacted:string>",
+            "employee_type": "<redacted:number>",
+            "enterprise_email": "<redacted:string>",
+            "is_tenant_manager": true,
+            "job_title": "<redacted:string>",
+            "join_time": "<redacted:number>",
+            "mobile_visible": true,
+            "open_id": "<redacted:string>",
+            "status": {
+              "is_activated": true,
+              "is_exited": false,
+              "is_frozen": false,
+              "is_resigned": false,
+              "is_unjoin": false
+            },
+            "union_id": "<redacted:string>",
+            "user_id": "<redacted:string>",
+            "work_station": "<redacted:string>"
+          }
+        }
+      }
+    }
+  }
+}

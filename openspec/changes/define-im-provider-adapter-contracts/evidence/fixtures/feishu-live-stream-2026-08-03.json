@@ -1,0 +1,82 @@
+{
+  "captured_at": "2026-08-02T18:03:21Z",
+  "environment": "authorized non-production app",
+  "exchange": {
+    "method": "POST",
+    "path": "/callback/ws/endpoint",
+    "query": [],
+    "request_body": {
+      "AppID": "<redacted:string>",
+      "AppSecret": "<redacted:string>"
+    },
+    "request_headers": [
+      ["locale", "<redacted:string>"],
+      ["User-Agent", "<redacted:string>"]
+    ],
+    "response_body": {
+      "code": 0,
+      "data": {
+        "ClientConfig": {
+          "PingInterval": "<redacted:number>",
+          "ReconnectCount": "<redacted:number>",
+          "ReconnectInterval": "<redacted:number>",
+          "ReconnectNonce": "<redacted:number>"
+        },
+        "URL": "<redacted:wss-url>"
+      },
+      "msg": "<redacted:string>"
+    },
+    "response_headers": [
+      ["Server", "<redacted:string>"],
+      ["Content-Type", "<redacted:string>"],
+      ["Transfer-Encoding", "<redacted:string>"],
+      ["Connection", "<redacted:string>"],
+      ["Date", "<redacted:string>"],
+      ["Vary", "<redacted:string>"],
+      ["X-Tt-Logid", "<redacted:string>"],
+      ["X-Lgw-Dst-Svc", "<redacted:string>"],
+      ["Tt_stable", "<redacted:string>"],
+      ["X-Request-Id", "<redacted:string>"],
+      ["Request-Id", "<redacted:string>"],
+      ["server-timing", "<redacted:string>"],
+      ["x-tt-trace-host", "<redacted:string>"],
+      ["x-tt-trace-tag", "<redacted:string>"],
+      ["x-tt-trace-id", "<redacted:string>"],
+      ["X-Timestamp", "<redacted:string>"],
+      ["Content-Encoding", "<redacted:string>"],
+      ["Via", "<redacted:string>"],
+      ["Timing-Allow-Origin", "<redacted:string>"],
+      ["EagleId", "<redacted:string>"]
+    ],
+    "status_code": 200
+  },
+  "lifecycle": {
+    "adapter_close_error": null,
+    "automatic_retries": 0,
+    "endpoint_discovery_count": 1,
+    "message_send_count": 0,
+    "remote_configuration_write_count": 0,
+    "run_outcome": "success",
+    "runner_alive_after_stop": false,
+    "sink_event_count": 0,
+    "stop_trigger": "immediately_after_websocket_handshake",
+    "websocket_handshake_completed": true
+  },
+  "operation": "stream.connect",
+  "pinned_sdk": {
+    "name": "lark-oapi",
+    "version": "1.7.1"
+  },
+  "production_adapter": true,
+  "provider": "feishu",
+  "sanitization": {
+    "credentials_retained": false,
+    "performed_in_memory_before_persistence": true,
+    "pii_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false,
+    "ticket_retained": false,
+    "wss_url_retained": false
+  },
+  "transport": "STREAM"
+}

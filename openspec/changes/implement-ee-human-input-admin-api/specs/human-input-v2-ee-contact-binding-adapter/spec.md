@@ -38,7 +38,7 @@ EE `ListIMIdentities` MUST 调用 Dify internal query，并 MUST 透传 provider
 
 ### Requirement: Organization binding mutation MUST 委托给 Dify transaction boundary
 
-`CreateIMBinding` 与 `DeleteIMBinding` MUST 通过 Dify internal command执行。Contact availability、identity ownership、current integration/provider、Organization scope、exact retry idempotency、unique conflict与完整 Contact-to-binding owner predicate MUST 由 Dify repository/application service保证。EE MUST 不增加本地 binding cache或补偿性 DB write。
+`CreateIMBinding` 与 `DeleteIMBinding` MUST 由 Kratos service 通过 `HumanInputUsecase` 与 `HumanInputGateway` 执行 Dify internal command；Contact/identity reads MUST 由 service 直接通过 consumer-owned `HumanInputQuery` 执行。Contact availability、identity ownership、current integration/provider、Organization scope、exact retry idempotency、unique conflict与完整 Contact-to-binding owner predicate MUST 由 Dify repository/application service保证。EE MUST 不增加本地 binding cache或补偿性 DB write。
 
 #### Scenario: 当前 Contact绑定 current identity
 - **WHEN** Dify接受 binding command
@@ -51,6 +51,10 @@ EE `ListIMIdentities` MUST 调用 Dify internal query，并 MUST 透传 provider
 #### Scenario: 使用错误 Contact删除 binding
 - **WHEN** Dify owner predicate拒绝 delete command
 - **THEN** EE MUST 保留 not-found/conflict语义，MUST NOT 按 binding ID直接访问数据库完成删除
+
+#### Scenario: Binding mutation outcome ambiguous
+- **WHEN** connection failure 发生在 binding command 可能已到达 Dify 之后
+- **THEN** EE MUST NOT 自动重放 mutation；operation/correlation metadata 只MAY用于 refreshed Contact current-state read与manual reconciliation，MUST NOT 据此改写 durable audit outcome
 
 ### Requirement: Binding reachability test MUST 调用 Dify-owned provider path
 
@@ -71,3 +75,11 @@ EE admin service MUST 只适配 Organization binding control-plane。Workspace o
 #### Scenario: EE admin client请求 workspace override
 - **WHEN** client需要设置或清除 workspace-scoped override
 - **THEN** `EnterpriseHumanInputAdmin` MUST 不提供对应 service method，operation MUST 继续使用 Dify workspace-owned API
+
+### Requirement: Contact/binding adapter rollout MUST 保持 default-off
+
+EE commit `935c2a9030a1fe9238d5b469298a7e31cfefb639` MUST 只作为 HTTP-only、default-off、local/fake adapter evidence。它 MUST NOT 被解释为 Dify Organization Contact projection、`joined_at` source、caller-scoped authentication、workspace no-loop 或真实跨仓 Contact/binding E2E 已验证。
+
+#### Scenario: Contact/binding enablement review
+- **WHEN** Dify internal surface、Organization Contact projection/`joined_at` source、caller-scoped authentication、workspace no-loop 或真实跨仓 E2E 任一项尚未验证
+- **THEN** Contact/binding admin feature MUST 保持 disabled，rollout decision MUST 为 **NO-GO**

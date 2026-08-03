@@ -1,0 +1,73 @@
+{
+  "audit": {
+    "adapter_instances": 1,
+    "automatic_retries": 0,
+    "card_invocations": 0,
+    "credential_invocations": 0,
+    "directory_invocations": 1,
+    "messaging_invocations": 0,
+    "observed_endpoint_counts": {
+      "graph_scope_token": 1,
+      "initial_users_page": 1
+    },
+    "operation_invocations": 1,
+    "provider_configuration_changes": 0,
+    "retained_endpoint_counts": {
+      "graph_scope_token": 1
+    },
+    "webhook_invocations": 0
+  },
+  "captured_at": "2026-08-02T22:31:20.346227Z",
+  "evidence_scope": {
+    "closed_exact_entries": [
+      "POST /{tenant_id}/oauth2/v2.0/token [Graph scope]"
+    ],
+    "unobserved_missing_entries": [
+      "GET trusted @odata.nextLink [subsequent page]"
+    ]
+  },
+  "exchange_catalog": {
+    "graph-scope-token-1": {
+      "authorization_present": false,
+      "method": "POST",
+      "origin": "login.microsoftonline.com",
+      "path": "/<redacted:path-segment>/oauth2/v2.0/token",
+      "query": [],
+      "request_body": {
+        "client_id": "<redacted:string>",
+        "client_secret": "<redacted:string>",
+        "grant_type": "<redacted:string>",
+        "scope": "<redacted:string>"
+      },
+      "response_body": {
+        "access_token": "<redacted:string>",
+        "expires_in": "<redacted:number>",
+        "ext_expires_in": "<redacted:number>",
+        "token_type": "<redacted:string>"
+      },
+      "status_code": 200
+    }
+  },
+  "operations": [
+    {
+      "exchange_ids": [
+        "graph-scope-token-1"
+      ],
+      "operation": "directory.read_snapshot",
+      "result": {
+        "entries_present": true,
+        "evidence_outcome": "partial",
+        "snapshot_outcome": "success",
+        "tenant_bound": true
+      }
+    }
+  ],
+  "provider": "ms_teams",
+  "sanitization": {
+    "credentials_retained": false,
+    "pii_retained": false,
+    "preclosed_exchanges_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false
+  }
+}

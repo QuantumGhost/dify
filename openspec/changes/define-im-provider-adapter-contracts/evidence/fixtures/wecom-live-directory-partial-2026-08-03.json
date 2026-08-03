@@ -1,0 +1,80 @@
+{
+  "audit": {
+    "adapter_instances": 1,
+    "automatic_retries": 0,
+    "credential_invocations": 0,
+    "destination_invocations": 0,
+    "directory_invocations": 1,
+    "observed_endpoint_counts": {
+      "agent_get": 1,
+      "department_list_explicit": 1,
+      "gettoken": 1,
+      "user_list_explicit": 1
+    },
+    "operation_invocations": 1,
+    "provider_configuration_changes": 0,
+    "retained_endpoint_counts": {
+      "gettoken": 1
+    },
+    "send_invocations": 0
+  },
+  "captured_at": "2026-08-02T21:50:32.390142Z",
+  "evidence_scope": {
+    "closed_exact_entries": [
+      "GET /gettoken"
+    ],
+    "unobserved_missing_entries": [
+      "GET /user/get [explicit-user branch]",
+      "GET /tag/get [tag branch]",
+      "GET /department/list [tag-department branch]",
+      "GET /user/list [tag-department branch]"
+    ]
+  },
+  "exchange_catalog": {
+    "gettoken-1": {
+      "authorization_present": false,
+      "method": "GET",
+      "path": "/cgi-bin/gettoken",
+      "query": [
+        [
+          "corpid",
+          "<redacted:string>"
+        ],
+        [
+          "corpsecret",
+          "<redacted:string>"
+        ]
+      ],
+      "request_body": null,
+      "response_body": {
+        "access_token": "<redacted:string>",
+        "errcode": 0,
+        "errmsg": "<redacted:string>",
+        "expires_in": "<redacted:number>"
+      },
+      "status_code": 200
+    }
+  },
+  "operations": [
+    {
+      "exchange_ids": [
+        "gettoken-1"
+      ],
+      "operation": "directory.read_snapshot",
+      "result": {
+        "entries_present": true,
+        "evidence_outcome": "partial",
+        "snapshot_outcome": "success",
+        "tenant_bound": true
+      }
+    }
+  ],
+  "provider": "we_com",
+  "sanitization": {
+    "credentials_retained": false,
+    "pii_retained": false,
+    "preclosed_exchanges_retained": false,
+    "provider_identity_retained": false,
+    "raw_headers_retained": false
+  }
+}

@@ -1,19 +1,20 @@
 import gzip
-from typing import override
-from unittest.mock import ANY, MagicMock, call, patch
+from typing import cast, override
+from unittest.mock import MagicMock, call, patch
 
 import httpx
 import pytest
 
 from core.helper.ssrf_proxy import (
+    _SSRF_CLIENT_LIMITS,
     SSRF_DEFAULT_MAX_RETRIES,
     ResponseTooLargeError,
     SSRFProxy,
     UnsupportedResponseEncodingError,
-    _build_ssrf_client,
     _get_user_provided_host_header,
     _to_graphon_http_response,
     buffer_response,
+    create_ssrf_protected_client,
     graphon_ssrf_proxy,
     make_request,
     max_retries_exceeded_error,
@@ -140,7 +141,43 @@ def test_force_list_response_returns_when_retries_disabled(mock_get_client):
     mock_client.send.assert_called_once()
 
 
-def test_build_ssrf_client_passes_ssl_verify_to_proxy_mount_transports():
+def test_create_ssrf_protected_client_rejects_non_boolean_verify() -> None:
+    invalid_verify = cast(bool, "yes")
+
+    with pytest.raises(ValueError, match="verify flag must be a boolean"):
+        create_ssrf_protected_client(verify=invalid_verify)
+
+
+def test_create_ssrf_protected_client_uses_proxy_all_and_remains_caller_owned() -> None:
+    mock_client = MagicMock(spec=httpx.Client)
+    timeout = httpx.Timeout(10.0)
+
+    with (
+        patch("core.helper.ssrf_proxy.dify_config.SSRF_PROXY_ALL_URL", "http://proxy.example.com:8080"),
+        patch("core.helper.ssrf_proxy.httpx.Client", return_value=mock_client) as client_constructor,
+    ):
+        client = create_ssrf_protected_client(
+            verify=False,
+            headers={"authorization": "Bearer token"},
+            timeout=timeout,
+        )
+
+    assert client is mock_client
+    mock_client.close.assert_not_called()
+    client_constructor.assert_called_once_with(
+        proxy="http://proxy.example.com:8080",
+        verify=False,
+        limits=_SSRF_CLIENT_LIMITS,
+        headers={"authorization": "Bearer token"},
+        timeout=timeout,
+    )
+
+    client.close()
+
+    mock_client.close.assert_called_once_with()
+
+
+def test_create_ssrf_protected_client_passes_ssl_verify_to_proxy_mount_transports() -> None:
     mock_client = MagicMock()
     http_transport = MagicMock()
     https_transport = MagicMock()
@@ -152,7 +189,7 @@ def test_build_ssrf_client_passes_ssl_verify_to_proxy_mount_transports():
         patch("core.helper.ssrf_proxy.httpx.HTTPTransport", side_effect=[http_transport, https_transport]) as transport,
         patch("core.helper.ssrf_proxy.httpx.Client", return_value=mock_client) as client,
     ):
-        ssrf_client = _build_ssrf_client(verify=False)
+        ssrf_client = create_ssrf_protected_client(verify=False)
 
     assert ssrf_client is mock_client
     transport.assert_has_calls(
@@ -164,8 +201,23 @@ def test_build_ssrf_client_passes_ssl_verify_to_proxy_mount_transports():
     client.assert_called_once_with(
         mounts={"http://": http_transport, "https://": https_transport},
         verify=False,
-        limits=ANY,
+        limits=_SSRF_CLIENT_LIMITS,
     )
+
+
+def test_create_ssrf_protected_client_uses_direct_transport_with_shared_limits() -> None:
+    mock_client = MagicMock(spec=httpx.Client)
+
+    with (
+        patch("core.helper.ssrf_proxy.dify_config.SSRF_PROXY_ALL_URL", None),
+        patch("core.helper.ssrf_proxy.dify_config.SSRF_PROXY_HTTP_URL", None),
+        patch("core.helper.ssrf_proxy.dify_config.SSRF_PROXY_HTTPS_URL", None),
+        patch("core.helper.ssrf_proxy.httpx.Client", return_value=mock_client) as client_constructor,
+    ):
+        client = create_ssrf_protected_client(verify=True)
+
+    assert client is mock_client
+    client_constructor.assert_called_once_with(verify=True, limits=_SSRF_CLIENT_LIMITS)
 
 
 class TestGetUserProvidedHostHeader:

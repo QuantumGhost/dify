@@ -1,0 +1,42 @@
+{
+  "provider": "Slack",
+  "recorded_at": "2026-08-02T13:15:13Z",
+  "environment": "authorized non-production workspace",
+  "transport": "Socket Mode",
+  "experiment": {
+    "production_adapter": true,
+    "raw_listener_registered_before_connect": true,
+    "gui_user_message_send_count": 1,
+    "automatic_retries": 0
+  },
+  "connection_count": "one",
+  "hello": {
+    "connection_info": {
+      "app_id": "<redacted:string>"
+    },
+    "debug_info": {
+      "approximate_connection_time": "<redacted:number>",
+      "build_number": "<redacted:number>",
+      "host": "<redacted:string>"
+    },
+    "num_connections": 1,
+    "type": "hello"
+  },
+  "hello_seen": true,
+  "events_api": {
+    "acknowledgements": [],
+    "matching_ack_count": 0,
+    "normalized_event": null,
+    "normalized_event_seen": false,
+    "raw_request": null,
+    "raw_request_seen": false,
+    "sink_acceptance": null
+  },
+  "stream": {
+    "close_error": null,
+    "run_result": {
+      "outcome": "success"
+    },
+    "runner_alive_after_stop": false
+  }
+}

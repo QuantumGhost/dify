@@ -1,0 +1,91 @@
+{
+  "captured_at": "2026-08-02T13:01:08Z",
+  "provider": "ms_teams",
+  "sanitization": {
+    "raw_headers_retained": false,
+    "credentials_retained": false,
+    "provider_identity_retained": false,
+    "pii_retained": false
+  },
+  "role_presence": {
+    "tenant_id": true,
+    "client_id": true,
+    "client_secret": true,
+    "bot_app_id_material_used": false,
+    "trusted_service_url_origin_count": 0
+  },
+  "operations": [
+    {
+      "operation": "credential.test_credentials",
+      "result": {
+        "outcome": "failure",
+        "code": "missing_permission",
+        "message": "Microsoft Graph token is missing required roles: Organization.Read.All"
+      },
+      "exchanges": [
+        {
+          "method": "POST",
+          "origin": "login.microsoftonline.com",
+          "path": "/<redacted:path-segment>/oauth2/v2.0/token",
+          "query": [],
+          "authorization_present": false,
+          "request_body": {
+            "client_id": "<redacted:string>",
+            "client_secret": "<redacted:string>",
+            "grant_type": "<redacted:string>",
+            "scope": "<redacted:string>"
+          },
+          "status_code": 200,
+          "response_body": {
+            "token_type": "<redacted:string>",
+            "expires_in": "<redacted:number>",
+            "ext_expires_in": "<redacted:number>",
+            "access_token": "<redacted:string>"
+          }
+        }
+      ]
+    },
+    {
+      "operation": "directory.read_snapshot",
+      "result": {
+        "outcome": "success",
+        "tenant_bound": true,
+        "entry_count": 3,
+        "unique_provider_user_id_count": 3,
+        "email_present_count": 3,
+        "available_counts": { "true": 0, "false": 0, "unknown": 3 }
+      },
+      "exchanges": [
+        {
+          "method": "GET",
+          "origin": "graph.microsoft.com",
+          "path": "/v1.0/users",
+          "query": [["$select", "<redacted:string>"]],
+          "authorization_present": true,
+          "request_body": null,
+          "status_code": 200,
+          "response_body": {
+            "@odata.context": "<redacted:string>",
+            "value": [
+              {
+                "displayName": "<redacted:string>",
+                "id": "<redacted:string>",
+                "mail": "<redacted:string>"
+              },
+              {
+                "displayName": "<redacted:string>",
+                "id": "<redacted:string>",
+                "mail": "<redacted:string>"
+              },
+              {
+                "displayName": "<redacted:string>",
+                "id": "<redacted:string>",
+                "mail": "<redacted:string>"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
