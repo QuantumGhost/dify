@@ -501,7 +501,8 @@ class DifyNodeFactory(NodeFactory):
             },
             BuiltinNodeTypes.HUMAN_INPUT: lambda: (
                 {
-                    "human_input_runtime": WorkflowHumanInputRuntime(self._dify_context),
+                    # Approvals belong to the persisted caller run, including in Workflow Tools.
+                    "human_input_runtime": WorkflowHumanInputRuntime(self._human_input_run_context),
                 }
                 if node_class is HumanInputV2Node
                 else {

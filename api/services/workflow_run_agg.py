@@ -350,7 +350,9 @@ class WorkflowRunAgg:
                     variable_pool=self._runtime_state.variable_pool,
                 )
                 if default_session_binding.resolve_form_id_from_session_id(session_id=reason.session_id)[0] == "1"
-                else resolve_human_input_v2_pause_reason(reason=reason, forms=self._human_input_v2_forms)
+                else resolve_human_input_v2_pause_reason(
+                    reason=reason, forms=self._human_input_v2_forms, variable_pool=self._runtime_state.variable_pool
+                )
             )
             if isinstance(reason, HitlRequired)
             else reason

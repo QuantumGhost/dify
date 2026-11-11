@@ -11,7 +11,6 @@ from core.tools.entities.tool_entities import ToolEntity
 from core.tools.workflow_as_tool.repository import WorkflowToolSource
 from core.tools.workflow_as_tool.tool import WorkflowTool
 from core.workflow.workflow_tool_container_types import WorkflowToolContainerPayload
-from graphon.nodes.tool.exc import ToolRuntimeResolutionError
 from repositories.workflow_tool_source_repository import SQLAlchemyWorkflowToolSourceRepository
 
 
@@ -67,7 +66,11 @@ class WorkflowToolSourceService:
         suspended_tools: Sequence[WorkflowToolContainerPayload] = (),
         snapshot: WorkflowToolSnapshot | None = None,
     ) -> MaterializedWorkflowTools:
-        """Restore saved definitions, or materialize current providers for new/legacy runs."""
+        """Materialize reachable providers or restore authoritative saved definitions.
+
+        Human Input versions share the caller's execution eligibility. A context
+        that forbids Human Input fails before execution, including for child graphs.
+        """
         sources: dict[str, WorkflowToolSource] = {}
         tools: dict[str, WorkflowTool] = {}
         pending = [graph_config]
@@ -130,10 +133,4 @@ class WorkflowToolSourceService:
                 if source.workflow_id not in sources:
                     pending.append(source.graph_config)
                 sources[source.workflow_id] = source
-        for source in sources.values():
-            if any(
-                node.get("data", {}).get("type") == "human-input" and node.get("data", {}).get("version") == "2"
-                for node in source.graph_config.get("nodes", [])
-            ):
-                raise ToolRuntimeResolutionError("Human Input V2 nodes are not supported in nested Workflow Tools.")
         return MaterializedWorkflowTools(sources=sources, tools=tools)

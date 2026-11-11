@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.app.layers.pause_state_persist_layer import WorkflowResumptionContext
+from core.workflow.nodes.human_input.boundary import resolve_human_input_node_id
 from core.workflow.nodes.human_input.pause_reason import HumanInputRequired, PauseReason
 from core.workflow.nodes.human_input.session_binding import default_session_binding
 from core.workflow.nodes.human_input_v2.presentation import build_human_input_v2_pause_reason
@@ -34,6 +35,8 @@ def load_workflow_pause_snapshot(
 
     Only a v1 reference may consult the legacy reason table. A missing or invalid
     v2 checkpoint must not fall back to that table or to all forms in the run.
+    Workflow Tool form presentation uses the caller's visible node; checkpoint
+    node identities remain unchanged for execution resumption.
     """
     if context is None:
         context = WorkflowResumptionContext.loads(pause.get_state().decode())
@@ -77,6 +80,12 @@ def load_workflow_pause_snapshot(
         if prepared is None:
             raise ValueError(f"Human Input v2 form is missing from its paused run: {form_id}")
         reasons.append(
-            build_human_input_v2_pause_reason(prepared.form.resolved_form, form_id=form_id, node_id=reason.node_id)
+            build_human_input_v2_pause_reason(
+                prepared.form.resolved_form,
+                form_id=form_id,
+                node_id=resolve_human_input_node_id(
+                    node_id=reason.node_id, form_id=form_id, variable_pool=state.variable_pool
+                ),
+            )
         )
     return WorkflowPauseSnapshot(state, tuple(reasons), forms)

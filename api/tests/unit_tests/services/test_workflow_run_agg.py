@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -14,16 +15,20 @@ from core.app.apps.workflow.app_queue_manager import WorkflowAppQueueManager
 from core.app.apps.workflow.app_runner import WorkflowAppRunner
 from core.app.entities.app_invoke_entities import InvokeFrom, UserFrom, WorkflowAppGenerateEntity
 from core.app.entities.queue_entities import (
+    QueueHumanInputFormFilledEvent,
     QueueNodeStartedEvent,
     QueueWorkflowFailedEvent,
     QueueWorkflowPausedEvent,
     QueueWorkflowSucceededEvent,
 )
 from core.app.layers.pause_state_persist_layer import PauseStateLayerConfig, WorkflowResumptionContext
+from core.helper import encrypter
+from core.human_input_v2.shared.values import AccountId
 from core.repositories.sqlalchemy_workflow_execution_repository import SQLAlchemyWorkflowExecutionRepository
 from core.repositories.sqlalchemy_workflow_node_execution_repository import SQLAlchemyWorkflowNodeExecutionRepository
 from core.workflow.nodes.human_input.entities import HumanInputNodeData, ParagraphInputConfig, UserActionConfig
 from core.workflow.nodes.human_input.pause_reason import HumanInputRequired
+from enums import DeploymentEdition
 from extensions.ext_storage import storage
 from extensions.storage.opendal_storage import OpenDALStorage
 from graphon.engine_events import (
@@ -37,13 +42,17 @@ from graphon.engine_events import (
 from graphon.entities.pause_reason import HitlRequired
 from graphon.enums import WorkflowExecutionStatus
 from graphon.nodes.start.entities import StartNodeData
+from graphon.nodes.tool.entities import ToolNodeData
 from graphon.runtime import RuntimeState
 from graphon.variable_loader import DUMMY_VARIABLE_LOADER
 from models import Account
+from models.account import AccountStatus, Tenant, TenantAccountJoin, TenantAccountRole
 from models.agent import AgentWorkspace, AgentWorkspaceBinding, WorkflowAgentBindingType
 from models.dataset import Document
 from models.enums import AppTriggerType, CreatorUserRole, WorkflowRunTriggeredFrom, WorkflowTriggerStatus
 from models.human_input import HumanInputForm
+from models.human_input_v2 import ContactSubjectType, HumanInputContactIdentity
+from models.human_input_v2 import HumanInputForm as V2HumanInputForm
 from models.model import App, AppMode
 from models.tools import WorkflowToolProvider
 from models.trigger import WorkflowTriggerLog
@@ -55,12 +64,18 @@ from models.workflow import (
     WorkflowRun,
 )
 from models.workflow import WorkflowType as ModelWorkflowType
+from repositories.factory import DifyAPIRepositoryFactory
 from repositories.human_input_v2.form_repository import Form
 from repositories.sqlalchemy_workflow_trigger_log_repository import SQLAlchemyWorkflowTriggerExecutionRepository
 from services.agent.workspace_service import AgentWorkspaceService
+from services.human_input_v2.submission_service import HumanInputSubmissionService
 from services.trigger.execution_layer import TriggerPostLayer
 from services.trigger.execution_store import TriggerExecutionRef
+from services.workflow_pause_service import load_workflow_pause_snapshot
 from services.workflow_run_agg import WorkflowRunAgg
+from tasks.app_generate.workflow_execute_task import resume_app_execution
+from tasks.human_input_im_card_tasks import update_human_input_im_card_task
+from tests.helpers.unit.config_override import apply_config_overrides
 from tests.unit_tests.core.app.apps.pipeline.test_pipeline_runner import (
     _build_app_generate_entity,
     _build_runner,
@@ -1144,3 +1159,254 @@ def test_v2_pause_persists_only_checkpoint_references_and_publishes_frozen_form(
     assert restored.graph_execution.pause_reasons[0].session_id == f"hitlv2:{prepared_forms[0].form.id}"
     if token is not None:
         assert token not in saved_state
+
+
+def _workflow_tool_v2_loop_graph(
+    node_data: dict[str, object], *, node_id: str, source_handle: str
+) -> dict[str, object]:
+    """Build one iteration that returns the child's answer through a loop variable."""
+    return {
+        "nodes": [
+            {"id": "start", "data": {"type": "start", "title": "Start", "variables": list[object]()}},
+            {
+                "id": "loop",
+                "data": {
+                    "type": "loop",
+                    "title": "Review",
+                    "start_node_id": "loop-start",
+                    "loop_count": 1,
+                    "break_conditions": list[object](),
+                    "logical_operator": "and",
+                    "loop_variables": [
+                        {"label": "answer", "var_type": "string", "value_type": "constant", "value": ""}
+                    ],
+                },
+            },
+            {"id": "loop-start", "parentId": "loop", "data": {"type": "loop-start", "title": "Loop start"}},
+            {"id": node_id, "parentId": "loop", "data": node_data},
+            {
+                "id": "save-answer",
+                "parentId": "loop",
+                "data": {
+                    "type": "assigner",
+                    "version": "2",
+                    "title": "Save answer",
+                    "items": [
+                        {
+                            "variable_selector": ["loop", "answer"],
+                            "input_type": "variable",
+                            "operation": "over-write",
+                            "value": [node_id, "answer"],
+                        }
+                    ],
+                },
+            },
+            {
+                "id": "end",
+                "data": {
+                    "type": "end",
+                    "title": "End",
+                    "outputs": [{"variable": "answer", "value_selector": ["loop", "answer"]}],
+                },
+            },
+        ],
+        "edges": [
+            {"source": "start", "target": "loop"},
+            {"source": "loop", "target": "end"},
+            {"source": "loop-start", "target": node_id},
+            {"source": node_id, "target": "save-answer", "sourceHandle": source_handle},
+        ],
+    }
+
+
+@pytest.mark.parametrize("placement", ["direct", "loop-in-tool", "tool-in-loop", "nested-tool"])
+def test_workflow_tool_v2_approval_pauses_submits_and_resumes(
+    sqlite_engine: Engine,
+    sqlite_session_factory: sessionmaker[Session],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    placement: str,
+) -> None:
+    """A caller run owns the form; submission completes the pinned child exactly once."""
+    monkeypatch.setattr(storage, "storage_runner", OpenDALStorage(scheme="fs", root=str(tmp_path)), raising=False)
+    cipher = Fernet(Fernet.generate_key())
+    monkeypatch.setattr(encrypter, "encrypt_token", lambda _tenant, token: cipher.encrypt(token.encode()).decode())
+    monkeypatch.setattr(encrypter, "decrypt_token", lambda _tenant, token: cipher.decrypt(token.encode()).decode())
+    monkeypatch.setattr(update_human_input_im_card_task, "apply_async", lambda **_kwargs: None)
+    resume_requests: list[dict[str, object]] = []
+    monkeypatch.setattr(resume_app_execution, "apply_async", lambda **kwargs: resume_requests.append(kwargs))
+    runner, workflow_repository, node_repository = make_workflow_runner(sqlite_engine, human_input=True)
+    entity = runner.application_generate_entity
+    apply_config_overrides(monkeypatch, DEPLOYMENT_EDITION=DeploymentEdition.CLOUD)
+    tenant_id = entity.app_config.tenant_id
+    approval: dict[str, object] = {
+        "type": "human-input",
+        "version": "2",
+        "title": "Child approval",
+        "recipients_spec": [{"type": "initiator"}],
+        "message_template": {"subject": "Review", "body": "Open {{#url#}}"},
+        "debug_mode": {"enabled": False, "channels": list[str]()},
+        "form_content": "Review: {{#$output.answer#}}",
+        "inputs": [{"type": "paragraph", "output_variable_name": "answer"}],
+        "user_actions": [{"id": "approve", "title": "Approve"}],
+    }
+    source_graph = runner._workflow.graph_dict
+    source_graph["nodes"][1]["data"] = approval
+    source_graph["nodes"][1]["id"] = "child-approval"
+    source_graph["edges"][0]["target"] = "child-approval"
+    source_graph["edges"][1]["source"] = "child-approval"
+    source_graph["nodes"][2]["data"]["outputs"][0]["value_selector"] = ["child-approval", "answer"]
+    source_graph_json = json.dumps(
+        _workflow_tool_v2_loop_graph(approval, node_id="child-approval", source_handle="approve")
+        if placement == "loop-in-tool"
+        else source_graph
+    )
+
+    source_app_ids: list[str] = []
+    with sqlite_session_factory.begin() as session:
+        tenant = Tenant(name="Workspace")
+        tenant.id = tenant_id
+        account = Account(name="Approver", email="approver@example.com", status=AccountStatus.ACTIVE)
+        account.id = entity.user_id
+        session.add_all(
+            [
+                tenant,
+                account,
+                TenantAccountJoin(tenant_id=tenant_id, account_id=entity.user_id, role=TenantAccountRole.NORMAL),
+                HumanInputContactIdentity(subject_type=ContactSubjectType.ACCOUNT, account_id=entity.user_id),
+            ]
+        )
+        # A second provider exercises propagation through multiple Workflow Tool frames.
+        for _ in range(2 if placement == "nested-tool" else 1):
+            source_app_id, source_workflow_id = str(uuid4()), str(uuid4())
+            source_app_ids.append(source_app_id)
+            session.add(
+                App(
+                    id=source_app_id,
+                    tenant_id=tenant_id,
+                    name="Child",
+                    mode=AppMode.WORKFLOW,
+                    enable_site=False,
+                    enable_api=False,
+                )
+            )
+            session.add(
+                Workflow(
+                    id=source_workflow_id,
+                    tenant_id=tenant_id,
+                    app_id=source_app_id,
+                    type=ModelWorkflowType.WORKFLOW,
+                    version="published",
+                    graph=source_graph_json,
+                    _features="{}",
+                    created_by=entity.user_id,
+                )
+            )
+            provider = WorkflowToolProvider(
+                tenant_id=tenant_id,
+                app_id=source_app_id,
+                user_id=entity.user_id,
+                version="published",
+                name=f"child_{len(source_app_ids)}",
+                label="Child",
+                description="Child approval",
+                icon="{}",
+            )
+            session.add(provider)
+            session.flush()
+            tool_data = ToolNodeData(
+                title="Child tool",
+                provider_type="workflow",
+                provider_id=provider.id,
+                provider_name=provider.name,
+                tool_name=provider.name,
+                tool_label="Child",
+                tool_configurations={},
+                tool_parameters={},
+            ).model_dump(mode="json")
+            source_graph = runner._workflow.graph_dict
+            source_graph["nodes"][1]["data"] = {"type": "tool", **tool_data}
+            source_graph["edges"][1]["sourceHandle"] = "source"
+            source_graph_json = json.dumps(source_graph)
+    visible_node_id = "approval"
+    runner._workflow.graph = (
+        json.dumps(
+            _workflow_tool_v2_loop_graph(
+                source_graph["nodes"][1]["data"], node_id=visible_node_id, source_handle="source"
+            )
+        )
+        if placement == "tool-in-loop"
+        else source_graph_json
+    )
+    config = PauseStateLayerConfig(sqlite_engine, entity.user_id)
+    WorkflowRunAgg.run(runner, config, workflow_repository, node_repository)
+    events = [message.event for message in runner._queue_manager.listen()]
+    paused = events[-1]
+    assert isinstance(paused, QueueWorkflowPausedEvent), events
+    reason = paused.reasons[0]
+    assert isinstance(reason, HumanInputRequired)
+    assert reason.node_id == visible_node_id
+    assert reason.form_version == "2"
+    prepared = paused.human_input_v2_forms[reason.form_id]
+    assert prepared.form.app_id == entity.app_config.app_id
+    assert prepared.form.workflow_run_id == entity.workflow_execution_id
+    assert prepared.form_token is not None
+    with sqlite_session_factory() as session:
+        pause = session.scalar(
+            select(WorkflowPause).where(WorkflowPause.workflow_run_id == entity.workflow_execution_id)
+        )
+        assert pause is not None
+        checkpoint = WorkflowResumptionContext.loads(storage.load(pause.state_object_key).decode())
+    pause_entity = DifyAPIRepositoryFactory.create_api_workflow_run_repository(
+        sqlite_session_factory
+    ).get_workflow_pause(entity.workflow_execution_id)
+    assert pause_entity is not None
+    replay = load_workflow_pause_snapshot(pause_entity, session_factory=sqlite_session_factory)
+    replay_reason = replay.reasons[0]
+    assert isinstance(replay_reason, HumanInputRequired)
+    assert replay_reason.node_id == visible_node_id
+    HumanInputSubmissionService(session_factory=sqlite_session_factory).submit_console_form(
+        account_id=AccountId(entity.user_id),
+        form_token=prepared.form_token.get_secret_value(),
+        action="approve",
+        inputs={"answer": "approved-child"},
+    )
+    resumed_entity = checkpoint.get_generate_entity().model_copy(update={"task_id": str(uuid4())})
+    assert isinstance(resumed_entity, WorkflowAppGenerateEntity)
+    queue = WorkflowAppQueueManager(resumed_entity.task_id, entity.user_id, entity.invoke_from, AppMode.WORKFLOW)
+    resumed = WorkflowAppRunner(
+        application_generate_entity=resumed_entity,
+        queue_manager=queue,
+        variable_loader=DUMMY_VARIABLE_LOADER,
+        workflow=runner._workflow,
+        system_user_id=entity.user_id,
+        graph_runtime_state=RuntimeState.from_snapshot(checkpoint.serialized_graph_runtime_state),
+        response_stream_filter=checkpoint.get_response_stream_filter(),
+        execution_driver=WorkflowRunAgg.run,
+    )
+    WorkflowRunAgg.run(resumed, config, workflow_repository, node_repository)
+    after = [message.event for message in queue.listen()]
+    filled = [event for event in after if isinstance(event, QueueHumanInputFormFilledEvent)]
+    assert [(event.form_id, event.node_id) for event in filled] == [(reason.form_id, visible_node_id)]
+    assert isinstance(after[-1], QueueWorkflowSucceededEvent), after
+    assert after[-1].outputs == {"answer": "approved-child"}
+    assert len(resume_requests) == 1
+    with sqlite_session_factory() as session:
+        forms = list(
+            session.scalars(
+                select(V2HumanInputForm).where(V2HumanInputForm.workflow_run_id == entity.workflow_execution_id)
+            )
+        )
+        assert len(forms) == 1
+        assert forms[0].status == "submitted"
+        run = session.get(WorkflowRun, entity.workflow_execution_id)
+        assert run is not None
+        assert run.status == WorkflowExecutionStatus.SUCCEEDED
+        child_executions = list(
+            session.scalars(
+                select(WorkflowNodeExecutionModel).where(WorkflowNodeExecutionModel.app_id.in_(source_app_ids))
+            )
+        )
+        assert child_executions
+        assert all(row.workflow_run_id == entity.workflow_execution_id for row in child_executions)
+    assert all(event.node_id != "child-approval" for event in events if isinstance(event, QueueNodeStartedEvent))

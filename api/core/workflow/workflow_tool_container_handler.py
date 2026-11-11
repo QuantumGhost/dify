@@ -19,6 +19,11 @@ from core.workflow.node_factory import DifyGraphInitContext, DifyNodeFactory, ge
 from core.workflow.node_runtime import resolve_dify_run_context
 from core.workflow.nodes.human_input.boundary import human_input_container_selector
 from core.workflow.nodes.human_input.session_binding import default_session_binding
+from core.workflow.nodes.human_input_v2.events import (
+    NodeRunHumanInputV2FormFilledEvent,
+    NodeRunHumanInputV2FormRequiredEvent,
+    NodeRunHumanInputV2FormTimeoutEvent,
+)
 from core.workflow.snippet_start import get_compatible_start_aliases
 from core.workflow.system_variables import (
     SystemVariableKey,
@@ -64,6 +69,11 @@ _file_access_controller = DatabaseFileAccessController()
 _RESERVED_TOOL_OUTPUTS = frozenset(("text", "json", "files"))
 _FAILURE_SELECTOR_PREFIX = "__workflow_tool_container__"
 _HIDDEN_CHILD_EVENT_KEY = "__dify_workflow_tool_child__"
+_FORM_PRESENTATION_EVENTS = (
+    NodeRunHumanInputV2FormRequiredEvent,
+    NodeRunHumanInputV2FormFilledEvent,
+    NodeRunHumanInputV2FormTimeoutEvent,
+)
 _CONTAINER_METADATA_KEYS = frozenset(
     (
         WorkflowNodeExecutionMetadataKey.LOOP_ID,
@@ -90,7 +100,7 @@ def _save_workflow_tool_event(event: NodeEvent, listeners: Mapping[str, Callable
 
 @final
 class WorkflowToolNestedContainerHandler:
-    """Suppress Workflow Tool events emitted through a nested built-in container."""
+    """Hide source node events while forwarding caller-owned form presentation."""
 
     def __init__(
         self,
@@ -117,12 +127,13 @@ class WorkflowToolNestedContainerHandler:
             self._handler.prepare_frame_event(frame=frame, event=event)
 
     def should_emit(self, *, event: NodeEvent) -> bool:
+        """Forward form presentation from source frames after saving the source event."""
         should_emit = self._handler.should_emit(event=event)
         if should_emit and _HIDDEN_CHILD_EVENT_KEY in event.node_run_result.process_data:
             _save_workflow_tool_event(event, self._event_listeners)
             if self._hidden_event_listener is not None:
                 self._hidden_event_listener(event)
-            return False
+            return isinstance(event, _FORM_PRESENTATION_EVENTS)
         return should_emit
 
     def record_frame_failure(self, *, frame: ExecutionFrame, event: NodeRunFailedEvent) -> None:
@@ -243,10 +254,16 @@ class WorkflowToolContainerHandler:
         }
 
     def should_emit(self, *, event: NodeEvent) -> bool:
+        """Persist source events; forward form snapshots and outcomes to the caller.
+
+        The caller needs the required snapshot before persisting a durable pause,
+        and needs completion events to update the same form after resumption.
+        Ordinary source node lifecycle events remain hidden.
+        """
         _save_workflow_tool_event(event, self._event_listeners)
         if self._hidden_event_listener is not None:
             self._hidden_event_listener(event)
-        return False
+        return isinstance(event, _FORM_PRESENTATION_EVENTS)
 
     def record_frame_failure(self, *, frame: ExecutionFrame, event: NodeRunFailedEvent) -> None:
         # ponytail: Graphon custom frames have no metadata slot; scope the pool key to this invocation.
