@@ -185,6 +185,7 @@ const baseConsoleState: ConsoleStateFixture = {
   workspacePermissionKeys: [
     'workspace.member.manage',
     'workspace.role.manage',
+    'channel.manage',
     'data_source.manage',
     'api_extension.manage',
     'customization.manage',
@@ -270,7 +271,7 @@ describe('AccountSetting', () => {
 
   describe('Rendering', () => {
     it.each(['editor', 'normal', 'dataset_operator'])(
-      'hides Channels and rejects its deep link for the %s role',
+      'hides Channels for the %s role without the Workspace channel grant',
       (role) => {
         mockConsoleState.current = {
           ...baseConsoleState,
@@ -278,6 +279,7 @@ describe('AccountSetting', () => {
           isCurrentWorkspaceManager: false,
           isCurrentWorkspaceOwner: false,
           isCurrentWorkspaceDatasetOperator: role === 'dataset_operator',
+          workspacePermissionKeys: [],
         }
         renderAccountSetting({ initialTab: ACCOUNT_SETTING_TAB.IM_PLATFORM })
         expect(
@@ -286,6 +288,19 @@ describe('AccountSetting', () => {
         expect(screen.queryByTestId('contacts-im-platform-page')).not.toBeInTheDocument()
       },
     )
+
+    it('allows a member with the Workspace channel grant to manage channels', async () => {
+      mockConsoleState.current = {
+        ...baseConsoleState,
+        currentWorkspace: { ...baseConsoleState.currentWorkspace, role: 'normal' },
+        isCurrentWorkspaceManager: false,
+        isCurrentWorkspaceOwner: false,
+        workspacePermissionKeys: ['channel.manage'],
+      }
+      renderAccountSetting({ initialTab: ACCOUNT_SETTING_TAB.IM_PLATFORM })
+
+      expect(await screen.findByTestId('contacts-im-platform-page')).toBeInTheDocument()
+    })
 
     it('hides workspace channels when centrally managed even in Community edition', () => {
       renderAccountSetting({ deploymentEdition: 'COMMUNITY', imCentrallyManaged: true })
